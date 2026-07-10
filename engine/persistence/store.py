@@ -102,6 +102,74 @@ class Store:
         result["state"] = json.loads(result.pop("state_json"))
         return result
 
+    def entities_at(self, location_id: str, kind: str | None = None) -> list[dict[str, Any]]:
+        query = "SELECT * FROM entities WHERE location_id=?"
+        params: tuple = (location_id,)
+        if kind is not None:
+            query += " AND kind=?"
+            params += (kind,)
+        results = []
+        for row in self.conn.execute(query + " ORDER BY id", params):
+            record = dict(row)
+            record["state"] = json.loads(record.pop("state_json"))
+            results.append(record)
+        return results
+
+    # --- npc memory ---------------------------------------------------------
+
+    def add_npc_memory(self, npc_id: str, day: int, hour: int, kind: str,
+                       summary: str, subject_id: str | None = None,
+                       valence: float = 0.0, rumor_certainty: float | None = None) -> None:
+        # promises/betrayals and strong-valence memories never decay (§5.2)
+        decays = 0 if (kind in ("promise", "betrayal") or abs(valence) >= 0.8) else 1
+        self.conn.execute(
+            "INSERT INTO npc_memory(npc_id, day, hour, kind, subject_id, valence, "
+            "rumor_certainty, summary, decays) VALUES(?,?,?,?,?,?,?,?,?)",
+            (npc_id, day, hour, kind, subject_id, valence, rumor_certainty, summary, decays),
+        )
+
+    # --- goals ----------------------------------------------------------------
+
+    def upsert_goal(self, npc_id: str, goal_id: str, progress: dict[str, Any],
+                    status: str = "active") -> None:
+        self.conn.execute(
+            "INSERT INTO goals(npc_id, goal_id, progress_json, status) VALUES(?,?,?,?) "
+            "ON CONFLICT(npc_id, goal_id) DO UPDATE SET "
+            "progress_json=excluded.progress_json, status=excluded.status",
+            (npc_id, goal_id, json.dumps(progress), status),
+        )
+
+    def get_goal(self, npc_id: str, goal_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT * FROM goals WHERE npc_id=? AND goal_id=?", (npc_id, goal_id)
+        ).fetchone()
+        if row is None:
+            return None
+        record = dict(row)
+        record["progress"] = json.loads(record.pop("progress_json"))
+        return record
+
+    # --- quest instances ---------------------------------------------------------
+
+    def upsert_quest(self, instance_id: str, def_id: str, state: str,
+                     available_day: int | None, expires_day: int | None) -> None:
+        self.conn.execute(
+            "INSERT INTO quests(instance_id, def_id, state, available_day, expires_day) "
+            "VALUES(?,?,?,?,?) ON CONFLICT(instance_id) DO UPDATE SET "
+            "state=excluded.state, available_day=excluded.available_day, "
+            "expires_day=excluded.expires_day",
+            (instance_id, def_id, state, available_day, expires_day),
+        )
+
+    def get_quests(self, state: str | None = None) -> list[dict[str, Any]]:
+        if state is None:
+            rows = self.conn.execute("SELECT * FROM quests ORDER BY instance_id")
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM quests WHERE state=? ORDER BY instance_id", (state,)
+            )
+        return [dict(row) for row in rows]
+
     # --- player ------------------------------------------------------------
 
     def init_player(self, name: str, level: int, col: int, location_id: str, hp_max: int = 100) -> None:
@@ -237,6 +305,28 @@ def _apply_zone_tick(store: Store, delta: Delta, day: int, hour: int) -> None:
     )
 
 
+def _apply_npc_memory(store: Store, delta: Delta, day: int, hour: int) -> None:
+    p = delta.payload
+    store.add_npc_memory(p["npc_id"], day, hour, p["kind"], p["summary"],
+                         p.get("subject_id"), p.get("valence", 0.0),
+                         p.get("rumor_certainty"))
+
+
+def _apply_goal_progress(store: Store, delta: Delta, day: int, hour: int) -> None:
+    p = delta.payload
+    existing = store.get_goal(p["npc_id"], p["goal_id"])
+    progress = existing["progress"] if existing else {}
+    progress["effort"] = progress.get("effort", 0) + p.get("effort_add", 1)
+    progress["last_day"] = day
+    store.upsert_goal(p["npc_id"], p["goal_id"], progress, p.get("status", "active"))
+
+
+def _apply_quest_state(store: Store, delta: Delta, day: int, hour: int) -> None:
+    p = delta.payload
+    store.upsert_quest(p["instance_id"], p["def_id"], p["state"],
+                       p.get("available_day"), p.get("expires_day"))
+
+
 def _apply_modifier_add(store: Store, delta: Delta, day: int, hour: int) -> None:
     p = delta.payload
     store.add_modifier(p["owner_id"], p["def_id"], day,
@@ -255,4 +345,7 @@ _DELTA_HANDLERS = {
     "zone_tick": _apply_zone_tick,
     "modifier_add": _apply_modifier_add,
     "modifier_remove": _apply_modifier_remove,
+    "npc_memory": _apply_npc_memory,
+    "goal_progress": _apply_goal_progress,
+    "quest_state": _apply_quest_state,
 }

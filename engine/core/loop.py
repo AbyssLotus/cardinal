@@ -35,6 +35,10 @@ _SYSTEM_MODULES = {
 }
 
 
+class _TurnAbort(Exception):
+    """Raised inside the turn transaction to roll the whole turn back."""
+
+
 @dataclass
 class TurnResult:
     text: str
@@ -77,36 +81,42 @@ class SimulationLoop:
         total_minutes = 0
         include_status = False
 
-        for action in actions:
-            # 2. VALIDATE
-            try:
-                validator.validate(action, player, self.registry)
-            except validator.ValidationFailure as e:
-                return TurnResult(str(e), [], 0, ok=False)
+        # Steps 2-7 run inside ONE transaction: ticks apply incrementally so
+        # each boundary sees the world the previous one produced, and a failed
+        # turn rolls back whole — at most the un-narrated turn is lost (§14).
+        try:
+            with self.store.transaction():
+                for action in actions:
+                    # 2. VALIDATE
+                    try:
+                        validator.validate(action, player, self.registry)
+                    except validator.ValidationFailure as e:
+                        raise _TurnAbort(str(e))
 
-            # 3. COST
-            minutes = self._cost(action, player)
+                    # 3. COST
+                    minutes = self._cost(action, player)
 
-            # 4. ADVANCE
-            boundaries = self.clock.advance(minutes)
-            total_minutes += minutes
+                    # 4. ADVANCE
+                    boundaries = self.clock.advance(minutes)
+                    total_minutes += minutes
 
-            # 5. TICK — all regions, not just the player's
-            deltas = self._tick(boundaries)
+                    # 5. TICK — all regions, not just the player's
+                    all_deltas += self._tick_and_apply(boundaries)
 
-            # 6. RESOLVE — against the updated world state
-            deltas += self._resolve(action, player)
-            if action.intent == "status":
-                include_status = True
+                    # 6. RESOLVE — against the updated world state
+                    resolved = self._resolve(action, player)
+                    self.store.apply_deltas(resolved, self.clock.day, self.clock.hour)
+                    all_deltas += resolved
+                    if action.intent == "status":
+                        include_status = True
+                    player = self.store.get_player() or player
 
-            all_deltas += deltas
-            player = self.store.get_player() or player  # not yet committed; see below
-
-        # 7. COMMIT — atomic
-        with self.store.transaction():
-            self.store.apply_deltas(all_deltas, self.clock.day, self.clock.hour)
-            self.store.set_clock(self.clock.day, self.clock.minute)
-            self.store.save_rng(self.rng.dump_states())
+                # 7. COMMIT — transaction closes atomically here
+                self.store.set_clock(self.clock.day, self.clock.minute)
+                self.store.save_rng(self.rng.dump_states())
+        except _TurnAbort as abort:
+            self._reload_clock()  # in-memory clock may have advanced; DB is truth
+            return TurnResult(str(abort), [], 0, ok=False)
 
         # 8. NARRATE — committed deltas only, filtered by perception
         committed_player = self.store.get_player()
@@ -122,9 +132,8 @@ class SimulationLoop:
         'the world exists independently of the player'."""
         minutes = days * self.clock.minutes_per_day
         boundaries = self.clock.advance(minutes)
-        deltas = self._tick(boundaries)
         with self.store.transaction():
-            self.store.apply_deltas(deltas, self.clock.day, self.clock.hour)
+            deltas = self._tick_and_apply(boundaries)
             self.store.set_clock(self.clock.day, self.clock.minute)
             self.store.save_rng(self.rng.dump_states())
         return TurnResult(f"Advanced {days} day(s) to {self.clock.label()}.", deltas, minutes)
@@ -145,14 +154,27 @@ class SimulationLoop:
             return max(1, int(per_km * distance_km))
         return 0  # look / status are perceptual, not world actions
 
-    def _tick(self, boundaries: list[TickBoundary]) -> list[Delta]:
-        deltas: list[Delta] = []
+    def _tick_and_apply(self, boundaries: list[TickBoundary]) -> list[Delta]:
+        """Run every system at every crossed boundary, applying each system's
+        deltas before the next runs — the living world sees itself move.
+        Caller must hold the turn transaction. Day boundaries also fire an
+        hour-0 tick so hourly systems never skip midnight."""
+        all_deltas: list[Delta] = []
         for boundary in boundaries:
-            for name in TICK_ORDER:
-                deltas += _SYSTEM_MODULES[name].tick(
-                    self.ctx, boundary.granularity, boundary.day, boundary.hour
-                )
-        return deltas
+            granularities = ["hour", "day"] if boundary.granularity == "day" else ["hour"]
+            for granularity in granularities:
+                for name in TICK_ORDER:
+                    deltas = _SYSTEM_MODULES[name].tick(
+                        self.ctx, granularity, boundary.day, boundary.hour
+                    )
+                    if deltas:
+                        self.store.apply_deltas(deltas, boundary.day, boundary.hour)
+                        all_deltas += deltas
+        return all_deltas
+
+    def _reload_clock(self) -> None:
+        day, minute = self.store.get_clock()
+        self.clock.day, self.clock.minute = day, minute
 
     def _resolve(self, action: Action, player: dict) -> list[Delta]:
         if action.intent == "travel":

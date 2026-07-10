@@ -4,11 +4,22 @@
   location: loc.tw_hub
   occupation: merchant
   needs: { food: 1.0, rest: 1.0 }
+  schedule:
+    - { from: "09:00", to: "17:00", activity: keep_shop, at: loc.tw_hub }
+    - { from: "18:00", to: "21:00", activity: socialize, at: loc.tw_hub }
 - id: npc.tw_bob
   name: "Bob"
   location: loc.tw_hub
   occupation: smith
   needs: { food: 1.0, rest: 1.0 }
+  schedule:
+    - { from: "08:00", to: "18:00", activity: work_forge, at: loc.tw_hub }
+    - { from: "18:00", to: "21:00", activity: socialize, at: loc.tw_hub }
+  goals:
+    - id: goal.tw_bob_masterwork
+      description: "Forge a masterwork blade."
+      priority: 0.6
+      status: active
 - id: npc.tw_cara
   name: "Cara"
   location: loc.tw_hub
@@ -19,8 +30,14 @@
   location: loc.tw_village
   occupation: farmer
   needs: { food: 1.0, rest: 1.0 }
+  schedule:
+    - { from: "06:00", to: "17:00", activity: tend_fields, at: loc.tw_village }
+    - { from: "18:00", to: "21:00", activity: socialize, at: loc.tw_village }
 - id: npc.tw_eve
   name: "Eve"
   location: loc.tw_village
   occupation: hunter
   needs: { food: 1.0, rest: 1.0 }
+  schedule:
+    - { from: "07:00", to: "16:00", activity: hunt, at: loc.tw_village }
+    - { from: "18:00", to: "21:00", activity: socialize, at: loc.tw_village }

@@ -27,3 +27,14 @@ economy:
 ecology:
   respawn_check_hours: 6
   migration_pressure_threshold: 0.7
+npc:
+  needs_decay_per_hour: { food: 0.03, rest: 0.05, income: 0.01 }
+  need_urgent_threshold: 0.35
+  weights: { schedule: 0.5, need: 1.2, goal: 0.4, idle: 0.1 }
+  socialize_memory_chance: 0.5
+weather:
+  patterns:
+    autumn: { clear: 0.45, rain: 0.30, storm: 0.10, fog: 0.15 }
+    winter: { clear: 0.40, snow: 0.35, storm: 0.15, fog: 0.10 }
+    spring: { clear: 0.50, rain: 0.35, storm: 0.10, fog: 0.05 }
+    summer: { clear: 0.65, rain: 0.20, storm: 0.10, fog: 0.05 }

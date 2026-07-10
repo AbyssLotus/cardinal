@@ -1,0 +1,17 @@
+id: quest.tw_errand
+name: "Dan's Errand"
+source: npc.tw_dan
+purpose: "A parcel must reach Hub Town before market day."
+requirements:
+  - deliver: { item: item.tw_goo, qty: 1 }
+rewards:
+  - { item: item.tw_ration, qty: 2 }
+duration_days: 3
+failure:
+  outcome: "Dan's parcel never made it to Hub Town."
+  world_effects:
+    - { type: npc_state, target: npc.tw_dan, set: { mood: glum } }
+npc_fallback:
+  chance_npc_resolves_per_day: 0.0    # deterministic expiry for tests
+repeatable: false
+world_impact: minor

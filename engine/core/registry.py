@@ -66,6 +66,7 @@ class Registry:
         self.entities: dict[str, Entity] = {}
         self.canon: dict[str, Any] = {"confirmed": [], "inferences": []}
         self._nested_ids: set[str] = set()
+        self._nested_parent: dict[str, str] = {}  # dist.x -> loc.y, zone.x -> floor.y
 
     # --- lookups ----------------------------------------------------------
 
@@ -81,6 +82,15 @@ class Registry:
 
     def known_ids(self) -> set[str]:
         return set(self.entities) | self._nested_ids | {self.manifest.id}
+
+    def resolve_location(self, ref: str) -> str | None:
+        """Map any place reference to the location entity containing it:
+        loc.x -> itself; dist.x / shop.x -> the location that defines them."""
+        seen = set()
+        while ref not in self.entities and ref in self._nested_parent and ref not in seen:
+            seen.add(ref)
+            ref = self._nested_parent[ref]
+        return ref if ref.startswith("loc.") and ref in self.entities else None
 
     def rule(self, path: str, default: Any = None) -> Any:
         """Dotted-path lookup into rules.yaml, e.g. rule('time_costs.meal', 30)."""
@@ -185,22 +195,25 @@ def _load_entity_file(path: Path, category: str, registry: Registry, errors: lis
 
 def _register_nested_ids(registry: Registry) -> None:
     """Any mapping with an `id:` field anywhere inside an entity defines that id
-    (zones, districts, inline shops, goals)."""
+    (zones, districts, inline shops, goals) and records the defining entity as
+    its parent (dist.tob_market -> loc.town_of_beginnings)."""
 
-    def walk(node: Any) -> None:
+    def walk(node: Any, parent: str | None) -> None:
         if isinstance(node, dict):
             nested = node.get("id")
             if isinstance(nested, str) and _REF_RE.match(nested):
                 registry._nested_ids.add(nested)
+                if parent is not None and nested != parent:
+                    registry._nested_parent[nested] = parent
             for value in node.values():
-                walk(value)
+                walk(value, parent)
         elif isinstance(node, list):
             for value in node:
-                walk(value)
+                walk(value, parent)
 
     for entity in registry.entities.values():
-        walk(entity.model_dump())
-    walk(registry.manifest.model_dump())
+        walk(entity.model_dump(), entity.id)
+    walk(registry.manifest.model_dump(), None)
 
 
 _QTY_SUFFIX = re.compile(r"_x\d+$")

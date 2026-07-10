@@ -7,7 +7,20 @@ See [CARDINAL_DESIGN_SPEC.md](CARDINAL_DESIGN_SPEC.md) for the authoritative des
 
 ## Status
 
-**Milestone M1 — Skeleton** (in progress):
+**Milestone M2 — Living world** (done):
+- [x] NPC utility agents (§7): hourly need decay, schedule-following with
+      location resolution (`dist.x` → its city), eat/sleep pressure, goal
+      effort accrual, socializing that writes NPC memories
+- [x] Quest lifecycle (§13): auto-availability, `npc_fallback` daily rolls,
+      expiry firing authored `failure.world_effects` — with or without a player
+- [x] Ecology day-tick: populations regrow toward carrying capacity; predator
+      pressure crossing the migration threshold is chronicled
+- [x] Weather day-tick: seasonal patterns from rules.yaml, storms and season
+      turnover enter the chronicle
+- [x] Incremental delta application: each tick boundary sees the world state
+      the previous one produced, still one atomic transaction per turn
+
+**Milestone M1 — Skeleton** (done):
 - [x] Repo layout
 - [x] Pydantic schemas for all world-package formats (§4)
 - [x] Registry: loads, validates, and cross-reference-checks world packages

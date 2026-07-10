@@ -118,6 +118,14 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         for entry in reversed(store.get_chronicle()):
             print(f"[Day {entry['day']} {entry['hour']:02d}:00] "
                   f"({entry['category']}) {entry['headline']}")
+    elif query == "quests":
+        for row in store.get_quests():
+            print(f"{row['instance_id']}: {row['state']} "
+                  f"(available day {row['available_day']}, expires day {row['expires_day']})")
+    elif query == "npcs":
+        for row in store.conn.execute(
+                "SELECT * FROM entities WHERE kind='npc' ORDER BY id"):
+            print(f"{row['id']} @ {row['location_id']} — {row['state_json']}")
     elif query.startswith("market"):
         for row in store.conn.execute("SELECT * FROM markets ORDER BY market_id, item_def"):
             print(dict(row))

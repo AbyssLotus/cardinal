@@ -72,6 +72,12 @@ def create_save(save_dir: str | Path, world_path: str | Path, seed: int,
         seed_deltas = npc_system.seed_runtime_state(ctx, entry.time.day)
         seed_deltas += world_memory.seed_from_world(registry)
         store.apply_deltas(seed_deltas, entry.time.day, entry.time.hour)
+
+        # authored NPC goals become live goal rows the agent loop advances
+        for npc in sorted(registry.by_kind("npc"), key=lambda n: n.id):
+            for goal in getattr(npc, "goals", []):
+                store.upsert_goal(npc.id, goal.id, {}, goal.status)
+
         store.save_rng(rng.dump_states())
 
     return Save(save_path, store, registry, rng, meta)
