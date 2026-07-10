@@ -1,0 +1,9 @@
+id: loc.horunka
+canon_tier: confirmed
+name: "Horunka Village"
+floor: floor.1
+type: village
+safe_zone: true
+population_npc: 60
+services: [inn, market]
+market: market.horunka

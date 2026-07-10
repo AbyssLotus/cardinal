@@ -1,0 +1,12 @@
+id: swordskill.horizontal
+canon_tier: confirmed
+name: "Horizontal"
+parent_skill: skill.one_handed_sword
+hits: 1
+damage_multiplier: 1.4
+activation_ms: 150
+execution_ms: 400
+post_delay_ms: 800                   # the freeze — a real mechanical cost
+range_m: 1.5
+arc_deg: 120
+cooldown_s: 4

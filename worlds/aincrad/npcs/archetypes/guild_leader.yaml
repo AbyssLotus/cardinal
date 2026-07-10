@@ -1,0 +1,7 @@
+id: arch.guild_leader
+canon_tier: inference
+population_weight: 0.001
+occupation: guild_leader
+personality:
+  traits_pool: { organized: 0.7, ambitious: 0.5 }
+level_range: [15, 30]

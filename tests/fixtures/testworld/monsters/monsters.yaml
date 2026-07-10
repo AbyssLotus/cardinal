@@ -1,0 +1,16 @@
+- id: mon.tw_slime
+  name: "Slime"
+  level: 1
+  stats: { hp: 30, attack: 4, defense: 1, speed: 2, reaction_ms: 1500 }
+  drops:
+    - { item: item.tw_goo, chance: 0.8, qty: 1 }
+  xp: 5
+- id: mon.tw_bat
+  name: "Cave Bat"
+  level: 4
+  stats: { hp: 60, attack: 12, defense: 2, speed: 9, reaction_ms: 600 }
+  behavior:
+    aggression: aggressive
+    active_hours: [18, 6]
+  drops: []
+  xp: 20

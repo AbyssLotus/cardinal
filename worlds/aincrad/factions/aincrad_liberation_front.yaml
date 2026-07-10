@@ -1,0 +1,14 @@
+id: fac.alf
+canon_tier: confirmed
+name: "Aincrad Liberation Front"
+type: guild
+headquarters: loc.town_of_beginnings
+leadership: [npc.thinker]
+membership_count: 300
+treasury_col: 250000
+agenda:
+  - { goal: "Support low-level players", priority: 0.8 }
+  - { goal: "Contest frontline authority", priority: 0.5 }
+relations:
+  - { with: fac.dka, disposition: -0.3 }
+policies: { tax_rate: 0.1, recruitment: open }

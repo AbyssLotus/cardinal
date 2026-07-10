@@ -1,0 +1,12 @@
+id: item.small_sword
+canon_tier: confirmed
+name: "Small Sword"
+category: weapon.one_handed_sword
+rarity: common
+description: "Standard-issue starter blade. It has never impressed anyone."
+stats: { attack: 12, accuracy: 2, durability_max: 400 }
+weight: 2.4
+requirements: { skill: skill.one_handed_sword, proficiency: 0 }
+market:
+  base_value_col: 200
+  volatility: 0.1

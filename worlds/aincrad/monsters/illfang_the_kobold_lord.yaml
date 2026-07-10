@@ -1,0 +1,18 @@
+id: mon.illfang_the_kobold_lord
+canon_tier: confirmed
+name: "Illfang the Kobold Lord"
+level: 10
+stats: { hp: 4000, attack: 55, defense: 22, speed: 9, reaction_ms: 500 }
+behavior:
+  aggression: aggressive
+  perception_range_m: 40
+  flee_hp_ratio: 0.0
+  pack_size: [1, 1]                  # attended by kobold sentinels (M5 content)
+  active_hours: [0, 24]
+  ai_script: boss_illfang            # phase change below 25% HP: talwar moveset
+ecology:
+  diet: none
+  habitat: [labyrinth]
+  reproduction_days: 0               # bosses do not respawn; defeat is a chronicle event
+drops: []
+xp: 2400

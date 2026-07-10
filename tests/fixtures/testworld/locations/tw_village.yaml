@@ -1,0 +1,7 @@
+id: loc.tw_village
+name: "Far Village"
+floor: floor.tw1
+type: village
+safe_zone: true
+population_npc: 20
+services: [inn]

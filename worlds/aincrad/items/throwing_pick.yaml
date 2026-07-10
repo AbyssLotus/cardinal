@@ -1,0 +1,17 @@
+id: item.throwing_pick
+canon_tier: confirmed
+name: "Throwing Pick"
+category: weapon.thrown
+rarity: common
+description: "A weighted steel dart. Argo sells them by the dozen."
+stats: { attack: 9, accuracy: 3, durability_max: 60 }
+weight: 0.2
+requirements: { skill: skill.blade_throwing, proficiency: 0 }
+ranged:
+  thrown: true
+  max_range_m: 15
+  optimal_range_m: 8
+  projectile_speed_mps: 22
+market:
+  base_value_col: 40
+  volatility: 0.15

@@ -1,0 +1,12 @@
+id: tech.aimed_shot
+canon_tier: inference
+name: "Aimed Shot"
+parent_skill: skill.improvised_archery
+delivery: projectile
+hits: 1
+damage_multiplier: 1.0     # no system assist: raw weapon damage only
+activation_ms: 900         # a full draw-and-aim; nothing like a sword skill's snap
+execution_ms: 200
+post_delay_ms: 0           # no freeze — this isn't a system technique
+ammo_per_use: 1
+cooldown_s: 0

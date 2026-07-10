@@ -1,0 +1,15 @@
+id: item.wooden_arrow
+canon_tier: inference
+name: "Wooden Arrow"
+category: ammo.arrow
+rarity: common
+description: "Hand-fletched arrow. Retrievable, when it doesn't shatter."
+weight: 0.05
+crafting:
+  materials:
+    - { item: item.boar_tusk, qty: 1 }   # one tusk yields a bundle of heads
+  time_minutes: 60
+  yields: 10
+market:
+  base_value_col: 4
+  volatility: 0.4

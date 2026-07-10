@@ -1,0 +1,12 @@
+id: swordskill.slant
+canon_tier: confirmed
+name: "Slant"
+parent_skill: skill.one_handed_sword
+hits: 1
+damage_multiplier: 1.6
+activation_ms: 180
+execution_ms: 350
+post_delay_ms: 900
+range_m: 1.5
+arc_deg: 60
+cooldown_s: 5

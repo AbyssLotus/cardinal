@@ -1,0 +1,20 @@
+id: mon.dire_wolf
+canon_tier: inference
+name: "Dire Wolf"
+level: 3
+stats: { hp: 95, attack: 19, defense: 5, speed: 11, reaction_ms: 700 }
+behavior:
+  aggression: predatory
+  perception_range_m: 30
+  flee_hp_ratio: 0.25
+  pack_size: [2, 5]
+  active_hours: [18, 6]              # nocturnal (wraps midnight)
+  ai_script: pack_flank
+ecology:
+  diet: carnivore
+  habitat: [grassland, forest]
+  reproduction_days: 45
+drops:
+  - { item: item.wolf_pelt, chance: 0.6, qty: 1 }
+  - { item: item.boar_meat, chance: 0.2, qty: 1 }
+xp: 41

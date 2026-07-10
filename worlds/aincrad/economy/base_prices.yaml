@@ -1,0 +1,10 @@
+# Base col values live on each item's `market.base_value_col`; this file holds
+# category-level defaults for generated items (used from M4 on).
+category_defaults:
+  weapon.one_handed_sword: 300
+  armor.cloth: 60
+  food: 12
+  food.raw: 15
+  material.crafting: 30
+  material.smithing: 90
+  material.alchemy: 200

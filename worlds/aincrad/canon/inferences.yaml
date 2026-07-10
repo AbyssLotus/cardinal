@@ -1,0 +1,14 @@
+# Tier-2: reasoned extensions, each with its justification. Revisable if a
+# conflict with confirmed canon is found.
+- inference: "Dire wolves inhabit Floor 1's fields and forests."
+  justification: "Floor 1 canonically hosts wolf-type mobs; a mid-danger pack predator fills the ecological slot between boars and the labyrinth."
+- inference: "Settlement markets restock via NPC merchant routes with real travel time."
+  justification: "NPCs in SAO behave as persistent agents; goods visibly arrive by wagon in canon scenes."
+- inference: "Little Nepenthes ovules only occur on the rare flowering variant."
+  justification: "Canon depicts the quest as a long hunt; a flat drop would contradict its established difficulty."
+- inference: "Guild membership is externally visible as a worn emblem that NPCs and players react to on sight."
+  justification: "Canon shows guild insignia on gear and player cursors carrying affiliation cues; modeling it as a concealable modifier makes reputation-by-appearance simulable."
+- inference: "Draft wagons exist and can be owned; merchant restocking uses them."
+  justification: "Canon scenes show goods arriving by wagon; the economy inference about merchant routes requires a physical carrier with real travel time."
+- inference: "Players can craft and use bows/slings despite the absence of an Archery skill."
+  justification: "Canon establishes SAO deliberately omits bow skills (thrown weapons only), but the crafting system builds arbitrary objects from materials. A crafted bow therefore works as a physics object with no system assist: hidden 'Improvised Archery' proficiency, no sword-skill techniques, accuracy penalty."

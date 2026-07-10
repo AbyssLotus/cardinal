@@ -1,0 +1,36 @@
+[project]
+name = "cardinal"
+version = "0.1.0"
+description = "Persistent world simulation engine (Project Cardinal)"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.5",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+llm = ["anthropic>=0.40"]
+
+[project.scripts]
+cardinal = "cli.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = [
+    "engine",
+    "engine.core",
+    "engine.actions",
+    "engine.systems",
+    "engine.memory",
+    "engine.persistence",
+    "engine.narrator",
+    "engine.canon",
+    "cli",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

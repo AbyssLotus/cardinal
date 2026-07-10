@@ -1,0 +1,36 @@
+id: npc.argo
+canon_tier: confirmed
+name: "Argo the Rat"
+archetype: arch.information_broker
+location: loc.town_of_beginnings
+identity:
+  age: 16
+  appearance: "Whisker face-paint, hooded cloak."
+personality:
+  traits: [shrewd, curious, mercantile, loyal_for_a_price]
+  values: [information, fairness_in_deals]
+  fears: [being_seen_as_unreliable]
+goals:
+  - id: goal.argo_network
+    description: "Build the most complete information network on the frontlines."
+    priority: 0.9
+    status: active
+needs:
+  food: 1.0
+  rest: 1.0
+  income: 0.6
+occupation: information_broker
+schedule:
+  - { from: "07:00", to: "09:00", activity: gather_rumors, at: dist.tob_market }
+  - { from: "09:00", to: "18:00", activity: sell_information, at: dist.tob_market }
+  - { from: "18:00", to: "22:00", activity: socialize, at: loc.tob_inn }
+relationships:
+  - { with: npc.thinker, disposition: 0.2, type: business_contact }
+knowledge:
+  - fact: "A quest in Horunka rewards a blade worth ten times its looks."
+    price_col: 800
+  - fact: "The labyrinth's upper levels shift layout weekly."
+    price_col: 1500
+combat:
+  level: 12
+  skills: [skill.hiding, skill.acrobatics, skill.dagger]

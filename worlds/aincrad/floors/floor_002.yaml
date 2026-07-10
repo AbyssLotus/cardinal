@@ -1,0 +1,10 @@
+# Minimal stub: exists so floor.1's `up` connection resolves. Content lands in M5+.
+id: floor.2
+canon_tier: confirmed
+name: "Floor 2"
+diameter_km: 9.5
+biome: mountain_plateau
+settlements: []
+zones: []
+connections:
+  down: floor.1

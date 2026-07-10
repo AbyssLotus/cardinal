@@ -1,0 +1,10 @@
+id: item.boar_tusk
+canon_tier: confirmed
+name: "Boar Tusk"
+category: material.crafting
+rarity: common
+description: "A curved tusk. Buyers exist, in bulk they don't."
+weight: 0.4
+market:
+  base_value_col: 25
+  volatility: 0.5

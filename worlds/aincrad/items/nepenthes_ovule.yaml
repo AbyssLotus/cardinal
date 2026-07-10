@@ -1,0 +1,10 @@
+id: item.nepenthes_ovule
+canon_tier: confirmed
+name: "Little Nepenthes Ovule"
+category: material.alchemy
+rarity: rare
+description: "A pale seed-sac from a flowering Little Nepenthes. Medicinal, allegedly."
+weight: 0.2
+market:
+  base_value_col: 1200
+  volatility: 0.6

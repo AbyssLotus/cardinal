@@ -1,0 +1,11 @@
+id: item.boar_meat
+canon_tier: confirmed
+name: "Boar Meat"
+category: food.raw
+rarity: common
+description: "Field-dressed boar. Cook it first."
+weight: 0.8
+expires_days: 2
+market:
+  base_value_col: 15
+  volatility: 0.3

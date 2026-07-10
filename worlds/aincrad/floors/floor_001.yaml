@@ -1,0 +1,39 @@
+id: floor.1
+canon_tier: confirmed
+name: "Floor 1"
+diameter_km: 10
+biome: plains_and_forest
+settlements: [loc.town_of_beginnings, loc.horunka, loc.tolbana]
+zones:
+  - id: zone.f1_west_fields
+    terrain: grassland
+    danger_rating: 1                # 1-10 absolute scale; NEVER scaled to player
+    monster_populations:
+      - species: mon.frenzy_boar
+        carrying_capacity: 400
+        current: 400
+      - species: mon.dire_wolf
+        carrying_capacity: 60
+        current: 60
+    resources:
+      - node: res.medicinal_herb
+        richness: 0.8               # depletes with harvesting, regrows seasonally
+  - id: zone.f1_deep_forest
+    terrain: forest
+    danger_rating: 3
+    monster_populations:
+      - species: mon.little_nepenthes
+        carrying_capacity: 150
+        current: 150
+      - species: mon.dire_wolf
+        carrying_capacity: 40
+        current: 40
+    resources:
+      - node: res.medicinal_herb
+        richness: 0.5
+labyrinth:
+  id: loc.f1_labyrinth
+  levels: 20
+  boss: mon.illfang_the_kobold_lord   # exists because the data says so
+connections:
+  up: floor.2                        # unlocked only when boss defeated (world event)

@@ -1,0 +1,11 @@
+id: loc.tw_hub
+name: "Hub Town"
+floor: floor.tw1
+type: city
+safe_zone: true
+population_npc: 100
+services: [inn, market]
+market: market.tw_hub
+history:
+  - day: 0
+    event: "Hub Town founded."

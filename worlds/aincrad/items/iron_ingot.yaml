@@ -1,0 +1,10 @@
+id: item.iron_ingot
+canon_tier: inference
+name: "Iron Ingot"
+category: material.smithing
+rarity: common
+description: "Smelted bar stock, the backbone of every smithy on the floor."
+weight: 2.0
+market:
+  base_value_col: 90
+  volatility: 0.25

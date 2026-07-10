@@ -1,0 +1,20 @@
+id: item.anneal_blade
+canon_tier: confirmed
+name: "Anneal Blade"
+category: weapon.one_handed_sword
+rarity: uncommon
+description: "A reliable one-handed sword awarded by the Secret Medicine quest."
+stats: { attack: 38, accuracy: 5, durability_max: 1200 }
+weight: 3.2
+requirements: { skill: skill.one_handed_sword, proficiency: 50 }
+upgrade:
+  max_plus: 8
+  paths: [sharpness, durability, quickness]
+  materials_per_attempt: [{ item: item.iron_ingot, qty: 2 }]
+  base_success: 0.85                 # decreases per attempt tier
+crafting: null                       # quest reward only
+market:
+  base_value_col: 15000
+  volatility: 0.4
+drop_sources: [quest.secret_medicine_of_the_forest]
+history_tracking: true               # engine records owners, kills, upgrades

@@ -1,0 +1,9 @@
+id: loc.tolbana
+canon_tier: confirmed
+name: "Tolbana"
+floor: floor.1
+type: village
+safe_zone: true
+population_npc: 250
+services: [inn, market]
+market: market.tolbana

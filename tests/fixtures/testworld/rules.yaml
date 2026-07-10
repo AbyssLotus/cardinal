@@ -1,0 +1,8 @@
+death:
+  permadeath: true
+time_costs:
+  travel_per_km_road: 10
+economy:
+  price_elasticity: 0.35
+ecology:
+  respawn_check_hours: 6

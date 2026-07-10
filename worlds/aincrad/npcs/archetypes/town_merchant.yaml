@@ -1,0 +1,7 @@
+id: arch.town_merchant
+canon_tier: inference
+population_weight: 0.05
+occupation: merchant
+personality:
+  traits_pool: { greedy: 0.3, honest: 0.5, gossipy: 0.4 }
+level_range: [3, 10]

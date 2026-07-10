@@ -1,0 +1,18 @@
+id: world.aincrad
+name: "Aincrad"
+version: "0.1.0"
+engine_min_version: "0.1.0"
+description: "The floating castle of Sword Art Online."
+canon_tier: confirmed
+calendar:
+  epoch_label: "November 6, 2022"     # in-world day 0
+  hours_per_day: 24
+  days_per_season: 90
+  seasons: [autumn, winter, spring, summer]
+entry_point:
+  location: loc.town_of_beginnings
+  time: { day: 0, hour: 13 }
+starting_player:
+  level: 1
+  col: 500
+  items: [item.small_sword, item.starter_clothes, item.bread_x2]

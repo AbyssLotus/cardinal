@@ -1,0 +1,8 @@
+id: skill.acrobatics
+canon_tier: confirmed
+name: "Acrobatics"
+category: mobility
+proficiency_max: 1000
+growth:
+  per_use: 0.25
+  per_training_hour: 1.5

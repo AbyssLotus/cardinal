@@ -1,0 +1,34 @@
+# One of each modifier archetype, to keep the schema honest.
+- id: mod.tw_lucky_charm
+  name: "Lucky Charm"
+  mod_type: blessing
+  slot: neck
+  visibility: concealable
+  effects:
+    - { type: stat_add, target: accuracy, value: 2 }
+- id: mod.tw_slime_rot
+  name: "Slime Rot"
+  mod_type: curse
+  visibility: visible
+  duration_days: 5
+  effects:
+    - { type: damage_over_time, value: 1 }     # HP per hour
+  side_effects:
+    - { type: disposition, target: npc.tw_alice, value: -0.4 }  # she can smell it
+  removal:
+    item: item.tw_ration        # eat something decent, apparently
+- id: mod.tw_chrome_arm
+  name: "Chrome Arm"
+  mod_type: cyberware
+  slot: right_arm
+  visibility: visible
+  humanity_cost: 0.1
+  effects:
+    - { type: stat_add, target: attack, value: 4 }
+    - { type: skill_grant, target: skill.tw_slinging, value: 25 }
+  acquisition:
+    source: surgery
+    time_minutes: 240
+    cost_col: 80
+  removal:
+    surgery: true

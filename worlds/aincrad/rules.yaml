@@ -1,0 +1,29 @@
+# World-rule constants. Every tunable number lives here, never in engine code.
+death:
+  permadeath: true                # SAO rule: HP 0 = character deletion
+  safe_zones_prevent_combat: true
+leveling:
+  xp_curve: "100 * level ** 1.8"  # evaluated by engine formula parser
+  stat_points_per_level: 3
+skills:
+  max_equipped: 2                 # skill slots at level 1; grows with level
+time_costs:                       # minutes, used by the COST step
+  travel_per_km_road: 12
+  travel_per_km_wilderness: 25
+  shop_transaction: 5
+  meal: 30
+  smithing_base: 90
+combat:
+  base_reaction_ms: 800
+  post_skill_delay_multiplier: 1.0  # sword-skill freeze duration scaling
+  ranged:
+    thrown_recovery_chance: 0.85    # find your pick again after the fight
+    move_spread_penalty_deg: 8      # accuracy cone widens while moving
+    cover_damage_reduction: 0.5     # partial cover vs ranged/area hits
+economy:
+  price_elasticity: 0.35
+  merchant_restock_days: 3
+  supply_decay_per_day: 0.02
+ecology:
+  respawn_check_hours: 6
+  migration_pressure_threshold: 0.7

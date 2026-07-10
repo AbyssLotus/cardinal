@@ -1,0 +1,11 @@
+id: item.bread
+canon_tier: confirmed
+name: "Bread"
+category: food
+rarity: common
+description: "A dense round loaf. Better with cream, they say."
+weight: 0.3
+expires_days: 3
+market:
+  base_value_col: 10
+  volatility: 0.2

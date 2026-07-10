@@ -1,0 +1,20 @@
+# Inference-tier: goods visibly arrive by wagon in canon scenes (see
+# inferences.yaml on merchant restock routes). NPC merchants use these;
+# a player with the col can buy one.
+id: vehicle.trade_wagon
+canon_tier: inference
+name: "Trade Wagon"
+description: "A canvas-topped wagon behind a system-bred draft horse."
+category: ground
+living: true                         # the horse half of it, anyway
+stats: { hp: 300, handling: -2 }
+speed_kmh:
+  road: 8
+  grassland: 5                       # no forest/cave entry — impassable terrain omitted
+seats: 2
+cargo_kg: 400
+needs: { food: 1.0, rest: 1.0 }      # the horse eats whether or not you drive
+requirements: { skill: null }        # anyone can drive a wagon, badly
+market:
+  base_value_col: 22000
+  volatility: 0.3

@@ -1,0 +1,26 @@
+# Five named NPCs in one multi-doc list (the registry accepts lists).
+- id: npc.tw_alice
+  name: "Alice"
+  location: loc.tw_hub
+  occupation: merchant
+  needs: { food: 1.0, rest: 1.0 }
+- id: npc.tw_bob
+  name: "Bob"
+  location: loc.tw_hub
+  occupation: smith
+  needs: { food: 1.0, rest: 1.0 }
+- id: npc.tw_cara
+  name: "Cara"
+  location: loc.tw_hub
+  occupation: guard
+  needs: { food: 1.0, rest: 1.0 }
+- id: npc.tw_dan
+  name: "Dan"
+  location: loc.tw_village
+  occupation: farmer
+  needs: { food: 1.0, rest: 1.0 }
+- id: npc.tw_eve
+  name: "Eve"
+  location: loc.tw_village
+  occupation: hunter
+  needs: { food: 1.0, rest: 1.0 }

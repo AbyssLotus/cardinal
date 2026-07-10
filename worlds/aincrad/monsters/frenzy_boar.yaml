@@ -1,0 +1,20 @@
+id: mon.frenzy_boar
+canon_tier: confirmed
+name: "Frenzy Boar"
+level: 2
+stats: { hp: 120, attack: 14, defense: 8, speed: 6, reaction_ms: 1100 }
+behavior:
+  aggression: territorial            # passive | territorial | aggressive | predatory
+  perception_range_m: 15
+  flee_hp_ratio: 0.0                 # never flees
+  pack_size: [1, 3]
+  active_hours: [6, 20]              # diurnal
+  ai_script: charge_and_gore
+ecology:
+  diet: grazer
+  habitat: [grassland]
+  reproduction_days: 30
+drops:
+  - { item: item.boar_meat, chance: 0.9, qty: [1, 2] }
+  - { item: item.boar_tusk, chance: 0.35, qty: 1 }
+xp: 24

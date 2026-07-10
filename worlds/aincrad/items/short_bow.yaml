@@ -1,0 +1,27 @@
+# Inference-tier: Aincrad has no archery skill in canon, so no bows drop or
+# sell — but the crafting system doesn't forbid making one. See inferences.yaml.
+id: item.short_bow
+canon_tier: inference
+name: "Short Bow"
+category: weapon.bow
+rarity: uncommon
+description: "A player-made hunting bow of lacquered wood and sinew. The system never sold one; someone built it anyway."
+stats: { attack: 16, accuracy: -4, durability_max: 500 }   # accuracy penalty: no skill assist exists
+weight: 1.1
+requirements: { skill: skill.improvised_archery, proficiency: 0 }
+ranged:
+  ammo: item.wooden_arrow
+  magazine: 1
+  reload_s: 2.5           # nock and draw
+  optimal_range_m: 20
+  max_range_m: 45
+  projectile_speed_mps: 40
+  spread_deg: 4
+crafting:
+  materials:
+    - { item: item.wolf_pelt, qty: 1 }    # sinew for the string
+    - { item: item.boar_tusk, qty: 2 }    # nocks and grip
+  time_minutes: 300
+market:
+  base_value_col: 900
+  volatility: 0.7          # a curiosity — no established market

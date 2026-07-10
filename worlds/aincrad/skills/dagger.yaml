@@ -1,0 +1,8 @@
+id: skill.dagger
+canon_tier: confirmed
+name: "Dagger"
+category: weapon
+proficiency_max: 1000
+growth:
+  per_use: 0.4
+  per_training_hour: 2.0

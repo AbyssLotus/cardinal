@@ -1,0 +1,25 @@
+# A living mount and a fueled machine — both persistence/travel paths.
+- id: vehicle.tw_mule
+  name: "Pack Mule"
+  category: mount
+  living: true
+  stats: { hp: 120 }
+  speed_kmh: { road: 6, grassland: 5 }
+  seats: 1
+  cargo_kg: 90
+  needs: { food: 1.0, rest: 1.0 }
+  market: { base_value_col: 300 }
+- id: vehicle.tw_autocart
+  name: "Autocart"
+  category: ground
+  living: false
+  stats: { hp: 200, armor: 5, handling: 1 }
+  speed_kmh: { road: 25, grassland: 10 }
+  seats: 4
+  cargo_kg: 250
+  fuel:
+    item: item.tw_oil_flask
+    per_km: 0.2
+    tank_capacity: 10
+  requirements: { skill: skill.tw_slinging }   # synthetic: any skill gate works
+  market: { base_value_col: 2500 }

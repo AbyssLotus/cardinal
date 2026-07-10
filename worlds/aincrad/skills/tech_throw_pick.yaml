@@ -1,0 +1,12 @@
+id: tech.throw_pick
+canon_tier: confirmed
+name: "Single Shot"
+parent_skill: skill.blade_throwing
+delivery: thrown
+hits: 1
+damage_multiplier: 1.3
+activation_ms: 200
+execution_ms: 250
+post_delay_ms: 400
+max_range_m: 15
+cooldown_s: 2

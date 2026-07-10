@@ -1,0 +1,12 @@
+id: swordskill.vertical_arc
+canon_tier: confirmed
+name: "Vertical Arc"
+parent_skill: skill.one_handed_sword
+hits: 2
+damage_multiplier: 2.1
+activation_ms: 220
+execution_ms: 600
+post_delay_ms: 1400
+range_m: 1.5
+arc_deg: 45
+cooldown_s: 8

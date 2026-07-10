@@ -1,0 +1,39 @@
+- id: item.tw_stick
+  name: "Sturdy Stick"
+  category: weapon.club
+  stats: { attack: 3, durability_max: 50 }
+  weight: 1.0
+  market: { base_value_col: 5 }
+- id: item.tw_ration
+  name: "Ration"
+  category: food
+  expires_days: 5
+  weight: 0.2
+  market: { base_value_col: 8 }
+- id: item.tw_goo
+  name: "Slime Goo"
+  category: material.crafting
+  weight: 0.1
+  market: { base_value_col: 2 }
+- id: item.tw_sling
+  name: "Leather Sling"
+  category: weapon.sling
+  stats: { attack: 5, durability_max: 80 }
+  weight: 0.3
+  ranged:
+    ammo: item.tw_pebble
+    optimal_range_m: 15
+    max_range_m: 30
+    projectile_speed_mps: 25
+    spread_deg: 6
+  market: { base_value_col: 12 }
+- id: item.tw_pebble
+  name: "Smooth Pebble"
+  category: ammo.stone
+  weight: 0.1
+  market: { base_value_col: 1 }
+- id: item.tw_oil_flask
+  name: "Oil Flask"
+  category: fuel
+  weight: 0.5
+  market: { base_value_col: 6 }

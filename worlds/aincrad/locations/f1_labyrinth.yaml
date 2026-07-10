@@ -1,0 +1,6 @@
+id: loc.f1_labyrinth
+canon_tier: confirmed
+name: "Floor 1 Labyrinth"
+floor: floor.1
+type: dungeon
+safe_zone: false

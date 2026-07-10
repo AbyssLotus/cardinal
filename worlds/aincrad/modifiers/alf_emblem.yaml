@@ -1,0 +1,20 @@
+# Inference-tier: guilds canonically mark members' gear/UI; modeling it as a
+# visible modifier lets NPC disposition react to affiliation on sight.
+id: mod.alf_emblem
+canon_tier: inference
+name: "ALF Emblem"
+description: "The Aincrad Liberation Front's sigil worn on the shoulder. People notice."
+mod_type: insignia
+slot: shoulder
+visibility: concealable              # can be covered by a cloak
+duration_days: null                  # worn until renounced
+effects:
+  - { type: disposition, target: fac.alf, value: 0.3 }
+side_effects:
+  - { type: disposition, target: fac.dka, value: -0.15 }
+acquisition:
+  source: ritual                     # sworn in at the Black Iron Palace
+  cost_col: 0
+  time_minutes: 30
+removal:
+  renounce: true                     # leaving is free; the memory of it is not

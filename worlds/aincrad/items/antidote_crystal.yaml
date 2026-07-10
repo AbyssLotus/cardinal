@@ -1,0 +1,10 @@
+id: item.antidote_crystal
+canon_tier: confirmed
+name: "Antidote Crystal"
+category: consumable.crystal
+rarity: uncommon
+description: "A green crystal that purges poison and paralysis on use."
+weight: 0.1
+market:
+  base_value_col: 500
+  volatility: 0.4

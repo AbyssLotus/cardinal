@@ -1,0 +1,10 @@
+id: item.wolf_pelt
+canon_tier: inference
+name: "Dire Wolf Pelt"
+category: material.crafting
+rarity: common
+description: "Thick winter fur, torn where the wolf objected."
+weight: 1.5
+market:
+  base_value_col: 60
+  volatility: 0.4

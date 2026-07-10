@@ -1,0 +1,11 @@
+id: world.testworld
+name: "Testworld"
+version: "0.1.0"
+description: "Tiny synthetic package for headless engine tests."
+entry_point:
+  location: loc.tw_hub
+  time: { day: 0, hour: 8 }
+starting_player:
+  level: 1
+  col: 100
+  items: [item.tw_stick, item.tw_ration_x3]

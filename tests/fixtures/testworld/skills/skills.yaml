@@ -1,0 +1,14 @@
+- id: skill.tw_slinging
+  name: "Slinging"
+  category: weapon
+  unlocks:
+    - { at: 0, grants: tech.tw_sling_shot }
+- id: tech.tw_sling_shot
+  name: "Sling Shot"
+  parent_skill: skill.tw_slinging
+  delivery: projectile
+  damage_multiplier: 1.0
+  activation_ms: 600
+  execution_ms: 300
+  post_delay_ms: 0
+  ammo_per_use: 1

@@ -1,0 +1,13 @@
+id: fac.dka
+canon_tier: confirmed
+name: "Divine Knights Alliance"
+type: guild
+headquarters: loc.tolbana
+leadership: []
+membership_count: 120
+treasury_col: 400000
+agenda:
+  - { goal: "Hold frontline clearing authority", priority: 0.9 }
+relations:
+  - { with: fac.alf, disposition: -0.3 }
+policies: { tax_rate: 0.15, recruitment: selective }

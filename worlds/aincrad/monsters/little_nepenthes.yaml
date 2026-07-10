@@ -1,0 +1,20 @@
+id: mon.little_nepenthes
+canon_tier: confirmed
+name: "Little Nepenthes"
+level: 3
+stats: { hp: 140, attack: 16, defense: 6, speed: 3, reaction_ms: 1400 }
+behavior:
+  aggression: aggressive
+  perception_range_m: 8
+  flee_hp_ratio: 0.0
+  pack_size: [3, 8]
+  active_hours: [0, 24]
+  ai_script: acid_spit_swarm
+ecology:
+  diet: carnivorous_plant
+  habitat: [forest]
+  reproduction_days: 20
+drops:
+  # the flower-bearing variant is rare — hence the quest's difficulty
+  - { item: item.nepenthes_ovule, chance: 0.02, qty: 1 }
+xp: 38

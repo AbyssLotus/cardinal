@@ -1,0 +1,14 @@
+id: mod.paralysis_venom
+canon_tier: confirmed
+name: "Paralysis"
+description: "The system's paralysis debuff: green status icon, locked limbs."
+mod_type: affliction
+visibility: visible                  # the status icon is visible to observers
+duration_minutes: 10
+effects:
+  - { type: stat_mult, target: speed, value: 0.0 }
+  - { type: action_lock, value: true }   # cannot act; defenders get free timing
+acquisition:
+  source: infliction                 # venomous monsters, trap items, PK ambushes
+removal:
+  item: item.antidote_crystal

@@ -1,0 +1,6 @@
+id: res.medicinal_herb
+canon_tier: inference
+name: "Medicinal Herb"
+regrowth_days: 20
+yields:
+  - { item: item.medicinal_herb_leaf, chance: 1.0, qty: [1, 3] }

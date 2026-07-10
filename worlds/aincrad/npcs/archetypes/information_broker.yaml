@@ -1,0 +1,7 @@
+id: arch.information_broker
+canon_tier: inference
+population_weight: 0.005
+occupation: information_broker
+personality:
+  traits_pool: { shrewd: 0.8, gossipy: 0.6, mercantile: 0.7 }
+level_range: [5, 15]

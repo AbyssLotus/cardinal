@@ -1,0 +1,14 @@
+# Inference-tier: the system offers no Archery skill, so bow use grows as an
+# unassisted proficiency — slower than any system-supported weapon skill.
+id: skill.improvised_archery
+canon_tier: inference
+name: "Improvised Archery"
+category: weapon
+proficiency_max: 1000
+growth:
+  per_use: 0.15            # no system assist — everything is learned the hard way
+  per_training_hour: 0.8
+unlocks:
+  - { at: 0, grants: tech.aimed_shot }
+hidden: true               # discovered only by drawing a bow; never listed in menus
+unlock_condition: { fire_crafted_bow: 1 }

@@ -1,0 +1,13 @@
+# One market per settlement. Prices float per §11; these define existence and scope.
+- id: market.tob
+  canon_tier: inference
+  settlement: loc.town_of_beginnings
+  stock_categories: [weapon, armor, food, material]
+- id: market.horunka
+  canon_tier: inference
+  settlement: loc.horunka
+  stock_categories: [food, material]
+- id: market.tolbana
+  canon_tier: inference
+  settlement: loc.tolbana
+  stock_categories: [weapon, armor, food, material]

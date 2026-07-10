@@ -1,0 +1,7 @@
+id: loc.tob_inn
+canon_tier: generated
+name: "The Weathered Cask Inn"
+floor: floor.1
+type: landmark
+safe_zone: true
+services: [inn, meals]

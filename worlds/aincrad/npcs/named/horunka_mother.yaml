@@ -1,0 +1,27 @@
+id: npc.horunka_mother
+canon_tier: confirmed
+name: "Sasha of Horunka"
+archetype: arch.villager
+location: loc.horunka
+identity:
+  age: 34
+  appearance: "Tired eyes, flour-dusted apron, listens for the back room."
+personality:
+  traits: [devoted, weary, quietly_desperate]
+  values: [family]
+  fears: [losing_her_daughter]
+goals:
+  - id: goal.cure_daughter
+    description: "Obtain a Little Nepenthes ovule to brew her daughter's medicine."
+    priority: 1.0
+    status: active
+needs:
+  food: 0.8
+  rest: 0.5
+  income: 0.4
+occupation: homemaker
+schedule:
+  - { from: "06:00", to: "21:00", activity: tend_household, at: loc.horunka }
+combat:
+  level: 1
+  skills: []

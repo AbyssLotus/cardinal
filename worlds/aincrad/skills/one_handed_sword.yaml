@@ -1,0 +1,17 @@
+id: skill.one_handed_sword
+canon_tier: confirmed
+name: "One-Handed Sword"
+category: weapon
+requirements: null
+proficiency_max: 1000
+growth:
+  per_use: 0.4
+  per_training_hour: 2.0
+  diminishing_vs_lower_level: true
+unlocks:
+  - { at: 0,   grants: swordskill.horizontal }
+  - { at: 50,  grants: swordskill.slant }
+  - { at: 150, grants: swordskill.vertical_arc }
+synergies: [skill.blade_throwing]
+hidden: false
+unique: false

@@ -1,0 +1,3 @@
+- id: market.tw_hub
+  settlement: loc.tw_hub
+  stock_categories: [weapon, food, material]

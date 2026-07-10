@@ -1,0 +1,11 @@
+id: item.medicinal_herb_leaf
+canon_tier: inference
+name: "Medicinal Herb Leaf"
+category: material.alchemy
+rarity: common
+description: "Bitter leaves that speed HP recovery when brewed."
+weight: 0.1
+expires_days: 10
+market:
+  base_value_col: 20
+  volatility: 0.3

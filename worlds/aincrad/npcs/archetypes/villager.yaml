@@ -1,0 +1,7 @@
+id: arch.villager
+canon_tier: inference
+population_weight: 0.6
+occupation: villager
+personality:
+  traits_pool: { hospitable: 0.5, wary_of_travelers: 0.3, gossipy: 0.4 }
+level_range: [1, 4]

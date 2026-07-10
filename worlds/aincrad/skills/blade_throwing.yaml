@@ -1,0 +1,11 @@
+id: skill.blade_throwing
+canon_tier: confirmed
+name: "Blade Throwing"
+category: weapon
+proficiency_max: 1000
+growth:
+  per_use: 0.35
+  per_training_hour: 1.8
+unlocks:
+  - { at: 0, grants: tech.throw_pick }
+synergies: [skill.one_handed_sword]

@@ -1,0 +1,28 @@
+id: npc.thinker
+canon_tier: confirmed
+name: "Thinker"
+archetype: arch.guild_leader
+location: loc.town_of_beginnings
+identity:
+  age: 25
+  appearance: "Plain gear, patient face; carries more paperwork than potions."
+personality:
+  traits: [idealistic, organized, conflict_averse]
+  values: [fairness, protecting_the_weak]
+  fears: [the_guild_splitting]
+goals:
+  - id: goal.alf_relief
+    description: "Keep low-level players in the Town of Beginnings fed and housed."
+    priority: 0.8
+    status: active
+needs:
+  food: 1.0
+  rest: 0.7
+  income: 0.5
+occupation: guild_leader
+schedule:
+  - { from: "08:00", to: "18:00", activity: administer_guild, at: dist.tob_black_iron_palace }
+  - { from: "18:00", to: "20:00", activity: socialize, at: loc.tob_inn }
+combat:
+  level: 18
+  skills: [skill.one_handed_sword]

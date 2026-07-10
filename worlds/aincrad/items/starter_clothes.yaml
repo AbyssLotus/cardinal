@@ -1,0 +1,11 @@
+id: item.starter_clothes
+canon_tier: confirmed
+name: "Starter Clothes"
+category: armor.cloth
+rarity: common
+description: "Plain travel clothes issued to every new arrival."
+stats: { defense: 2, durability_max: 300 }
+weight: 1.0
+market:
+  base_value_col: 50
+  volatility: 0.05

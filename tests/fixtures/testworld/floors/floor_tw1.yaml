@@ -1,0 +1,15 @@
+id: floor.tw1
+name: "Test Floor"
+diameter_km: 4
+settlements: [loc.tw_hub, loc.tw_village]
+zones:
+  - id: zone.tw_field
+    terrain: grassland
+    danger_rating: 1
+    monster_populations:
+      - { species: mon.tw_slime, carrying_capacity: 50, current: 50 }
+  - id: zone.tw_cave
+    terrain: cave
+    danger_rating: 4
+    monster_populations:
+      - { species: mon.tw_bat, carrying_capacity: 20, current: 20 }
