@@ -10,7 +10,7 @@ def test_create_and_reopen_save(tmp_path, testworld_path):
     save = create_save(tmp_path / "s1", testworld_path, seed=7)
     player = save.store.get_player()
     assert player["location_id"] == "loc.tw_hub"
-    assert player["col"] == 100
+    assert player["col"] == 500
     inventory = save.store.get_inventory("player")
     assert {(i["def_id"], i["qty"]) for i in inventory} == {
         ("item.tw_stick", 1), ("item.tw_ration", 3),
@@ -31,7 +31,7 @@ def test_create_and_reopen_save(tmp_path, testworld_path):
     save.store.close()
 
     reopened = open_save(tmp_path / "s1")
-    assert reopened.store.get_player()["col"] == 100
+    assert reopened.store.get_player()["col"] == 500
     assert reopened.meta["seed"] == 7
     reopened.store.close()
 
@@ -50,7 +50,7 @@ def test_commit_is_atomic(tmp_path, testworld_path):
         with save.store.transaction():
             save.store.apply_deltas([good, bad], day=0, hour=8)
     # the good delta was rolled back along with the bad one
-    assert save.store.get_player()["col"] == 100
+    assert save.store.get_player()["col"] == 500
     save.store.close()
 
 

@@ -379,9 +379,12 @@ SwordSkill = Technique
 # --- §4.9 quests --------------------------------------------------------------------
 
 
-class QuestFailure(ContentModel):
+class QuestOutcome(ContentModel):
     outcome: str = ""
     world_effects: list[dict[str, Any]] = Field(default_factory=list)
+
+
+QuestFailure = QuestOutcome  # legacy name
 
 
 class Quest(Entity):
@@ -391,7 +394,8 @@ class Quest(Entity):
     requirements: list[dict[str, Any]] = Field(default_factory=list)
     rewards: list[dict[str, Any]] = Field(default_factory=list)
     duration_days: Optional[int] = None
-    failure: QuestFailure = Field(default_factory=QuestFailure)
+    success: QuestOutcome = Field(default_factory=QuestOutcome)
+    failure: QuestOutcome = Field(default_factory=QuestOutcome)
     npc_fallback: dict[str, Any] = Field(default_factory=dict)
     repeatable: bool = False
     world_impact: str = "minor"

@@ -25,6 +25,8 @@ _DEFAULT_WEIGHTS = {"schedule": 0.5, "need": 1.2, "goal": 0.4, "idle": 0.1}
 
 
 def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delta]:
+    if granularity == "day":
+        return _daily_memory_pass(ctx, day)
     if granularity != "hour":
         return []
     rule = ctx.registry.rule
@@ -102,6 +104,52 @@ def _schedule_block(npc, hour: int):
 
 def _is_night(hour: int) -> bool:
     return hour >= 22 or hour < 6
+
+
+def _daily_memory_pass(ctx: SystemContext, day: int) -> list[Delta]:
+    """§5.2 daily work: salience decay and rumor propagation.
+
+    Memories decay in salience (never deleted) unless flagged permanent.
+    Co-located NPCs pass their strongest memories along as rumors with
+    reduced certainty — this is how reputation spreads."""
+    ctx.store.conn.execute(
+        "UPDATE npc_memory SET salience = ROUND(salience * 0.97, 4) WHERE decays = 1")
+
+    rng = ctx.rng.stream("rumors")
+    chance = ctx.registry.rule("npc.rumor_spread_chance", 0.4)
+    deltas: list[Delta] = []
+    by_location: dict[str, list[str]] = {}
+    for npc in sorted(ctx.registry.by_kind("npc"), key=lambda n: n.id):
+        runtime = ctx.store.get_entity(npc.id)
+        if runtime is not None and runtime["location_id"]:
+            by_location.setdefault(runtime["location_id"], []).append(npc.id)
+
+    for location in sorted(by_location):
+        group = by_location[location]
+        if len(group) < 2:
+            continue
+        for source in group:
+            strong = ctx.store.conn.execute(
+                "SELECT * FROM npc_memory WHERE npc_id=? AND kind != 'rumor' "
+                "AND ABS(valence) >= 0.5 ORDER BY id DESC LIMIT 2",
+                (source,)).fetchall()
+            for memory in strong:
+                for listener in group:
+                    if listener == source or rng.random() >= chance:
+                        continue
+                    already = ctx.store.conn.execute(
+                        "SELECT 1 FROM npc_memory WHERE npc_id=? AND summary=? LIMIT 1",
+                        (listener, memory["summary"])).fetchone()
+                    if already:
+                        continue
+                    certainty = round((memory["rumor_certainty"] or 1.0) * 0.75, 2)
+                    deltas.append(Delta(kind="npc_memory", payload={
+                        "npc_id": listener, "kind": "rumor",
+                        "subject_id": memory["subject_id"],
+                        "valence": round(memory["valence"] * 0.8, 2),
+                        "summary": memory["summary"],
+                        "rumor_certainty": certainty}))
+    return deltas
 
 
 def _socialize(ctx: SystemContext, npc, location: str, chance: float, rng) -> list[Delta]:

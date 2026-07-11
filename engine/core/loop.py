@@ -21,7 +21,8 @@ from engine.narrator import perception
 from engine.narrator.base import Narrator
 from engine.persistence.store import Delta, Store
 from engine.systems import TICK_ORDER, SystemContext
-from engine.systems import combat, interact, skills as skills_system
+from engine.systems import combat, economy as economy_system, interact
+from engine.systems import skills as skills_system
 from engine.systems import (  # noqa: F401  (imported for the tick table)
     economy, ecology, factions, npc, quests, weather, worldevents,
 )
@@ -39,6 +40,18 @@ _SYSTEM_MODULES = {
 
 class _TurnAbort(Exception):
     """Raised inside the turn transaction to roll the whole turn back."""
+
+
+def _disposition_words(value: float) -> str:
+    if value >= 0.5:
+        return "warm"
+    if value >= 0.15:
+        return "friendly"
+    if value > -0.15:
+        return "neutral"
+    if value > -0.5:
+        return "wary"
+    return "hostile"
 
 
 @dataclass
@@ -211,7 +224,9 @@ class SimulationLoop:
                     return interaction.time_minutes
         if action.intent in ("mount", "dismount"):
             return 1
-        return 0  # look / status / skills / equip are near-instant
+        if action.intent in ("shop", "buy", "sell", "give"):
+            return rule("time_costs.shop_transaction", 5)
+        return 0  # look / status / skills / equip / talk are near-instant
 
     def _floor_diameter(self, player: dict) -> float:
         current = self.registry.find(player["location_id"])
@@ -269,6 +284,17 @@ class SimulationLoop:
             ]
         if action.intent == "interact":
             return self._resolve_interact(action, player)
+        if action.intent == "shop":
+            self._resolve_shop(player)
+            return []
+        if action.intent in ("buy", "sell"):
+            self._resolve_trade(action, player)
+            return []
+        if action.intent == "talk":
+            self._resolve_talk(action.parameters["name"], player)
+            return []
+        if action.intent == "give":
+            return self._resolve_give(action.parameters["name"], player)
         if action.intent == "mount":
             self._resolve_mount(action.parameters["name"], player)
             return []
@@ -348,6 +374,213 @@ class SimulationLoop:
             return []
         deltas, messages = interact.resolve(self.ctx, device, interaction)
         self._notes += messages
+        return deltas
+
+    # ------------------------------------------------------------ trade
+
+    def _local_market(self, player: dict):
+        location = self.registry.find(player["location_id"])
+        market_id = getattr(location, "market", None) if location else None
+        return self.registry.find(market_id) if market_id else None
+
+    def _find_goods(self, name: str):
+        needle = name.lower()
+        for kind in ("item", "vehicle"):
+            for good in sorted(self.registry.by_kind(kind), key=lambda g: g.id):
+                if needle in good.name.lower() or needle in good.id:
+                    return good
+        return None
+
+    def _resolve_shop(self, player: dict) -> None:
+        market = self._local_market(player)
+        if market is None:
+            self._notes.append("No market trades here.")
+            return
+        currency = self.registry.manifest.currency.name
+        lines = [f"— {market.id} —"]
+        for good in economy_system.stocked_goods(self.ctx, market):
+            price = economy_system.current_price(self.ctx, market.id, good)
+            lines.append(f"  {good.name}: {price:.0f} {currency}")
+        self._notes += lines
+
+    def _resolve_trade(self, action: Action, player: dict) -> None:
+        market = self._local_market(player)
+        if market is None:
+            self._notes.append("No market trades here.")
+            return
+        good = self._find_goods(action.parameters["name"])
+        if good is None:
+            self._notes.append(f"Nobody here deals in {action.parameters['name']!r}.")
+            return
+        qty = action.parameters["qty"]
+        currency = self.registry.manifest.currency.name
+        price = economy_system.current_price(self.ctx, market.id, good)
+        is_vehicle = good.id.startswith("vehicle.")
+
+        if action.intent == "buy":
+            total = int(price * qty)
+            if player["col"] < total:
+                self._notes.append(f"That's {total} {currency}; you carry {player['col']}.")
+                return
+            if is_vehicle:
+                qty, total = 1, int(price)
+                state = {"owner": "player", "mounted": False,
+                         "hp": (good.stats or {}).get("hp", 100)}
+                if good.fuel is not None:
+                    state["fuel"] = good.fuel.tank_capacity
+                instance_id = f"vehicleinst.buy_{self.rng.stream('trade').randrange(1 << 30):08x}"
+                self.store.upsert_entity(instance_id, "vehicle", good.id, state,
+                                         player["location_id"], self.clock.day)
+            else:
+                durability = (good.stats or {}).get("durability_max")
+                instance_id = f"iteminst.buy_{self.rng.stream('trade').randrange(1 << 30):08x}"
+                self.store.add_item_instance(instance_id, good.id, "player",
+                                             durability=durability, qty=qty)
+            self.store.update_player(col=player["col"] - total)
+            economy_system.record_trade(self.ctx, market.id, good, qty, player_buys=True)
+            self.store.add_player_history(self.clock.day, self.clock.hour, "craft",
+                                          f"Bought {qty}x {good.name} for {total} {currency}.")
+            self._notes.append(f"Bought {qty}x {good.name} for {total} {currency}.")
+            return
+
+        # sell — merchants pay a margin under market price
+        ratio = self.registry.rule("economy.merchant_buy_ratio", 0.6)
+        owned = sum(i["qty"] for i in self.store.get_inventory("player")
+                    if i["def_id"] == good.id)
+        if owned < qty:
+            self._notes.append(f"You only carry {owned}x {good.name}.")
+            return
+        remaining = qty
+        while remaining > 0:
+            batch = min(remaining, max(1, remaining))
+            if not self.store.consume_item("player", good.id, batch):
+                # rows are stacked; fall back to one at a time
+                if not self.store.consume_item("player", good.id, 1):
+                    break
+                batch = 1
+            remaining -= batch
+        earned = int(price * ratio * (qty - remaining))
+        self.store.update_player(col=player["col"] + earned)
+        economy_system.record_trade(self.ctx, market.id, good, qty - remaining,
+                                    player_buys=False)
+        self._notes.append(f"Sold {qty - remaining}x {good.name} for {earned} {currency}.")
+
+    # ------------------------------------------------------------ dialogue & quests
+
+    def _npcs_here(self, player: dict) -> list:
+        found = []
+        for npc in sorted(self.registry.by_kind("npc"), key=lambda n: n.id):
+            runtime = self.store.get_entity(npc.id)
+            at = runtime["location_id"] if runtime else getattr(npc, "location", None)
+            if at == player["location_id"]:
+                found.append(npc)
+        return found
+
+    def _resolve_talk(self, name: str, player: dict) -> None:
+        needle = name.lower()
+        for npc in self._npcs_here(player):
+            if needle not in npc.name.lower() and needle not in npc.id:
+                continue
+            reputation = self.store.get_reputation(npc.id)
+            memory_weight = self.store.conn.execute(
+                "SELECT COALESCE(SUM(valence * salience), 0) AS w FROM npc_memory "
+                "WHERE npc_id=? AND subject_id='player'", (npc.id,)).fetchone()["w"]
+            disposition = round(reputation + memory_weight, 2)
+            self._notes.append(f"{npc.name} ({_disposition_words(disposition)})")
+            instances = {q["def_id"]: q for q in self.store.get_quests()}
+            for quest in sorted(self.registry.by_kind("quest"), key=lambda q: q.id):
+                if quest.source != npc.id:
+                    continue
+                instance = instances.get(quest.id)
+                if instance is not None and instance["state"] == "available":
+                    self._notes.append(f'  "{quest.purpose}"')
+                    for requirement in quest.requirements:
+                        spec = requirement.get("obtain") or requirement.get("deliver")
+                        if spec:
+                            wanted = self.registry.find(spec["item"])
+                            self._notes.append(
+                                f"  (needs {spec.get('qty', 1)}x "
+                                f"{getattr(wanted, 'name', spec['item'])})")
+            for knowledge in getattr(npc, "knowledge", []):
+                if knowledge.price_col:
+                    self._notes.append(
+                        f'  Offers information for {knowledge.price_col} '
+                        f'{self.registry.manifest.currency.name}.')
+            return
+        self._notes.append(f"No one called {name!r} is here.")
+
+    def _resolve_give(self, item_name: str, player: dict) -> list[Delta]:
+        needle = item_name.lower()
+        held = None
+        for item in self.store.get_inventory("player"):
+            definition = self.registry.find(item["def_id"])
+            if definition is not None and (needle in definition.name.lower()
+                                           or needle in item["def_id"]):
+                held = definition
+                break
+        if held is None:
+            self._notes.append(f"You carry nothing called {item_name!r}.")
+            return []
+
+        instances = {q["def_id"]: q for q in self.store.get_quests()}
+        for npc in self._npcs_here(player):
+            for quest in sorted(self.registry.by_kind("quest"), key=lambda q: q.id):
+                if quest.source != npc.id:
+                    continue
+                instance = instances.get(quest.id)
+                if instance is None or instance["state"] != "available":
+                    continue
+                for requirement in quest.requirements:
+                    spec = requirement.get("obtain") or requirement.get("deliver")
+                    if not spec or spec["item"] != held.id:
+                        continue
+                    needed = spec.get("qty", 1)
+                    if not self.store.consume_item("player", held.id, needed):
+                        self._notes.append(f"{npc.name} needs {needed}x {held.name}.")
+                        return []
+                    return self._complete_quest(quest, instance, npc, player)
+        self._notes.append(f"No one here has any use for your {held.name}.")
+        return []
+
+    def _complete_quest(self, quest, instance, npc, player: dict) -> list[Delta]:
+        deltas: list[Delta] = [Delta(kind="quest_state", payload={
+            "instance_id": instance["instance_id"], "def_id": quest.id,
+            "state": "completed", "available_day": instance["available_day"],
+            "expires_day": instance["expires_day"]})]
+        for reward in quest.rewards:
+            reward_def = self.registry.find(reward["item"])
+            durability = (getattr(reward_def, "stats", {}) or {}).get("durability_max")
+            instance_id = f"iteminst.reward_{self.rng.stream('trade').randrange(1 << 30):08x}"
+            self.store.add_item_instance(instance_id, reward["item"], "player",
+                                         durability=durability, qty=reward.get("qty", 1))
+            self._notes.append(
+                f"{npc.name} gives you {reward.get('qty', 1)}x "
+                f"{getattr(reward_def, 'name', reward['item'])}.")
+        outcome_text = quest.success.outcome or f"{quest.name} was fulfilled."
+        self._notes.append(outcome_text)
+        deltas.append(Delta(kind="chronicle", payload={
+            "category": "discovery", "headline": outcome_text,
+            "detail": f"({quest.name}: completed)", "actors": [npc.id, "player"]},
+            location_id=player["location_id"]))
+        deltas.append(Delta(kind="npc_memory", payload={
+            "npc_id": npc.id, "kind": "assistance", "subject_id": "player",
+            "valence": 0.9,  # permanent by the §5.2 rule
+            "summary": f"{player['name']} answered my plea: {quest.purpose}"}))
+        deltas.append(Delta(kind="reputation", payload={"scope_id": npc.id, "delta": 0.25}))
+        location = self.registry.find(player["location_id"])
+        if location is not None:
+            deltas.append(Delta(kind="reputation",
+                                payload={"scope_id": location.id, "delta": 0.1}))
+        deltas.append(Delta(kind="player_history", payload={
+            "kind": "quest", "summary": f"Completed: {quest.name}.", "refs": [quest.id]}))
+        for effect in quest.success.world_effects:
+            runtime = self.store.get_entity(effect.get("target", ""))
+            if effect.get("type") == "npc_state" and runtime is not None:
+                state = runtime["state"]
+                state.update(effect.get("set", {}))
+                deltas.append(Delta(kind="entity_state", payload={
+                    "id": effect["target"], "kind": "npc", "def_id": effect["target"],
+                    "state": state}, location_id=runtime["location_id"]))
         return deltas
 
     # ------------------------------------------------------------ vehicles

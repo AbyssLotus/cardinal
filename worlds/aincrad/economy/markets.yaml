@@ -2,7 +2,7 @@
 - id: market.tob
   canon_tier: inference
   settlement: loc.town_of_beginnings
-  stock_categories: [weapon, armor, food, material]
+  stock_categories: [weapon, armor, food, material, ground]
 - id: market.horunka
   canon_tier: inference
   settlement: loc.horunka

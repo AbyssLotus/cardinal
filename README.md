@@ -7,6 +7,21 @@ See [CARDINAL_DESIGN_SPEC.md](CARDINAL_DESIGN_SPEC.md) for the authoritative des
 
 ## Status
 
+**Milestone M4 — Economy & quests** (done):
+- [x] Markets (§11): daily repricing `base × (demand/supply)^elasticity`,
+      mean-reverting indices (the abstract merchant restock), trades as
+      supply/demand inputs — dump loot and watch the price fall tomorrow
+- [x] `shop / buy / sell` with the world's own currency; vehicles are stocked
+      goods (buy a mule, mount it)
+- [x] Quest completion: `talk <npc>` reveals needs, `give <item>` fulfills
+      requirements — rewards granted, authored success outcome chronicled,
+      permanent NPC gratitude memory, reputation with the NPC and settlement
+- [x] Rumor propagation (§5.2): daily salience decay; co-located NPCs pass
+      strong memories on as rumors with degraded certainty — your deeds
+      reach people you never met
+- Note: rare goods are purchasable wherever their category is stocked
+      (emergent arbitrage); per-good stock depth is an M6 refinement
+
 **Milestone M3 — Player systems** (done):
 - [x] Interactive combat (§8): 1-second rounds, delivery-aware (melee closes
       distance, projectile consumes ammo, thrown weapons leave your hand and

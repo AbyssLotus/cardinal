@@ -92,10 +92,37 @@ def parse(text: str, registry: Registry) -> list[Action]:
     if verb in ("dismount", "unmount", "park"):
         return [Action("dismount", raw_input=text)]
 
+    if verb in ("shop", "browse", "market"):
+        return [Action("shop", raw_input=text)]
+
+    if verb in ("buy", "sell"):
+        if not args:
+            raise ParseError(f"{verb.capitalize()} what?")
+        qty = 1
+        if len(args) > 1 and args[-1].isdigit():
+            qty = int(args[-1])
+            args = args[:-1]
+        return [Action(verb, parameters={"name": " ".join(args), "qty": max(1, qty)},
+                       raw_input=text)]
+
+    if verb in ("talk", "greet"):
+        if not args:
+            raise ParseError("Talk to whom?")
+        name = " ".join(args)
+        if name.startswith("to "):
+            name = name[3:]
+        return [Action("talk", parameters={"name": name}, raw_input=text)]
+
+    if verb == "give":
+        if not args:
+            raise ParseError("Give what?")
+        return [Action("give", parameters={"name": " ".join(args)}, raw_input=text)]
+
     raise ParseError(
         f"You don't know how to {verb!r}. Try: look, status, skills, wait <min>, "
         "go <place>, hunt <creature>, attack [technique], guard <stance>, flee, "
-        "equip <item>, use/hack/open <device>, mount <vehicle>, dismount.")
+        "equip <item>, use/hack/open <device>, mount <vehicle>, dismount, "
+        "shop, buy/sell <item> [qty], talk <npc>, give <item>.")
 
 
 def _resolve_monster(name: str, registry: Registry) -> str | None:

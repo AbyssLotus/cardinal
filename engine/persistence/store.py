@@ -149,6 +149,40 @@ class Store:
         record["progress"] = json.loads(record.pop("progress_json"))
         return record
 
+    # --- markets ------------------------------------------------------------
+
+    def get_market_row(self, market_id: str, item_def: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT * FROM markets WHERE market_id=? AND item_def=?",
+            (market_id, item_def)).fetchone()
+        return dict(row) if row else None
+
+    def get_market(self, market_id: str) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM markets WHERE market_id=? ORDER BY item_def", (market_id,))]
+
+    def upsert_market_row(self, market_id: str, item_def: str, supply_idx: float,
+                          demand_idx: float, price: float) -> None:
+        self.conn.execute(
+            "INSERT INTO markets(market_id, item_def, supply_idx, demand_idx, price) "
+            "VALUES(?,?,?,?,?) ON CONFLICT(market_id, item_def) DO UPDATE SET "
+            "supply_idx=excluded.supply_idx, demand_idx=excluded.demand_idx, "
+            "price=excluded.price",
+            (market_id, item_def, supply_idx, demand_idx, price))
+
+    # --- reputation ----------------------------------------------------------
+
+    def adjust_reputation(self, scope_id: str, delta: float) -> None:
+        self.conn.execute(
+            "INSERT INTO player_reputation(scope_id, value) VALUES(?,?) "
+            "ON CONFLICT(scope_id) DO UPDATE SET value=value+excluded.value",
+            (scope_id, delta))
+
+    def get_reputation(self, scope_id: str) -> float:
+        row = self.conn.execute(
+            "SELECT value FROM player_reputation WHERE scope_id=?", (scope_id,)).fetchone()
+        return row["value"] if row else 0.0
+
     # --- quest instances ---------------------------------------------------------
 
     def upsert_quest(self, instance_id: str, def_id: str, state: str,
@@ -389,6 +423,16 @@ def _apply_quest_state(store: Store, delta: Delta, day: int, hour: int) -> None:
                        p.get("available_day"), p.get("expires_day"))
 
 
+def _apply_market_update(store: Store, delta: Delta, day: int, hour: int) -> None:
+    p = delta.payload
+    store.upsert_market_row(p["market_id"], p["item_def"], p["supply_idx"],
+                            p["demand_idx"], p["price"])
+
+
+def _apply_reputation(store: Store, delta: Delta, day: int, hour: int) -> None:
+    store.adjust_reputation(delta.payload["scope_id"], delta.payload["delta"])
+
+
 def _apply_modifier_add(store: Store, delta: Delta, day: int, hour: int) -> None:
     p = delta.payload
     store.add_modifier(p["owner_id"], p["def_id"], day,
@@ -410,4 +454,6 @@ _DELTA_HANDLERS = {
     "npc_memory": _apply_npc_memory,
     "goal_progress": _apply_goal_progress,
     "quest_state": _apply_quest_state,
+    "market_update": _apply_market_update,
+    "reputation": _apply_reputation,
 }
