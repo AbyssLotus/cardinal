@@ -1,0 +1,14 @@
+id: world.probe_destiny
+name: "Cosmodrome Probe"
+version: "0.1.0"
+description: "Minimal Destiny package: Light abilities, guns, Guardian resurrection."
+currency: { id: glimmer, name: "Glimmer" }
+region_label: "Sector"
+entry_point:
+  location: loc.d2_tower
+  time: { day: 0, hour: 10 }
+starting_player:
+  level: 1
+  col: 5000
+  items: [item.d2_auto_rifle, item.d2_primary_ammo_x60, item.d2_warlock_robes]
+  skills: [skill.d2_rifles, skill.d2_solar_light]

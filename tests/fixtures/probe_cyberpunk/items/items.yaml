@@ -1,0 +1,36 @@
+- id: item.cp_pistol
+  name: "Unity Pistol"
+  category: weapon.pistol
+  stats: { attack: 34, durability_max: 500 }
+  requirements: { skill: skill.cp_handguns }
+  weight: 1.2
+  ranged:
+    ammo: item.cp_bullets
+    magazine: 12
+    reload_s: 2.0
+    optimal_range_m: 15
+    max_range_m: 40
+    projectile_speed_mps: 400    # nobody dodges bullets
+    spread_deg: 2
+  market: { base_value_col: 500 }
+- id: item.cp_bullets
+  name: "9mm Rounds"
+  category: ammo.9mm
+  weight: 0.01
+  market: { base_value_col: 2 }
+- id: item.cp_cyberdeck
+  name: "Fuyutsuki Cyberdeck"
+  category: gear.cyberdeck
+  weight: 1.0
+  market: { base_value_col: 3000 }
+- id: item.cp_datashard
+  name: "Encrypted Datashard"
+  category: material.data
+  weight: 0.01
+  market: { base_value_col: 400 }
+- id: item.cp_armorjack
+  name: "Armorjack Jacket"
+  category: armor.subdermal
+  stats: { defense: 7, durability_max: 400 }
+  weight: 3.0
+  market: { base_value_col: 900 }

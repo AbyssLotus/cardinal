@@ -1,0 +1,14 @@
+id: world.probe_wow
+name: "Elwynn Probe"
+version: "0.1.0"
+description: "Minimal WoW package: mana casting, graveyard respawns, murlocs."
+currency: { id: gold, name: "Gold" }
+region_label: "Zone"
+entry_point:
+  location: loc.wow_goldshire
+  time: { day: 0, hour: 9 }
+starting_player:
+  level: 1
+  col: 50
+  items: [item.wow_apprentice_staff, item.wow_apprentice_robe]
+  skills: [skill.wow_fire]

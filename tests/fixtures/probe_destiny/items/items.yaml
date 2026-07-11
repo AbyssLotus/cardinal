@@ -1,0 +1,26 @@
+- id: item.d2_auto_rifle
+  name: "Khvostov Auto Rifle"
+  category: weapon.auto_rifle
+  stats: { attack: 26, durability_max: 800 }
+  requirements: { skill: skill.d2_rifles }
+  weight: 3.5
+  ranged:
+    ammo: item.d2_primary_ammo
+    magazine: 30
+    reload_s: 1.8
+    optimal_range_m: 25
+    max_range_m: 50
+    projectile_speed_mps: 900
+    spread_deg: 3
+  market: { base_value_col: 1000 }
+- id: item.d2_primary_ammo
+  name: "Primary Ammo"
+  category: ammo.primary
+  weight: 0.01
+  market: { base_value_col: 1 }
+- id: item.d2_warlock_robes
+  name: "Warlock Robes"
+  category: armor.warlock
+  stats: { defense: 6, durability_max: 600 }
+  weight: 2.0
+  market: { base_value_col: 800 }

@@ -61,12 +61,30 @@ def create_save(save_dir: str | Path, world_path: str | Path, seed: int,
 
         starting = manifest.starting_player
         store.init_player(player_name, starting.level, starting.col, entry.location)
+        first_weapon_equipped = False
         for index, ref in enumerate(starting.items):
             def_id, qty = strip_qty_suffix(ref)
             item_def = registry.get(def_id)
             durability = item_def.stats.get("durability_max") if hasattr(item_def, "stats") else None
-            store.add_item_instance(f"iteminst.start_{index}", def_id, "player",
+            instance_id = f"iteminst.start_{index}"
+            store.add_item_instance(instance_id, def_id, "player",
                                     durability=durability, qty=qty)
+            category = getattr(item_def, "category", "")
+            if category.startswith("armor"):
+                store.set_equipped(instance_id, True)
+            elif category.startswith("weapon") and not first_weapon_equipped:
+                store.set_equipped(instance_id, True)
+                first_weapon_equipped = True
+        for skill_ref in starting.skills:
+            store.upsert_player_skill(skill_ref, 0.0)
+        for index, vehicle_ref in enumerate(starting.vehicles):
+            vehicle_def = registry.get(vehicle_ref)
+            state = {"owner": "player", "mounted": False,
+                     "hp": (vehicle_def.stats or {}).get("hp", 100)}
+            if vehicle_def.fuel is not None:
+                state["fuel"] = vehicle_def.fuel.tank_capacity
+            store.upsert_entity(f"vehicleinst.start_{index}", "vehicle", vehicle_ref,
+                                state, entry.location, entry.time.day)
 
         ctx = SystemContext(registry=registry, store=store, rng=rng, bus=None)
         seed_deltas = npc_system.seed_runtime_state(ctx, entry.time.day)

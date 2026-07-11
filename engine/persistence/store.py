@@ -215,6 +215,68 @@ class Store:
             )
         ]
 
+    def get_equipped(self, owner_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(row)
+            for row in self.conn.execute(
+                "SELECT * FROM item_instances WHERE owner_id=? AND equipped=1 ORDER BY id",
+                (owner_id,),
+            )
+        ]
+
+    def set_equipped(self, instance_id: str, equipped: bool) -> None:
+        self.conn.execute("UPDATE item_instances SET equipped=? WHERE id=?",
+                          (1 if equipped else 0, instance_id))
+
+    def adjust_durability(self, instance_id: str, delta: int) -> int | None:
+        """Returns remaining durability, or None if the instance shattered."""
+        row = self.conn.execute(
+            "SELECT durability FROM item_instances WHERE id=?", (instance_id,)
+        ).fetchone()
+        if row is None or row["durability"] is None:
+            return None
+        remaining = row["durability"] + delta
+        if remaining <= 0:
+            self.conn.execute("DELETE FROM item_instances WHERE id=?", (instance_id,))
+            return None
+        self.conn.execute("UPDATE item_instances SET durability=? WHERE id=?",
+                          (remaining, instance_id))
+        return remaining
+
+    def consume_item(self, owner_id: str, def_id: str, qty: int = 1) -> bool:
+        """Remove qty of a stackable item; False if the owner lacks enough."""
+        row = self.conn.execute(
+            "SELECT id, qty FROM item_instances WHERE owner_id=? AND def_id=? "
+            "ORDER BY id LIMIT 1", (owner_id, def_id),
+        ).fetchone()
+        if row is None or row["qty"] < qty:
+            return False
+        if row["qty"] == qty:
+            self.conn.execute("DELETE FROM item_instances WHERE id=?", (row["id"],))
+        else:
+            self.conn.execute("UPDATE item_instances SET qty=qty-? WHERE id=?",
+                              (qty, row["id"]))
+        return True
+
+    # --- player skills -------------------------------------------------------
+
+    def get_player_skill(self, skill_id: str) -> float | None:
+        row = self.conn.execute(
+            "SELECT proficiency FROM player_skills WHERE skill_id=?", (skill_id,)
+        ).fetchone()
+        return row["proficiency"] if row else None
+
+    def get_player_skills(self) -> dict[str, float]:
+        return {row["skill_id"]: row["proficiency"]
+                for row in self.conn.execute("SELECT * FROM player_skills ORDER BY skill_id")}
+
+    def upsert_player_skill(self, skill_id: str, proficiency: float) -> None:
+        self.conn.execute(
+            "INSERT INTO player_skills(skill_id, proficiency) VALUES(?,?) "
+            "ON CONFLICT(skill_id) DO UPDATE SET proficiency=excluded.proficiency",
+            (skill_id, proficiency),
+        )
+
     # --- modifiers ---------------------------------------------------------------
 
     def add_modifier(self, owner_id: str, def_id: str, day: int,

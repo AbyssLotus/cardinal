@@ -1,0 +1,6 @@
+id: loc.d2_tower
+name: "The Tower"
+floor: floor.d2_cosmodrome
+type: city
+safe_zone: true
+services: [vault, vendor]

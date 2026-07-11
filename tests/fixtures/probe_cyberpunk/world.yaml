@@ -1,0 +1,14 @@
+id: world.probe_cp
+name: "Night City Probe"
+version: "0.1.0"
+description: "Minimal cyberpunk package: firearms, chrome, lethal streets."
+currency: { id: eddies, name: "Eurodollars" }
+region_label: "District"
+entry_point:
+  location: loc.cp_afterlife
+  time: { day: 0, hour: 22 }
+starting_player:
+  level: 1
+  col: 2000
+  items: [item.cp_pistol, item.cp_bullets_x30, item.cp_armorjack, item.cp_cyberdeck]
+  skills: [skill.cp_handguns, skill.cp_netrunning]

@@ -4,7 +4,7 @@ name: "Small Sword"
 category: weapon.one_handed_sword
 rarity: common
 description: "Standard-issue starter blade. It has never impressed anyone."
-stats: { attack: 12, accuracy: 2, durability_max: 400 }
+stats: { attack: 22, accuracy: 2, durability_max: 400 }   # tuned: a fresh player can take a Frenzy Boar (canon tutorial kill), not trivially
 weight: 2.4
 requirements: { skill: skill.one_handed_sword, proficiency: 0 }
 market:

@@ -1,0 +1,36 @@
+- id: skill.d2_rifles
+  name: "Rifles"
+  category: weapon
+  growth: { per_use: 0.4, per_training_hour: 2.0 }
+- id: skill.d2_solar_light
+  name: "Solar Light"
+  category: ability
+  growth: { per_use: 0.6, per_training_hour: 1.0 }
+  unlocks:
+    - { at: 0,  grants: tech.d2_solar_grenade }
+    - { at: 50, grants: tech.d2_golden_gun }
+- id: tech.d2_solar_grenade
+  name: "Solar Grenade"
+  parent_skill: skill.d2_solar_light
+  delivery: area
+  base_damage: 40                # the Light provides; no weapon involved
+  resource: light
+  resource_cost: 60
+  range_m: 4                     # blast radius
+  max_range_m: 25
+  activation_ms: 400
+  execution_ms: 300
+  post_delay_ms: 0
+  cooldown_s: 8
+- id: tech.d2_golden_gun
+  name: "Golden Gun"
+  parent_skill: skill.d2_solar_light
+  delivery: beam                 # hitscan flame — dodged on the tell or not at all
+  base_damage: 95
+  resource: light
+  resource_cost: 90
+  max_range_m: 40
+  activation_ms: 300
+  execution_ms: 150
+  post_delay_ms: 0
+  cooldown_s: 20

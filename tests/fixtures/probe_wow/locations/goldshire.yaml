@@ -1,0 +1,6 @@
+id: loc.wow_goldshire
+name: "Goldshire"
+floor: floor.wow_elwynn
+type: village
+safe_zone: true
+services: [inn, blacksmith]

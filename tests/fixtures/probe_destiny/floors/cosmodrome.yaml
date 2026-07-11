@@ -1,0 +1,12 @@
+id: floor.d2_cosmodrome
+name: "The Cosmodrome"
+diameter_km: 12
+biome: tundra_ruins
+settlements: [loc.d2_tower]
+zones:
+  - id: zone.d2_divide
+    terrain: ruins
+    danger_rating: 3
+    cover_density: 0.5
+    monster_populations:
+      - { species: mon.d2_dreg, carrying_capacity: 200, current: 200 }

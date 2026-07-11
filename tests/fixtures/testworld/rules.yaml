@@ -1,7 +1,11 @@
 death:
   permadeath: true
+leveling:
+  xp_curve: "100 * level ** 1.8"
+  hp_per_level: 10
 time_costs:
   travel_per_km_road: 10
+  travel_per_km_wilderness: 20
 economy:
   price_elasticity: 0.35
 ecology:

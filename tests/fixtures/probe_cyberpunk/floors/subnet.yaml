@@ -1,0 +1,13 @@
+# A net architecture IS a region: depth levels are zones, ICE are monsters.
+# Your presence travels here via the jack-in terminal; your body stays put.
+id: floor.cp_subnet
+name: "Konpeki Subnet"
+diameter_km: 0.1                 # depth, not distance — netruns are fast
+biome: cyberspace
+settlements: [loc.cp_subnet_shallows]
+zones:
+  - id: zone.cp_subnet_deep
+    terrain: cyberspace
+    danger_rating: 5
+    monster_populations:
+      - { species: mon.cp_wisp_ice, carrying_capacity: 20, current: 20 }

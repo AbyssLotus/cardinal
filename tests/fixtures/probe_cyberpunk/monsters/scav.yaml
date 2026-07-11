@@ -1,0 +1,14 @@
+id: mon.cp_scav
+name: "Scav Gunman"
+level: 3
+stats: { hp: 65, attack: 18, defense: 4, speed: 6, reaction_ms: 750 }
+behavior:
+  aggression: aggressive
+  perception_range_m: 30
+  flee_hp_ratio: 0.15
+  pack_size: [1, 2]
+  active_hours: [0, 24]
+  ai_script: spit_and_cover      # ranged AI: keeps distance, shoots
+drops:
+  - { item: item.cp_bullets, chance: 0.7, qty: [4, 9] }
+xp: 45

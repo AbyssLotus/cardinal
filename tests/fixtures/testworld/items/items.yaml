@@ -1,7 +1,7 @@
 - id: item.tw_stick
   name: "Sturdy Stick"
   category: weapon.club
-  stats: { attack: 3, durability_max: 50 }
+  stats: { attack: 3, durability_max: 200 }
   weight: 1.0
   market: { base_value_col: 5 }
 - id: item.tw_ration
@@ -19,6 +19,7 @@
   name: "Leather Sling"
   category: weapon.sling
   stats: { attack: 5, durability_max: 80 }
+  requirements: { skill: skill.tw_slinging }
   weight: 0.3
   ranged:
     ammo: item.tw_pebble

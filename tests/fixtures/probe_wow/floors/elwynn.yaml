@@ -1,0 +1,11 @@
+id: floor.wow_elwynn
+name: "Elwynn Forest"
+diameter_km: 8
+biome: forest
+settlements: [loc.wow_goldshire]
+zones:
+  - id: zone.wow_crystal_lake
+    terrain: lakeside
+    danger_rating: 2
+    monster_populations:
+      - { species: mon.wow_murloc, carrying_capacity: 300, current: 300 }

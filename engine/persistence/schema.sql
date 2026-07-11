@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS item_instances (
     durability   INTEGER,
     plus         INTEGER NOT NULL DEFAULT 0,
     qty          INTEGER NOT NULL DEFAULT 1,
+    equipped     INTEGER NOT NULL DEFAULT 0,
     history_json TEXT NOT NULL DEFAULT '[]'
 );
 

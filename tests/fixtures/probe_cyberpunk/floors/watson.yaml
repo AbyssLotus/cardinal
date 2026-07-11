@@ -1,0 +1,13 @@
+id: floor.cp_watson
+name: "Watson District"
+diameter_km: 6
+biome: urban
+settlements: [loc.cp_afterlife]
+zones:
+  - id: zone.cp_alleys
+    terrain: urban
+    danger_rating: 4
+    cover_density: 0.7           # gunfights happen around corners here
+    visibility_m: 40
+    monster_populations:
+      - { species: mon.cp_scav, carrying_capacity: 60, current: 60 }

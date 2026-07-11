@@ -1,0 +1,15 @@
+# Guardians don't stay dead: the Ghost pulls you back at the Tower.
+death:
+  permadeath: false
+  respawn_location: loc.d2_tower
+  col_loss_ratio: 0.05
+leveling:
+  xp_curve: "100 * level ** 1.8"
+  hp_per_level: 12
+time_costs:
+  travel_per_km_road: 3
+  travel_per_km_wilderness: 6
+combat:
+  base_reaction_ms: 600
+  pools:
+    light: { max: 100, regen: 4 }   # ability energy, recharges in combat

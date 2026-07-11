@@ -4,7 +4,7 @@
   stats: { hp: 30, attack: 4, defense: 1, speed: 2, reaction_ms: 1500 }
   drops:
     - { item: item.tw_goo, chance: 0.8, qty: 1 }
-  xp: 5
+  xp: 25
 - id: mon.tw_bat
   name: "Cave Bat"
   level: 4

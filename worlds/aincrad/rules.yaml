@@ -5,6 +5,7 @@ death:
 leveling:
   xp_curve: "100 * level ** 1.8"  # evaluated by engine formula parser
   stat_points_per_level: 3
+  hp_per_level: 10
 skills:
   max_equipped: 2                 # skill slots at level 1; grows with level
 time_costs:                       # minutes, used by the COST step

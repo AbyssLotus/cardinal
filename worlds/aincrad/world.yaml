@@ -16,3 +16,4 @@ starting_player:
   level: 1
   col: 500
   items: [item.small_sword, item.starter_clothes, item.bread_x2]
+  skills: [skill.one_handed_sword]

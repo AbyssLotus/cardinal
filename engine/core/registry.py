@@ -32,7 +32,7 @@ from engine.schemas import (
 REF_PREFIXES = {
     "floor", "loc", "zone", "dist", "shop", "npc", "arch", "mon", "item",
     "skill", "swordskill", "tech", "quest", "fac", "market", "res", "goal", "world",
-    "mod", "vehicle",
+    "mod", "vehicle", "device",
 }
 _REF_RE = re.compile(r"^([a-z][a-z0-9_]*)\.[a-z0-9_.]+$")
 
@@ -49,6 +49,7 @@ _DIR_CATEGORIES = {
     "resources": "resources",
     "modifiers": "modifiers",
     "vehicles": "vehicles",
+    "devices": "devices",
 }
 
 

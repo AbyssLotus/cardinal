@@ -1,0 +1,14 @@
+# Azeroth: the Spirit Healer sends you back. Death is a corpse run, not an end.
+death:
+  permadeath: false
+  respawn_location: loc.wow_goldshire
+leveling:
+  xp_curve: "100 * level ** 1.8"
+  hp_per_level: 15
+time_costs:
+  travel_per_km_road: 12
+  travel_per_km_wilderness: 20
+combat:
+  base_reaction_ms: 900
+  pools:
+    mana: { max: 120, regen: 6 }

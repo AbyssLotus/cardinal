@@ -1,39 +1,646 @@
-"""Positional combat resolution (§8), generalized across genres. M3 milestone — stub.
+"""Combat resolution (§8), delivery-agnostic. M3 implementation.
 
-The 1-second-round, continuous-position model is delivery-agnostic. Each
-attack resolves through its technique's `delivery` (see schemas.Technique):
+Model: 1-second rounds. Positions are per-monster distances to the player
+(a 1D simplification of the spec's 2D plane — flanking is modeled as an AI
+bonus; full 2D positioning is an M6 refinement, documented deviation).
 
-  melee      — connects within range_m/arc_deg; defender in `ready` state may
-               parry/dodge/block if reaction_ms beats activation+execution.
-  thrown     — the weapon instance IS the projectile: it leaves the attacker's
-               inventory, lands in the encounter space, and can be recovered
-               (or looted). Dodgeable if reaction beats flight time.
-  projectile — consumes the weapon's RangedSpec.ammo per shot; magazine and
-               reload_s are real action costs. Dodgeable only when
-               reaction_ms < distance / projectile_speed_mps * 1000 — bullets
-               effectively aren't, arrows at range are.
-  beam       — hitscan. Defenders dodge the tell (activation_ms), never the
-               shot. Cover is the counterplay.
-  area       — resolves against every combatant within range_m of the impact
-               point; cover and prone-state reduce damage, reactions don't.
+Delivery paths per the Technique schema:
+  melee      — must close to range_m; defender in ready state may react
+  thrown     — consumes the weapon item; partial recovery after victory
+  projectile — consumes ranged.ammo per shot within max_range_m
+  (beam/area land when content needs them)
 
-Range bands from RangedSpec: full accuracy inside optimal_range_m, linear
-falloff to max_range_m, no connection beyond. spread_deg widens with movement.
+Core timing rule: a defender reacts only when ready (not frozen in a
+post-skill delay) AND its reaction_ms beats the attack's activation+execution.
+The sword-skill freeze is a real cost: post_delay_ms // 1000 = frozen rounds.
 
-Cover & sightlines come from zone data (Zone.cover_density, Zone.visibility_m)
-plus per-encounter terrain features; a target in cover is only hittable by
-delivery paths with line of sight or `area`.
+No level scaling, ever. Permadeath per world rules applies. All constants
+from rules.yaml `combat:`; every roll from rng stream "combat".
 
-Invariants (unchanged from §8): no level scaling ever; permadeath per world
-rules applies to everyone; all tunables live in rules.yaml `combat:` —
-nothing genre-specific is hardcoded here.
+Encounter state persists in the entities table (id `encounter.player`) —
+the world, including a fight you quit mid-swing, survives restarts.
 """
 
 from __future__ import annotations
 
+import json
+import math
+from dataclasses import dataclass, field
+from typing import Any
+
 from engine.persistence.store import Delta
 from engine.systems import SystemContext
+
+ENCOUNTER_ID = "encounter.player"
+
+BASIC_STRIKE = {"name": "strike", "delivery": "melee", "hits": 1, "damage_multiplier": 1.0,
+                "activation_ms": 300, "execution_ms": 300, "post_delay_ms": 300,
+                "range_m": 1.5, "cooldown_s": 0, "ammo_per_use": 0}
+BASIC_SHOT = {"name": "shot", "delivery": "projectile", "hits": 1, "damage_multiplier": 1.0,
+              "activation_ms": 300, "execution_ms": 200, "post_delay_ms": 0,
+              "cooldown_s": 0, "ammo_per_use": 1}
+BASIC_THROW = {"name": "throw", "delivery": "thrown", "hits": 1, "damage_multiplier": 1.0,
+               "activation_ms": 250, "execution_ms": 250, "post_delay_ms": 0,
+               "cooldown_s": 0, "ammo_per_use": 0}
+
+
+@dataclass
+class RoundResult:
+    events: list[str] = field(default_factory=list)
+    deltas: list[Delta] = field(default_factory=list)
+    done: bool = False
+    outcome: str | None = None  # victory | death | fled
 
 
 def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delta]:
     return []
+
+
+# --------------------------------------------------------------------- setup
+
+
+def get_encounter(ctx: SystemContext) -> dict[str, Any] | None:
+    row = ctx.store.get_entity(ENCOUNTER_ID)
+    return row["state"] if row and row["state"].get("monsters") else None
+
+
+def start_encounter(ctx: SystemContext, species_id: str, zone_id: str,
+                    location_id: str) -> tuple[dict[str, Any], list[str]]:
+    monster = ctx.registry.get(species_id)
+    rng = ctx.rng.stream("combat")
+    low, high = monster.behavior.pack_size
+    count = rng.randint(low, high)
+    start_dist = float(monster.behavior.perception_range_m)
+    state = {
+        "species": species_id,
+        "zone": zone_id,
+        "location": location_id,
+        "monsters": [
+            {"tag": f"{monster.name} {chr(65 + i)}" if count > 1 else monster.name,
+             "hp": monster.stats.hp, "dist": round(start_dist + i * 1.5, 1),
+             "frozen": 0, "attacked_once": False}
+            for i in range(count)
+        ],
+        "player": {"stamina": ctx.registry.rule("combat.stamina_max", 100),
+                   "guard": "dodge", "frozen": 0, "cooldowns": {},
+                   "pools": {name: spec.get("max", 100)
+                             for name, spec in
+                             (ctx.registry.rule("combat.pools", {}) or {}).items()}},
+        "round": 0,
+        "seconds": 0,
+        "kills": 0,
+    }
+    _save(ctx, state)
+    plural = f"{count} {monster.name}s" if count > 1 else f"a {monster.name}"
+    return state, [f"You engage {plural} ({int(start_dist)}m off)."]
+
+
+def _save(ctx: SystemContext, state: dict[str, Any]) -> None:
+    ctx.store.upsert_entity(ENCOUNTER_ID, "encounter", "encounter", state,
+                            state.get("location"), 0)
+
+
+def _clear(ctx: SystemContext) -> None:
+    ctx.store.upsert_entity(ENCOUNTER_ID, "encounter", "encounter", {}, None, 0)
+
+
+# --------------------------------------------------------------------- round
+
+
+def resolve_round(ctx: SystemContext, state: dict[str, Any], intent: str,
+                  argument: str | None) -> RoundResult:
+    """One combat round: the player's declared action plus every monster's."""
+    result = RoundResult()
+    rng = ctx.rng.stream("combat")
+    monster_def = ctx.registry.get(state["species"])
+    player = ctx.store.get_player()
+    state["round"] += 1
+    state["seconds"] += 1
+    pstate = state["player"]
+
+    mods = _modifier_effects(ctx)
+    if mods.get("action_lock"):
+        result.events.append("Your body will not answer — you are paralyzed.")
+    elif intent == "guard":
+        stance = argument if argument in ("parry", "dodge", "block") else "dodge"
+        pstate["guard"] = stance
+        pstate["stamina"] = min(ctx.registry.rule("combat.stamina_max", 100),
+                                pstate["stamina"] + 10)
+        result.events.append(f"You set yourself to {stance}.")
+    elif intent == "flee":
+        if _try_flee(ctx, state, monster_def, rng, result):
+            return result
+    elif intent == "attack":
+        _player_attack(ctx, state, monster_def, player, argument, mods, rng, result)
+
+    # cooldowns and freezes thaw; breath and power come back
+    pstate["cooldowns"] = {k: v - 1 for k, v in pstate["cooldowns"].items() if v > 1}
+    if pstate["frozen"] > 0:
+        pstate["frozen"] -= 1
+    pstate["stamina"] = min(ctx.registry.rule("combat.stamina_max", 100),
+                            pstate["stamina"]
+                            + ctx.registry.rule("combat.stamina_regen_per_round", 3))
+    for name, spec in (ctx.registry.rule("combat.pools", {}) or {}).items():
+        pools = pstate.setdefault("pools", {})
+        pools[name] = min(spec.get("max", 100),
+                          pools.get(name, spec.get("max", 100)) + spec.get("regen", 0))
+
+    # monsters act
+    if _living(state):
+        _monsters_act(ctx, state, monster_def, player, mods, rng, result)
+    player = ctx.store.get_player()
+
+    if player["hp"] <= 0:
+        _resolve_death(ctx, state, monster_def, result)
+    elif not _living(state):
+        _resolve_victory(ctx, state, monster_def, player, rng, result)
+    else:
+        _save(ctx, state)
+        result.events.append(_status_line(state, player))
+    return result
+
+
+# --------------------------------------------------------------- player side
+
+
+def _player_attack(ctx, state, monster_def, player, argument, mods, rng, result):
+    from engine.systems import skills as skills_system
+
+    pstate = state["player"]
+    if pstate["frozen"] > 0:
+        result.events.append("You are still recovering from your last skill.")
+        return
+
+    weapon = _equipped_weapon(ctx)
+    weapon_def = ctx.registry.find(weapon["def_id"]) if weapon else None
+    # bare `attack` uses the weapon's natural mode: shoot, throw, or swing
+    ranged_spec = getattr(weapon_def, "ranged", None) if weapon_def else None
+    if ranged_spec is not None and ranged_spec.thrown:
+        technique: dict[str, Any] = dict(BASIC_THROW)
+    elif ranged_spec is not None:
+        technique = dict(BASIC_SHOT)
+    else:
+        technique = dict(BASIC_STRIKE)
+    if argument and argument.lower() == "ram":
+        mounted = _mounted_vehicle(ctx)
+        if mounted is None:
+            result.events.append("You'd need to be riding something to ram.")
+            return
+        _, vehicle_def = mounted
+        top_speed = max(vehicle_def.speed_kmh.values(), default=10.0)
+        technique = {"name": "ram", "delivery": "melee", "hits": 1,
+                     "damage_multiplier": 1.0, "base_damage": round(top_speed * 0.8),
+                     "activation_ms": 400, "execution_ms": 300, "post_delay_ms": 500,
+                     "range_m": 2.5, "cooldown_s": 2, "ammo_per_use": 0}
+        argument = None  # resolved; skip technique lookup
+    if argument:
+        known = skills_system.known_techniques(ctx.store, ctx.registry)
+        chosen = known.get(argument.lower())
+        if chosen is None:
+            result.events.append(f"You don't know a technique called {argument!r}.")
+            return
+        if chosen.name.lower() in pstate["cooldowns"]:
+            result.events.append(f"{chosen.name} is still on cooldown.")
+            return
+        technique = chosen.model_dump()
+
+    target = min(_living(state), key=lambda m: m["dist"])
+    delivery = technique.get("delivery", "melee")
+    base_damage = technique.get("base_damage")
+    ability = base_damage is not None  # spells/grenades: no weapon, no ammo
+
+    # resource pool cost (mana, light, energy — defined per world in rules)
+    resource = technique.get("resource")
+    if resource:
+        pools = pstate.setdefault("pools", {})
+        cost = technique.get("resource_cost", 0.0)
+        if pools.get(resource, 0) < cost:
+            result.events.append(f"Not enough {resource} for {technique['name']}.")
+            return
+        pools[resource] = round(pools[resource] - cost, 1)
+
+    if delivery == "melee":
+        reach = technique.get("range_m", 1.5)
+        if target["dist"] > reach:
+            step = ctx.registry.rule("combat.player_speed_mps", 5.0)
+            mounted = _mounted_vehicle(ctx)
+            if mounted is not None:  # ride the throttle, not your legs
+                step = max(step, max(mounted[1].speed_kmh.values(), default=0) / 3.6)
+            target["dist"] = max(reach, round(target["dist"] - step, 1))
+            result.events.append(f"You close in on {target['tag']} ({target['dist']}m).")
+            return
+    elif ability:
+        max_range = technique.get("max_range_m") or 20.0
+        if target["dist"] > max_range:
+            result.events.append(f"{target['tag']} is out of range ({target['dist']}m).")
+            return
+    else:  # weapon-delivered thrown / projectile / beam
+        ranged = getattr(weapon_def, "ranged", None) if weapon_def else None
+        if ranged is None:
+            result.events.append("Your weapon can't attack at range.")
+            return
+        max_range = technique.get("max_range_m") or ranged.max_range_m
+        if target["dist"] > max_range:
+            result.events.append(f"{target['tag']} is out of range ({target['dist']}m).")
+            return
+        if delivery == "projectile":
+            ammo_needed = technique.get("ammo_per_use", 1)
+            if ranged.ammo is None or not ctx.store.consume_item(
+                    "player", ranged.ammo, ammo_needed):
+                result.events.append("You are out of ammunition.")
+                return
+        elif delivery == "thrown":
+            if not ctx.store.consume_item("player", weapon["def_id"], 1):
+                result.events.append("Nothing left to throw.")
+                return
+            state.setdefault("thrown", []).append(weapon["def_id"])
+
+    # who gets hit: area covers everything near the impact point (1D window)
+    if delivery == "area":
+        blast = technique.get("range_m", 3.0)
+        targets = [m for m in _living(state) if abs(m["dist"] - target["dist"]) <= blast]
+    else:
+        targets = [target]
+
+    # timing: beams are dodged on the tell or not at all; the rest race reaction
+    total_ms = technique.get("activation_ms", 300) + technique.get("execution_ms", 300)
+    dodge_chance = 0.05 if delivery == "beam" else (0.0 if delivery == "area" else 0.15)
+
+    attack_stat = base_damage if ability else (
+        (getattr(weapon_def, "stats", {}) or {}).get("attack", 1) if weapon_def else 1)
+    attack_stat += mods.get("attack_add", 0)
+    skill_id = (technique.get("parent_skill") if (ability or argument)
+                else _weapon_skill(weapon_def))
+    proficiency = (ctx.store.get_player_skill(skill_id) or 0.0) if skill_id else 0.0
+    proficiency_factor = 0.8 + (proficiency / 1000.0) * 0.4
+
+    landed_any = False
+    for struck in targets:
+        if (monster_def.stats.reaction_ms < total_ms and rng.random() < dodge_chance):
+            result.events.append(f"{struck['tag']} slips aside from your {technique['name']}.")
+            continue
+        damage = attack_stat * technique.get("damage_multiplier", 1.0) * proficiency_factor
+        damage *= mods.get("attack_mult", 1.0)
+        damage *= 0.9 + 0.2 * rng.random()
+        damage = max(1, round(damage * technique.get("hits", 1) - monster_def.stats.defense))
+        struck["hp"] -= damage
+        landed_any = True
+        result.events.append(
+            f"Your {technique['name']} hits {struck['tag']} for {damage} "
+            f"({_hp_words(struck['hp'], monster_def.stats.hp)}).")
+        if struck["hp"] <= 0:
+            state["kills"] += 1
+            result.events.append(f"{struck['tag']} shatters into fragments.")
+
+    if landed_any and skill_id and ctx.store.get_player_skill(skill_id) is not None:
+        skills_system.gain_proficiency(ctx.store, ctx.registry, skill_id,
+                                       monster_def.level, ctx.store.get_player()["level"])
+
+    if weapon is not None and not ability and delivery != "thrown":
+        if ctx.store.adjust_durability(weapon["id"], -1) is None:
+            result.events.append(f"Your {getattr(weapon_def, 'name', 'weapon')} shatters!")
+
+    freeze = int(technique.get("post_delay_ms", 0)
+                 * ctx.registry.rule("combat.post_skill_delay_multiplier", 1.0)) // 1000
+    pstate["frozen"] += freeze
+    cooldown = int(technique.get("cooldown_s", 0))
+    if cooldown and technique["name"] != "strike":
+        pstate["cooldowns"][technique["name"].lower()] = cooldown
+
+
+def _try_flee(ctx, state, monster_def, rng, result) -> bool:
+    speed = ctx.registry.rule("combat.player_speed_mps", 5.0)
+    chance = max(0.05, min(0.95, 0.4 + (speed - monster_def.stats.speed) / 20.0))
+    if rng.random() < chance:
+        _clear(ctx)
+        result.done, result.outcome = True, "fled"
+        result.deltas.append(Delta(kind="player_history", payload={
+            "kind": "combat", "summary": f"Fled from {monster_def.name}.",
+            "refs": [state["species"]]}))
+        result.events.append("You break away and run.")
+        return True
+    result.events.append("You fail to disengage!")
+    return False
+
+
+# --------------------------------------------------------------- monster side
+
+
+def _monsters_act(ctx, state, monster_def, player, mods, rng, result):
+    pstate = state["player"]
+    armor = _armor_defense(ctx) + mods.get("defense_add", 0)
+    base_reaction = ctx.registry.rule("combat.base_reaction_ms", 800)
+    act_ms = 300 + monster_def.stats.reaction_ms // 4
+    total_ms = act_ms + 300
+    script = monster_def.behavior.ai_script
+    attack_range = 6.0 if "spit" in script else 1.5
+    living = _living(state)
+
+    for monster in living:
+        if monster["frozen"] > 0:
+            monster["frozen"] -= 1
+            continue
+        if monster["dist"] > attack_range:
+            monster["dist"] = max(attack_range,
+                                  round(monster["dist"] - monster_def.stats.speed, 1))
+            continue
+
+        damage = float(monster_def.stats.attack)
+        if "charge" in script and not monster["attacked_once"]:
+            damage *= 1.5
+        if "flank" in script and len(living) >= 2:
+            damage *= 1.15
+        if "boss" in script and monster["hp"] < monster_def.stats.hp * 0.25:
+            damage *= 1.3
+        monster["attacked_once"] = True
+
+        # defender reaction: only when ready and fast enough
+        if pstate["frozen"] == 0 and base_reaction < total_ms:
+            if _defend(ctx, state, monster, damage, rng, result):
+                continue
+        damage *= 0.9 + 0.2 * rng.random()
+        dealt = max(1, round(damage - armor))
+        dealt = _vehicle_absorb(ctx, dealt, result)
+        if dealt <= 0:
+            continue
+        new_hp = max(0, player["hp"] - dealt)
+        ctx.store.update_player(hp=new_hp)
+        player = ctx.store.get_player()
+        result.events.append(f"{monster['tag']} hits you for {dealt}.")
+        _damage_armor(ctx, result)
+        if new_hp <= 0:
+            return
+
+
+def _defend(ctx, state, monster, incoming, rng, result) -> bool:
+    """Returns True if the attack was fully negated."""
+    pstate = state["player"]
+    stance = pstate["guard"]
+    costs = {"parry": 10, "dodge": 8, "block": 15}
+    cost = ctx.registry.rule(f"combat.{stance}_stamina", costs[stance])
+    if pstate["stamina"] < cost:
+        return False
+    pstate["stamina"] -= cost
+    weapon_def = None
+    weapon = _equipped_weapon(ctx)
+    if weapon:
+        weapon_def = ctx.registry.find(weapon["def_id"])
+    skill_id = _weapon_skill(weapon_def)
+    proficiency = (ctx.store.get_player_skill(skill_id) or 0.0) if skill_id else 0.0
+
+    if stance == "parry":
+        if rng.random() < 0.35 + proficiency / 2000.0:
+            monster["frozen"] = 1  # the switch mechanic's opening
+            result.events.append(f"You parry {monster['tag']} — it staggers open!")
+            return True
+    elif stance == "dodge":
+        if rng.random() < 0.35:
+            result.events.append(f"You dodge {monster['tag']}'s attack.")
+            return True
+    elif stance == "block":
+        if rng.random() < 0.55:
+            player = ctx.store.get_player()
+            dealt = max(1, round(incoming * 0.5 - _armor_defense(ctx)))
+            ctx.store.update_player(hp=max(0, player["hp"] - dealt))
+            result.events.append(f"You block; {dealt} bleeds through.")
+            _damage_armor(ctx, result)
+            return True
+    return False
+
+
+# --------------------------------------------------------------- resolution
+
+
+def _resolve_victory(ctx, state, monster_def, player, rng, result):
+    from engine.systems import skills as skills_system
+
+    kills = state["kills"]
+    xp_each = monster_def.xp
+    if monster_def.level <= player["level"] - skills_system.LOW_LEVEL_GAP:
+        xp_each //= 4
+    result.deltas += skills_system.award_xp(ctx.store, ctx.registry, xp_each * kills)
+
+    for monster in state["monsters"]:
+        for drop in monster_def.drops:
+            if rng.random() >= drop.chance:
+                continue
+            qty = drop.qty if isinstance(drop.qty, int) else rng.randint(*drop.qty)
+            instance_id = f"iteminst.drop_{state['species'].split('.')[1]}_{rng.randrange(1 << 30):08x}"
+            item_def = ctx.registry.find(drop.item)
+            durability = (getattr(item_def, "stats", {}) or {}).get("durability_max")
+            ctx.store.add_item_instance(instance_id, drop.item, "player",
+                                        durability=durability, qty=qty)
+            result.events.append(f"Looted {qty}x {getattr(item_def, 'name', drop.item)}.")
+
+    recovery = ctx.registry.rule("combat.ranged.thrown_recovery_chance", 0.85)
+    for def_id in state.get("thrown", []):
+        if rng.random() < recovery:
+            item_def = ctx.registry.find(def_id)
+            durability = (getattr(item_def, "stats", {}) or {}).get("durability_max")
+            ctx.store.add_item_instance(
+                f"iteminst.recovered_{rng.randrange(1 << 30):08x}", def_id, "player",
+                durability=durability)
+            result.events.append(f"You recover your {getattr(item_def, 'name', def_id)}.")
+
+    _reduce_population(ctx, state, kills)
+    result.deltas.append(Delta(kind="player_history", payload={
+        "kind": "combat",
+        "summary": f"Slew {kills}x {monster_def.name}.",
+        "refs": [state["species"]]}))
+    if _is_boss(ctx, state["species"]):
+        result.deltas.append(Delta(kind="chronicle", payload={
+            "category": "boss_defeat",
+            "headline": f"{monster_def.name} has fallen.",
+            "actors": ["player"]}))
+    _clear(ctx)
+    result.done, result.outcome = True, "victory"
+    result.events.append(f"The field falls quiet. (+{xp_each * kills} XP)")
+
+
+def _resolve_death(ctx, state, monster_def, result):
+    """HP 0. Under permadeath the character is deleted from the world's story —
+    this must actually work (§8). Worlds where death is a setback, not an
+    ending (respawn shrines, resurrection), set death.permadeath: false and a
+    death.respawn_location; the world's rules decide, never the engine."""
+    if ctx.registry.rule("death.permadeath", True):
+        ctx.store.update_player(hp=0, alive=0)
+        player = ctx.store.get_player()
+        result.deltas.append(Delta(kind="chronicle", payload={
+            "category": "death",
+            "headline": f"{player['name']} was slain by a {monster_def.name}.",
+            "actors": ["player"]}, location_id=state.get("location")))
+        result.deltas.append(Delta(kind="player_history", payload={
+            "kind": "milestone", "summary": "Died. The world goes on."}))
+        result.events.append("Your HP hits zero. Everything goes white.")
+    else:
+        respawn = ctx.registry.rule("death.respawn_location",
+                                    ctx.registry.manifest.entry_point.location)
+        player = ctx.store.get_player()
+        col_loss = int(player["col"] * ctx.registry.rule("death.col_loss_ratio", 0.0))
+        ctx.store.update_player(hp=player["hp_max"], location_id=respawn,
+                                col=player["col"] - col_loss)
+        place = ctx.registry.find(respawn)
+        place_name = getattr(place, "name", respawn) if place else respawn
+        result.deltas.append(Delta(kind="player_history", payload={
+            "kind": "milestone",
+            "summary": f"Died to a {monster_def.name} and returned at {place_name}."}))
+        result.events.append(f"Death takes you — briefly. You wake at {place_name}."
+                             + (f" ({col_loss} {ctx.registry.manifest.currency.name} lost.)"
+                                if col_loss else ""))
+    _clear(ctx)
+    result.done, result.outcome = True, "death"
+
+
+# --------------------------------------------------------------- helpers
+
+
+def _living(state) -> list[dict[str, Any]]:
+    return [m for m in state["monsters"] if m["hp"] > 0]
+
+
+def _mounted_vehicle(ctx) -> tuple[dict[str, Any], Any] | None:
+    """(instance record, definition) of the vehicle the player is riding."""
+    for row in ctx.store.conn.execute(
+            "SELECT * FROM entities WHERE kind='vehicle' ORDER BY id"):
+        record = dict(row)
+        record["state"] = json.loads(record.pop("state_json"))
+        if record["state"].get("owner") == "player" and record["state"].get("mounted"):
+            definition = ctx.registry.find(record["def_id"])
+            if definition is not None:
+                return record, definition
+    return None
+
+
+def _vehicle_absorb(ctx, damage: int, result) -> int:
+    """A mounted vehicle takes the hit first. Returns damage reaching the rider.
+    Destruction dumps the rider off — and the wreck stays destroyed."""
+    mounted = _mounted_vehicle(ctx)
+    if mounted is None:
+        return damage
+    instance, definition = mounted
+    state = instance["state"]
+    hp = state.get("hp", (definition.stats or {}).get("hp", 100))
+    armor = (definition.stats or {}).get("armor", 0)
+    absorbed = max(1, damage - armor)
+    hp -= absorbed
+    if hp <= 0:
+        state.update({"hp": 0, "mounted": False, "destroyed": True})
+        ctx.store.upsert_entity(instance["id"], "vehicle", instance["def_id"],
+                                state, instance["location_id"], 0)
+        result.events.append(f"The {definition.name} is wrecked — you are thrown clear!")
+        return max(0, -hp)  # overkill spills onto the rider
+    state["hp"] = hp
+    ctx.store.upsert_entity(instance["id"], "vehicle", instance["def_id"],
+                            state, instance["location_id"], 0)
+    result.events.append(f"The {definition.name} shudders ({absorbed} damage).")
+    return 0
+
+
+def _equipped_weapon(ctx) -> dict[str, Any] | None:
+    for item in ctx.store.get_equipped("player"):
+        definition = ctx.registry.find(item["def_id"])
+        if definition is not None and definition.category.startswith("weapon"):
+            return item
+    return None
+
+
+def _weapon_skill(weapon_def) -> str | None:
+    if weapon_def is None or not weapon_def.requirements:
+        return None
+    return weapon_def.requirements.get("skill")
+
+
+def _armor_defense(ctx) -> int:
+    total = 0
+    for item in ctx.store.get_equipped("player"):
+        definition = ctx.registry.find(item["def_id"])
+        if definition is not None and definition.category.startswith("armor"):
+            total += (definition.stats or {}).get("defense", 0)
+    return total
+
+
+def _damage_armor(ctx, result) -> None:
+    for item in ctx.store.get_equipped("player"):
+        definition = ctx.registry.find(item["def_id"])
+        if definition is not None and definition.category.startswith("armor"):
+            if ctx.store.adjust_durability(item["id"], -1) is None:
+                result.events.append(f"Your {definition.name} falls apart!")
+            break
+
+
+def _modifier_effects(ctx) -> dict[str, Any]:
+    """Aggregate active player modifier effects relevant to combat."""
+    totals: dict[str, Any] = {"attack_add": 0, "defense_add": 0, "attack_mult": 1.0,
+                              "action_lock": False}
+    for record in ctx.store.get_modifiers("player"):
+        definition = ctx.registry.find(record["def_id"])
+        if definition is None:
+            continue
+        for effect in list(definition.effects) + list(definition.side_effects):
+            if effect.type == "stat_add" and effect.target == "attack":
+                totals["attack_add"] += effect.value
+            elif effect.type == "stat_add" and effect.target == "defense":
+                totals["defense_add"] += effect.value
+            elif effect.type == "stat_mult" and effect.target == "attack":
+                totals["attack_mult"] *= effect.value
+            elif effect.type == "action_lock" and effect.value:
+                totals["action_lock"] = True
+    return totals
+
+
+def _reduce_population(ctx, state, kills: int) -> None:
+    zone_id = state.get("zone")
+    if not zone_id:
+        return
+    runtime = ctx.store.get_entity(zone_id)
+    if runtime is not None:
+        populations = runtime["state"].get("populations", {})
+        def_id, location = runtime["def_id"], runtime["location_id"]
+    else:
+        # first kill before ecology's first day-tick: seed from authored data
+        populations, def_id, location = {}, zone_id, None
+        for floor in ctx.registry.by_kind("floor"):
+            for zone in floor.zones:
+                if zone.id == zone_id:
+                    populations = {p.species: p.current for p in zone.monster_populations}
+                    def_id, location = floor.id, floor.id
+    species = state["species"]
+    if species in populations:
+        populations[species] = max(0, populations[species] - kills)
+        ctx.store.upsert_entity(zone_id, "zone", def_id,
+                                {"populations": populations}, location, 0)
+
+
+def _is_boss(ctx, species_id: str) -> bool:
+    for floor in ctx.registry.by_kind("floor"):
+        if floor.labyrinth is not None and floor.labyrinth.boss == species_id:
+            return True
+    return False
+
+
+def _hp_words(hp: int, hp_max: int) -> str:
+    """Preserve uncertainty: the player reads a cursor, not a number (§15)."""
+    ratio = hp / hp_max if hp_max else 0
+    if hp <= 0:
+        return "destroyed"
+    if ratio > 0.7:
+        return "barely scratched"
+    if ratio > 0.4:
+        return "wounded"
+    if ratio > 0.15:
+        return "badly wounded"
+    return "nearly broken"
+
+
+def _status_line(state, player) -> str:
+    monsters = ", ".join(f"{m['tag']} {m['dist']}m" for m in _living(state))
+    pstate = state["player"]
+    frozen = " [FROZEN]" if pstate["frozen"] > 0 else ""
+    pools = "".join(f" | {name} {value:g}"
+                    for name, value in sorted(pstate.get("pools", {}).items()))
+    return (f"HP {player['hp']}/{player['hp_max']} | stamina {pstate['stamina']}{pools} | "
+            f"guard {pstate['guard']}{frozen} || {monsters}")
+
+
+def minutes_elapsed(state_seconds: int) -> int:
+    return max(1, math.ceil(state_seconds / 60))

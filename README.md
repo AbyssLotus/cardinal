@@ -7,6 +7,26 @@ See [CARDINAL_DESIGN_SPEC.md](CARDINAL_DESIGN_SPEC.md) for the authoritative des
 
 ## Status
 
+**Milestone M3 — Player systems** (done):
+- [x] Interactive combat (§8): 1-second rounds, delivery-aware (melee closes
+      distance, projectile consumes ammo, thrown weapons leave your hand and
+      are recovered — or not — after), the post-skill freeze, cooldowns,
+      stamina, parry/dodge/block stances with the reaction-time gate, monster
+      ai_script flavors (charge, pack flank, spit range, boss phase)
+- [x] Skills & XP (§9): proficiency growth per validated use (diminished vs
+      low-level prey), technique unlocks derived from skill files, data-driven
+      XP curve with level-ups
+- [x] Item runtime (§10 partial): durability wear and shattering, equip slots,
+      ammo consumption, loot drops with authored chances
+- [x] Modifier effects apply in combat (stat_add/mult, action_lock/paralysis)
+- [x] Permadeath: HP 0 deletes the character from the story — chronicled,
+      and the dead take no actions
+- [x] Consequences: kills reduce zone populations; boss kills enter the
+      chronicle as `boss_defeat`
+- Deviations: encounter positions are 1D distances (2D plane is an M6
+      refinement); encounter state persists in the entities table so a fight
+      survives a process restart
+
 **Milestone M2 — Living world** (done):
 - [x] NPC utility agents (§7): hourly need decay, schedule-following with
       location resolution (`dist.x` → its city), eat/sleep pressure, goal
@@ -60,6 +80,44 @@ pytest
   (any mapping with an `id:` field self-registers), rather than as bare id strings.
 - Starting item lists accept an `_xN` suffix (`item.bread_x2`) meaning quantity, per
   the manifest example in §4.1.
+
+## Genre probes (proof, not promise)
+
+`tests/fixtures/probe_cyberpunk`, `probe_destiny`, and `probe_wow` are minimal
+world packages that run three foreign power systems on the unmodified engine,
+verified by `tests/test_probes.py`:
+
+- **Night City**: firearms with real ammo (bare `attack` shoots when your
+  weapon is ranged), 400 m/s rounds nobody reaction-dodges, permadeath.
+- **Cosmodrome**: a `light` pool from rules.yaml fuels a Solar Grenade
+  (`delivery: area`, hits the whole dreg pack) and a hitscan Golden Gun
+  (`delivery: beam`); `death.permadeath: false` + `respawn_location` means
+  Guardians resurrect at the Tower minus a glimmer tithe.
+- **Elwynn**: mana-limited Fireball casting (`resource_cost` beats cooldowns
+  as the limiter), graveyard respawns, murloc packs that flee at low HP.
+
+**Netrunning** works through the interaction system + net-architecture-as-region
+pattern (see `probe_cyberpunk`): a jack-in terminal (skill-checked `hack`,
+requires your cyberdeck) teleports your presence into a subnet floor where ICE
+are monsters, quickhacks are RAM-costed beam techniques, a state-gated data
+vault yields loot and a secret chronicle entry, and an exit node jacks you out.
+
+**Devices & interactions** (`devices/`, `device.*`): any world object with
+verbs — doors, terminals, levers, shrines. Skill-vs-difficulty checks, tool
+requirements (`requires_item`), state gates (`requires_state`), and authored
+outcomes (state change, message, teleport / give_item / npc_state / chronicle
+effects). One primitive covers hacking, lockpicking, and quest machinery.
+
+**Vehicles at runtime**: `starting_player.vehicles` seeds owned instances;
+`mount/dismount`; riding cuts travel time to the vehicle's per-terrain speed,
+moves the vehicle with you, and burns fuel for machines. In combat a mounted
+vehicle absorbs hits (armor first, wreck-and-thrown-clear on destruction) and
+enables `attack ram` (damage scales with top speed).
+
+Known simplifications: magazine/reload cycles aren't yet simulated (ammo is
+per-shot), no aggro/threat model, no NPC-piloted vehicles yet, and dual
+presence (your meat body attackable mid-netrun) is deferred until a cyberpunk
+package is a real target.
 
 ## Genre uplift (beyond the spec's SAO framing)
 

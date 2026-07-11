@@ -1,0 +1,17 @@
+- id: item.wow_apprentice_staff
+  name: "Apprentice Staff"
+  category: weapon.staff
+  stats: { attack: 6, durability_max: 250 }
+  weight: 2.0
+  market: { base_value_col: 3 }
+- id: item.wow_apprentice_robe
+  name: "Apprentice Robe"
+  category: armor.cloth
+  stats: { defense: 2, durability_max: 200 }
+  weight: 0.8
+  market: { base_value_col: 2 }
+- id: item.wow_murloc_fin
+  name: "Murloc Fin"
+  category: material.junk
+  weight: 0.2
+  market: { base_value_col: 1 }

@@ -1,0 +1,13 @@
+# Night City: death is death. No pools — meat and metal only.
+death:
+  permadeath: true
+leveling:
+  xp_curve: "100 * level ** 1.8"
+  hp_per_level: 8
+time_costs:
+  travel_per_km_road: 4          # cars exist even when you walk
+  travel_per_km_wilderness: 10
+combat:
+  base_reaction_ms: 700          # everyone's wired
+  pools:
+    ram: { max: 60, regen: 3 }   # deck RAM for quickhacks

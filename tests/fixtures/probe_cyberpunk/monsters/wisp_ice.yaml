@@ -1,0 +1,14 @@
+id: mon.cp_wisp_ice
+name: "Wisp ICE"
+level: 3
+stats: { hp: 40, attack: 14, defense: 0, speed: 8, reaction_ms: 500 }
+behavior:
+  aggression: aggressive
+  perception_range_m: 12
+  flee_hp_ratio: 0.0
+  pack_size: [1, 2]
+  active_hours: [0, 24]
+  ai_script: swarm
+drops:
+  - { item: item.cp_datashard, chance: 0.9, qty: 1 }
+xp: 40

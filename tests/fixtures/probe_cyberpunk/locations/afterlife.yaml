@@ -1,0 +1,6 @@
+id: loc.cp_afterlife
+name: "The Afterlife"
+floor: floor.cp_watson
+type: city
+safe_zone: true
+services: [bar, fixer]

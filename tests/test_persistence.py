@@ -14,10 +14,16 @@ def test_create_and_reopen_save(tmp_path, testworld_path):
     inventory = save.store.get_inventory("player")
     assert {(i["def_id"], i["qty"]) for i in inventory} == {
         ("item.tw_stick", 1), ("item.tw_ration", 3),
+        ("item.tw_sling", 1), ("item.tw_pebble", 20),
     }
-    # stick got durability from its definition
+    # stick got durability from its definition and was auto-equipped (first weapon)
     stick = next(i for i in inventory if i["def_id"] == "item.tw_stick")
-    assert stick["durability"] == 50
+    assert stick["durability"] == 200
+    assert stick["equipped"] == 1
+    sling = next(i for i in inventory if i["def_id"] == "item.tw_sling")
+    assert sling["equipped"] == 0
+    # starting skills seeded
+    assert save.store.get_player_skills() == {"skill.tw_slinging": 0.0}
     assert save.store.get_clock() == (0, 8 * 60)
     # NPCs materialized as runtime entities; chronicle seeded
     assert save.store.get_entity("npc.tw_alice")["location_id"] == "loc.tw_hub"

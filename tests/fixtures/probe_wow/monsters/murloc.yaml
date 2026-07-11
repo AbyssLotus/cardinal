@@ -1,0 +1,14 @@
+id: mon.wow_murloc
+name: "Murloc Forager"
+level: 2
+stats: { hp: 45, attack: 9, defense: 1, speed: 4, reaction_ms: 1000 }
+behavior:
+  aggression: territorial
+  perception_range_m: 18
+  flee_hp_ratio: 0.2             # they do run — gurgling
+  pack_size: [1, 2]
+  active_hours: [0, 24]
+  ai_script: swarm
+drops:
+  - { item: item.wow_murloc_fin, chance: 0.5, qty: 1 }
+xp: 28

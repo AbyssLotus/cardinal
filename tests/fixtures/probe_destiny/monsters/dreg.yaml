@@ -1,0 +1,14 @@
+id: mon.d2_dreg
+name: "Fallen Dreg"
+level: 2
+stats: { hp: 55, attack: 11, defense: 2, speed: 5, reaction_ms: 850 }
+behavior:
+  aggression: aggressive
+  perception_range_m: 25
+  flee_hp_ratio: 0.1
+  pack_size: [3, 4]              # they come in packs — grenade bait
+  active_hours: [0, 24]
+  ai_script: swarm
+drops:
+  - { item: item.d2_primary_ammo, chance: 0.6, qty: [3, 8] }
+xp: 30

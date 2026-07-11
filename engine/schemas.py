@@ -72,6 +72,8 @@ class StartingPlayer(ContentModel):
     level: int = 1
     col: int = 0
     items: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    vehicles: list[str] = Field(default_factory=list)
 
 
 class WorldManifest(Entity):
@@ -356,13 +358,17 @@ class Technique(Entity):
     delivery: Literal["melee", "thrown", "projectile", "beam", "area"] = "melee"
     hits: int = 1
     damage_multiplier: float = 1.0
+    base_damage: Optional[float] = None  # ability's own power (spells, grenades);
+                                         # set -> no weapon or ammo is involved
+    resource: Optional[str] = None       # pool consumed (mana, light, energy…)
+    resource_cost: float = 0.0           # pools defined in rules combat.pools
     activation_ms: int = 100
     execution_ms: int = 400
     post_delay_ms: int = 500  # the freeze — a real mechanical cost
     range_m: float = 1.5      # melee reach, or blast radius for `area`
     arc_deg: float = 90
     max_range_m: Optional[float] = None  # ranged deliveries; None = weapon's ranged spec
-    ammo_per_use: int = 1                # projectile delivery only
+    ammo_per_use: int = 1                # weapon-projectile delivery only
     cooldown_s: float = 1
 
 
@@ -462,6 +468,42 @@ class Modifier(Entity):
     humanity_cost: float = 0.0       # generic essence/corruption knob; rules.yaml decides meaning
 
 
+# --- devices & interactions (doors, terminals, levers, traps…) --------------------
+
+
+class InteractionOutcome(ContentModel):
+    message: str = ""
+    set_state: Optional[str] = None
+    effects: list[dict[str, Any]] = Field(default_factory=list)
+    # effect types the engine resolves: teleport {to}, give_item {item, qty},
+    # npc_state {target, set}, chronicle {headline, category, …}
+
+
+class Interaction(ContentModel):
+    """One verb a device answers to. With a skill, success is a proficiency-vs-
+    difficulty check; without one, it always succeeds (a plain lever)."""
+
+    verb: str                        # hack | pick | open | press | use | …
+    skill: Optional[str] = None
+    difficulty: float = 0.0
+    time_minutes: int = 1
+    requires_item: Optional[str] = None
+    requires_state: Optional[str] = None  # only usable while device is in this state
+    success: InteractionOutcome = Field(default_factory=InteractionOutcome)
+    failure: InteractionOutcome = Field(default_factory=InteractionOutcome)
+
+
+class Device(Entity):
+    """An interactable world object: door, terminal, camera, shrine, trap.
+    Runtime state (current state string) lives in the entities table."""
+
+    name: str
+    description: str = ""
+    location: str
+    initial_state: str = "idle"
+    interactions: list[Interaction] = Field(default_factory=list)
+
+
 # --- vehicles (mounts, carts, cars, boats, ships…) --------------------------------
 
 
@@ -525,4 +567,5 @@ CATEGORY_MODELS: dict[str, type[Entity]] = {
     "resources": Resource,
     "modifiers": Modifier,
     "vehicles": Vehicle,
+    "devices": Device,
 }

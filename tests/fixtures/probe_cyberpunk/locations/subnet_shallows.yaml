@@ -1,0 +1,5 @@
+id: loc.cp_subnet_shallows
+name: "Subnet Shallows"
+floor: floor.cp_subnet
+type: landmark
+safe_zone: false

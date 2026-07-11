@@ -1,0 +1,32 @@
+- id: skill.wow_fire
+  name: "Fire Magic"
+  category: magic
+  growth: { per_use: 0.5, per_training_hour: 3.0 }
+  unlocks:
+    - { at: 0,   grants: tech.wow_fireball }
+    - { at: 150, grants: tech.wow_flamestrike }
+- id: tech.wow_fireball
+  name: "Fireball"
+  parent_skill: skill.wow_fire
+  delivery: projectile
+  base_damage: 32                # the spell's own power; the staff is a stick
+  resource: mana
+  resource_cost: 25
+  max_range_m: 30
+  activation_ms: 900             # cast time — interruptible in spirit
+  execution_ms: 200
+  post_delay_ms: 0
+  cooldown_s: 0                  # mana is the limiter, not cooldown
+- id: tech.wow_flamestrike
+  name: "Flamestrike"
+  parent_skill: skill.wow_fire
+  delivery: area
+  base_damage: 26
+  resource: mana
+  resource_cost: 55
+  range_m: 5
+  max_range_m: 25
+  activation_ms: 1200
+  execution_ms: 300
+  post_delay_ms: 0
+  cooldown_s: 6

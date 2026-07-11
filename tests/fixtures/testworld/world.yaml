@@ -8,4 +8,6 @@ entry_point:
 starting_player:
   level: 1
   col: 100
-  items: [item.tw_stick, item.tw_ration_x3]
+  items: [item.tw_stick, item.tw_ration_x3, item.tw_sling, item.tw_pebble_x20]
+  skills: [skill.tw_slinging]
+  vehicles: [vehicle.tw_autocart]

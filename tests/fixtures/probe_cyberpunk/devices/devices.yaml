@@ -1,0 +1,50 @@
+# The interaction system doing netrunning: jack in, raid the subnet, jack out.
+- id: device.cp_jack_terminal
+  name: "Access Terminal"
+  description: "A battered netrunner chair wired into the Konpeki subnet."
+  location: loc.cp_afterlife
+  initial_state: idle
+  interactions:
+    - verb: hack
+      skill: skill.cp_netrunning
+      difficulty: 0
+      time_minutes: 5
+      requires_item: item.cp_cyberdeck
+      success:
+        message: "The ice-cold rush of the net swallows you."
+        effects:
+          - { type: teleport, to: loc.cp_subnet_shallows }
+      failure:
+        message: "The handshake bounces. Your deck runs hot for nothing."
+- id: device.cp_exit_node
+  name: "Exit Node"
+  description: "A shimmering soft-spot in the architecture."
+  location: loc.cp_subnet_shallows
+  initial_state: idle
+  interactions:
+    - verb: use
+      time_minutes: 1
+      success:
+        message: "You jack out. Meat again."
+        effects:
+          - { type: teleport, to: loc.cp_afterlife }
+- id: device.cp_datavault
+  name: "Data Vault"
+  description: "Encrypted corporate paydata, humming behind thin walls."
+  location: loc.cp_subnet_shallows
+  initial_state: locked
+  interactions:
+    - verb: hack
+      skill: skill.cp_netrunning
+      difficulty: 40
+      time_minutes: 3
+      requires_state: locked
+      success:
+        set_state: emptied
+        message: "The vault cracks open like an egg."
+        effects:
+          - { type: give_item, item: item.cp_datashard, qty: 3 }
+          - { type: chronicle, category: discovery, visibility: secret,
+              headline: "Someone cracked the Konpeki data vault." }
+      failure:
+        message: "Black ICE countermeasures sting your deck."

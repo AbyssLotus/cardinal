@@ -46,7 +46,66 @@ def parse(text: str, registry: Registry) -> list[Action]:
             raise ParseError(f"No place called {' '.join(args)!r} is known to you.")
         return [Action("travel", target=target, raw_input=text)]
 
-    raise ParseError(f"You don't know how to {verb!r}. Try: look, status, wait <min>, go <place>.")
+    if verb in ("hunt", "fight"):
+        if not args:
+            raise ParseError("Hunt what?")
+        species = _resolve_monster(" ".join(args), registry)
+        if species is None:
+            raise ParseError(f"You know of no creature called {' '.join(args)!r}.")
+        return [Action("hunt", target=species, raw_input=text)]
+
+    if verb == "attack":
+        # in combat: strike (optionally with a named technique);
+        # out of combat: 'attack boar' means go hunt one — the loop decides.
+        argument = " ".join(args) if args else None
+        return [Action("attack", parameters={"argument": argument}, raw_input=text)]
+
+    if verb == "guard":
+        stance = args[0] if args else "dodge"
+        if stance not in ("parry", "dodge", "block"):
+            raise ParseError("Guard how? parry, dodge, or block.")
+        return [Action("guard", parameters={"stance": stance}, raw_input=text)]
+
+    if verb in ("flee", "run"):
+        return [Action("flee", raw_input=text)]
+
+    if verb == "equip":
+        if not args:
+            raise ParseError("Equip what?")
+        return [Action("equip", parameters={"name": " ".join(args)}, raw_input=text)]
+
+    if verb == "skills":
+        return [Action("skills", raw_input=text)]
+
+    if verb in ("use", "hack", "pick", "open", "press", "pull"):
+        if not args:
+            raise ParseError(f"{verb.capitalize()} what?")
+        return [Action("interact",
+                       parameters={"verb": verb, "name": " ".join(args)},
+                       raw_input=text)]
+
+    if verb in ("mount", "ride", "board", "drive"):
+        if not args:
+            raise ParseError("Mount what?")
+        return [Action("mount", parameters={"name": " ".join(args)}, raw_input=text)]
+
+    if verb in ("dismount", "unmount", "park"):
+        return [Action("dismount", raw_input=text)]
+
+    raise ParseError(
+        f"You don't know how to {verb!r}. Try: look, status, skills, wait <min>, "
+        "go <place>, hunt <creature>, attack [technique], guard <stance>, flee, "
+        "equip <item>, use/hack/open <device>, mount <vehicle>, dismount.")
+
+
+def _resolve_monster(name: str, registry: Registry) -> str | None:
+    if registry.find(name) is not None:
+        return name
+    needle = name.lower().rstrip("s")
+    for monster in registry.by_kind("mon"):
+        if needle in getattr(monster, "name", "").lower():
+            return monster.id
+    return None
 
 
 def _resolve_location(name: str, registry: Registry) -> str | None:

@@ -1,0 +1,35 @@
+- id: skill.cp_handguns
+  name: "Handguns"
+  category: weapon
+  growth: { per_use: 0.5, per_training_hour: 2.0 }
+  unlocks:
+    - { at: 0, grants: tech.cp_double_tap }
+- id: skill.cp_netrunning
+  name: "Netrunning"
+  category: intelligence
+  growth: { per_use: 0.8, per_training_hour: 2.5 }
+  unlocks:
+    - { at: 0, grants: tech.cp_zap }
+- id: tech.cp_zap
+  name: "Zap"
+  parent_skill: skill.cp_netrunning
+  delivery: beam                 # quickhack: hits at the speed of thought
+  base_damage: 28
+  resource: ram
+  resource_cost: 20
+  max_range_m: 15
+  activation_ms: 200
+  execution_ms: 100
+  post_delay_ms: 0
+  cooldown_s: 2
+- id: tech.cp_double_tap
+  name: "Double Tap"
+  parent_skill: skill.cp_handguns
+  delivery: projectile
+  hits: 2
+  damage_multiplier: 0.7         # two quick shots, each a bit rushed
+  ammo_per_use: 2
+  activation_ms: 250
+  execution_ms: 200
+  post_delay_ms: 0
+  cooldown_s: 3
