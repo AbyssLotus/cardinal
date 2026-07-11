@@ -53,8 +53,10 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
         candidates: list[tuple[float, str, str]] = [(weights["idle"], "idle", location)]
 
         block = _schedule_block(npc, hour)
+        scheduled_activity = None
         if block is not None:
             at = ctx.registry.resolve_location(block.at) or location
+            scheduled_activity = block.activity
             candidates.append((weights["schedule"], block.activity, at))
 
         if needs.get("food", 1.0) < urgent_below:
@@ -82,6 +84,10 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
             }))
         elif activity == "socialize":
             deltas += _socialize(ctx, npc, target, socialize_chance, rng)
+        if activity == scheduled_activity and "income" in needs:
+            # an hour worked is an hour earned — schedules sustain livelihoods
+            needs["income"] = min(1.0, round(
+                needs["income"] + rule("npc.income_per_work_hour", 0.05), 4))
 
         state["needs"] = needs
         state["activity"] = activity

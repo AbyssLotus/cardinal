@@ -7,6 +7,22 @@ See [CARDINAL_DESIGN_SPEC.md](CARDINAL_DESIGN_SPEC.md) for the authoritative des
 
 ## Status
 
+**Milestone M6 — Hardening** (done): **all six spec milestones complete — v0.1.**
+- [x] Save-format migrations: `meta.yaml` carries `save_format`; opening an
+      older save runs append-only migrations in a transaction (migration 0→1
+      upgrades pre-versioned dev saves); saves from a newer engine refuse to
+      open with a clear message
+- [x] Balance telemetry: `cardinal tick <save> --days N --report` prints NPC
+      vitals, chronicle/quest/market/population summaries. The first year-long
+      Aincrad run caught a real bug — NPC `income` bled to zero because no
+      activity restored it; working a scheduled job now earns (`npc.income_per_work_hour`)
+- [x] Invariant tests (§17): golden combat (same seed ⇒ byte-identical fight
+      transcript and end state), **no level scaling** (a slime hits a level-40
+      player with the same numbers as a level-1), **col conservation** (every
+      currency movement reconciles against buys/sells/rewards)
+- [x] 365-day Aincrad run: completes cleanly, sustainable NPC vitals,
+      populations stable, chronicle non-trivial
+
 **Milestone M5 — Content & narrator** (done):
 - [x] LLM narrator (`--narrator llm`): Anthropic-backed prose rendering with
       the GM rules encoded in the system prompt (cached), perception-only

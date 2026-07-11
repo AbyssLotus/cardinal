@@ -41,12 +41,15 @@ def create_save(save_dir: str | Path, world_path: str | Path, seed: int,
     registry = load_world(world_path)
     save_path.mkdir(parents=True, exist_ok=True)
 
+    from engine.persistence.migrations import CURRENT_SAVE_FORMAT
+
     meta = {
         "world_package": str(Path(world_path).resolve()),
         "world_id": registry.manifest.id,
         "world_version": registry.manifest.version,
         "seed": seed,
         "player_name": player_name,
+        "save_format": CURRENT_SAVE_FORMAT,
     }
     with open(save_path / "meta.yaml", "w", encoding="utf-8") as f:
         yaml.safe_dump(meta, f, sort_keys=False)
@@ -102,6 +105,8 @@ def create_save(save_dir: str | Path, world_path: str | Path, seed: int,
 
 
 def open_save(save_dir: str | Path) -> Save:
+    from engine.persistence.migrations import CURRENT_SAVE_FORMAT, migrate
+
     save_path = Path(save_dir)
     meta_file = save_path / "meta.yaml"
     if not meta_file.exists():
@@ -112,9 +117,21 @@ def open_save(save_dir: str | Path) -> Save:
     if registry.manifest.version != meta["world_version"]:
         raise SaveError(
             f"world package version {registry.manifest.version} != save's pinned "
-            f"{meta['world_version']} (migrations arrive in M6)"
+            f"{meta['world_version']} — content changed under the save; "
+            f"bump deliberately by editing meta.yaml if the change is compatible"
         )
     store = Store(save_path / "state.db")
+
+    save_format = meta.get("save_format", 0)
+    if save_format != CURRENT_SAVE_FORMAT:
+        try:
+            meta["save_format"] = migrate(store, save_format)
+        except RuntimeError as e:
+            store.close()
+            raise SaveError(str(e))
+        with open(meta_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump(meta, f, sort_keys=False)
+
     rng = RngManager(meta["seed"])
     rng.load_states(store.load_rng())
     return Save(save_path, store, registry, rng, meta)

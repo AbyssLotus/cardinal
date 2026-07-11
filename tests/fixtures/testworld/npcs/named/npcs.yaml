@@ -25,6 +25,9 @@
   location: loc.tw_hub
   occupation: guard
   needs: { food: 1.0, rest: 1.0 }
+  schedule:
+    - { from: "08:00", to: "18:00", activity: guard_gate, at: loc.tw_hub }
+    - { from: "18:00", to: "20:00", activity: socialize, at: loc.tw_hub }
 - id: npc.tw_dan
   name: "Dan"
   location: loc.tw_village

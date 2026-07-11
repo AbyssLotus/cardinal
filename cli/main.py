@@ -91,6 +91,11 @@ def cmd_tick(args: argparse.Namespace) -> int:
     result = loop.advance_days(args.days)
     print(result.text)
     print(f"({len(result.deltas)} state delta(s) committed)")
+    if args.report:
+        import json as _json
+
+        from engine import telemetry
+        print(_json.dumps(telemetry.report(save.store, save.registry), indent=2))
     save.store.close()
     return 0
 
@@ -179,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("tick", help="advance the world with no player")
     p.add_argument("save")
     p.add_argument("--days", type=int, required=True)
+    p.add_argument("--report", action="store_true",
+                   help="print balance telemetry after ticking")
     p.set_defaults(func=cmd_tick)
 
     p = sub.add_parser("inspect", help="debug: entity state, market, chronicle")
