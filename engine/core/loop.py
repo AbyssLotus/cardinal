@@ -548,6 +548,14 @@ class SimulationLoop:
             "state": "completed", "available_day": instance["available_day"],
             "expires_day": instance["expires_day"]})]
         for reward in quest.rewards:
+            if "col" in reward:
+                amount = reward["col"]
+                fresh = self.store.get_player()
+                self.store.update_player(col=fresh["col"] + amount)
+                self._notes.append(
+                    f"{npc.name} presses {amount} "
+                    f"{self.registry.manifest.currency.name} into your hand.")
+                continue
             reward_def = self.registry.find(reward["item"])
             durability = (getattr(reward_def, "stats", {}) or {}).get("durability_max")
             instance_id = f"iteminst.reward_{self.rng.stream('trade').randrange(1 << 30):08x}"

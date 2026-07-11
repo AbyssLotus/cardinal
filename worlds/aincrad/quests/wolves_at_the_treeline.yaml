@@ -1,0 +1,24 @@
+id: quest.wolves_at_the_treeline
+canon_tier: generated
+name: "Wolves at the Treeline"
+source: npc.elder_theron
+purpose: "Dire wolves press closer to Horunka each night; the village needs proof of a culling."
+requirements:
+  - deliver: { item: item.wolf_pelt, qty: 3 }
+rewards:
+  - { col: 400 }
+  - { item: item.medicinal_herb_leaf, qty: 2 }
+duration_days: 20
+success:
+  outcome: "The howls fall back from Horunka's fences; Theron sleeps by an open window again."
+  world_effects:
+    - { type: npc_state, target: npc.elder_theron, set: { mood: relieved } }
+failure:
+  outcome: "A dire wolf took a goat inside Horunka's fence; families bar their doors at dusk."
+  world_effects:
+    - { type: npc_state, target: npc.elder_theron, set: { mood: fearful } }
+npc_fallback:
+  chance_npc_resolves_per_day: 0.02
+  outcome: "A wandering swordswoman left three wolf pelts on Theron's step and took no payment."
+repeatable: false
+world_impact: minor

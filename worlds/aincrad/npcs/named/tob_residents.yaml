@@ -1,0 +1,75 @@
+# Town of Beginnings residents (generated-tier: original characters filling
+# the gaps world rules imply — an inn has a keeper, a smithy has a smith).
+- id: npc.mina_the_innkeeper
+  canon_tier: generated
+  name: "Mina"
+  archetype: arch.town_merchant
+  location: loc.tob_inn
+  identity: { age: 41, appearance: "Sleeves rolled, ledger always in reach." }
+  personality:
+    traits: [brisk, motherly, unshockable]
+    values: [a_full_common_room]
+  needs: { food: 1.0, rest: 0.9, income: 0.7 }
+  occupation: innkeeper
+  schedule:
+    - { from: "06:00", to: "14:00", activity: keep_inn, at: loc.tob_inn }
+    - { from: "14:00", to: "16:00", activity: buy_stores, at: dist.tob_market }
+    - { from: "16:00", to: "23:00", activity: keep_inn, at: loc.tob_inn }
+  combat: { level: 4, skills: [] }
+- id: npc.garrick_the_smith
+  canon_tier: generated
+  name: "Garrick"
+  archetype: arch.town_merchant
+  location: loc.town_of_beginnings
+  identity: { age: 52, appearance: "Burn-scarred forearms, half-moon spectacles." }
+  personality:
+    traits: [taciturn, exacting, secretly_sentimental]
+    values: [work_that_outlives_you]
+  goals:
+    - id: goal.garrick_masterwork
+      description: "Forge a blade worthy of the frontline clearers."
+      priority: 0.7
+      status: active
+  needs: { food: 1.0, rest: 1.0, income: 0.5 }
+  occupation: merchant
+  schedule:
+    - { from: "07:00", to: "18:00", activity: work_forge, at: dist.tob_market }
+    - { from: "19:00", to: "22:00", activity: socialize, at: loc.tob_inn }
+  combat: { level: 9, skills: [] }
+- id: npc.hana_the_provisioner
+  canon_tier: generated
+  name: "Hana"
+  archetype: arch.town_merchant
+  location: loc.town_of_beginnings
+  identity: { age: 29, appearance: "Quick hands, quicker arithmetic." }
+  personality:
+    traits: [gossipy, cheerful, sharp_dealing]
+    values: [repeat_customers]
+  needs: { food: 1.0, rest: 1.0, income: 0.8 }
+  occupation: merchant
+  schedule:
+    - { from: "08:00", to: "20:00", activity: keep_shop, at: dist.tob_market }
+    - { from: "20:00", to: "22:00", activity: socialize, at: loc.tob_inn }
+  combat: { level: 3, skills: [] }
+- id: npc.brother_marlo
+  canon_tier: generated
+  name: "Brother Marlo"
+  archetype: arch.villager
+  location: loc.town_of_beginnings
+  identity: { age: 63, appearance: "Grey robes, chalk-dusted fingers from tracing names." }
+  personality:
+    traits: [gentle, grave, unhurried]
+    values: [remembering_the_dead]
+  goals:
+    - id: goal.marlo_record
+      description: "Keep a written record of every name struck from the Monument of Life."
+      priority: 0.8
+      status: active
+  needs: { food: 0.9, rest: 0.9, income: 0.2 }
+  occupation: monument_keeper
+  schedule:
+    - { from: "05:00", to: "20:00", activity: tend_monument, at: dist.tob_black_iron_palace }
+  knowledge:
+    - fact: "Which frontline players died this month, and where."
+      price_col: 0
+  combat: { level: 2, skills: [] }

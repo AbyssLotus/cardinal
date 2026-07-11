@@ -1,0 +1,53 @@
+- id: npc.elder_theron
+  canon_tier: generated
+  name: "Elder Theron"
+  archetype: arch.villager
+  location: loc.horunka
+  identity: { age: 71, appearance: "Walking stick of black oak; eyes that count everything twice." }
+  personality:
+    traits: [stubborn, protective, superstitious]
+    values: [the_village_surviving_one_more_winter]
+    fears: [the_forest_creeping_closer]
+  goals:
+    - id: goal.theron_walls
+      description: "See Horunka through the winter with every household intact."
+      priority: 0.9
+      status: active
+  needs: { food: 0.9, rest: 0.8, income: 0.3 }
+  occupation: village_elder
+  schedule:
+    - { from: "07:00", to: "19:00", activity: hold_council, at: loc.horunka }
+  combat: { level: 3, skills: [] }
+- id: npc.yuna_the_forager
+  canon_tier: generated
+  name: "Yuna"
+  archetype: arch.villager
+  location: loc.horunka
+  identity: { age: 19, appearance: "Herb-stained satchel, scratches she never explains." }
+  personality:
+    traits: [fearless, curt, kind_under_it]
+    values: [knowing_the_forest_better_than_it_knows_her]
+  needs: { food: 1.0, rest: 1.0, income: 0.6 }
+  occupation: forager
+  schedule:
+    - { from: "06:00", to: "15:00", activity: forage, at: loc.horunka }
+    - { from: "16:00", to: "19:00", activity: sell_herbs, at: loc.horunka }
+  knowledge:
+    - fact: "Where the flowering Little Nepenthes grow thickest."
+      price_col: 300
+  combat: { level: 6, skills: [skill.hiding] }
+- id: npc.old_fen
+  canon_tier: generated
+  name: "Old Fen"
+  archetype: arch.villager
+  location: loc.horunka
+  identity: { age: 58, appearance: "An axe over one shoulder, sawdust in his beard." }
+  personality:
+    traits: [slow_talking, reliable, wolf_wary]
+    values: [a_stacked_woodpile]
+  needs: { food: 1.0, rest: 1.0, income: 0.4 }
+  occupation: woodcutter
+  schedule:
+    - { from: "06:00", to: "16:00", activity: cut_wood, at: loc.horunka }
+    - { from: "17:00", to: "21:00", activity: socialize, at: loc.horunka }
+  combat: { level: 5, skills: [] }

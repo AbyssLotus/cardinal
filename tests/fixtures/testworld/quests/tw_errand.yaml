@@ -6,6 +6,7 @@ requirements:
   - deliver: { item: item.tw_goo, qty: 1 }
 rewards:
   - { item: item.tw_ration, qty: 2 }
+  - { col: 25 }
 duration_days: 3
 success:
   outcome: "Dan's parcel made it after all; he won't forget it."

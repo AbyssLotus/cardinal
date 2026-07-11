@@ -1,0 +1,93 @@
+- id: npc.mayor_orin
+  canon_tier: generated
+  name: "Mayor Orin"
+  archetype: arch.guild_leader
+  location: loc.tolbana
+  identity: { age: 47, appearance: "A chain of office he polishes when nervous, which is often." }
+  personality:
+    traits: [pompous, anxious, ultimately_decent]
+    values: [tolbana_mattering]
+  goals:
+    - id: goal.orin_frontier_town
+      description: "Make Tolbana the staging town for the labyrinth push."
+      priority: 0.7
+      status: active
+  needs: { food: 1.0, rest: 0.9, income: 0.5 }
+  occupation: mayor
+  schedule:
+    - { from: "08:00", to: "18:00", activity: administer_town, at: loc.tolbana }
+  combat: { level: 4, skills: [] }
+- id: npc.delia_the_provisioner
+  canon_tier: generated
+  name: "Delia"
+  archetype: arch.town_merchant
+  location: loc.tolbana
+  identity: { age: 35, appearance: "Sells rope, torches, and no-nonsense by the yard." }
+  personality:
+    traits: [practical, dry_humored, fair]
+    values: [nobody_dying_for_lack_of_a_torch]
+  needs: { food: 1.0, rest: 1.0, income: 0.7 }
+  occupation: merchant
+  schedule:
+    - { from: "07:00", to: "19:00", activity: keep_shop, at: loc.tolbana }
+    - { from: "19:00", to: "21:00", activity: socialize, at: loc.tolbana }
+  combat: { level: 5, skills: [] }
+- id: npc.watchman_bell
+  canon_tier: generated
+  name: "Watchman Bell"
+  archetype: arch.villager
+  location: loc.tolbana
+  identity: { age: 33, appearance: "A lantern pole taller than he is; yawns before sundown." }
+  personality:
+    traits: [dutiful, sleepy, unexpectedly_brave]
+    values: [quiet_nights]
+  needs: { food: 1.0, rest: 0.7, income: 0.5 }
+  occupation: watchman
+  schedule:
+    - { from: "18:00", to: "24:00", activity: walk_the_walls, at: loc.tolbana }
+    - { from: "00:00", to: "06:00", activity: walk_the_walls, at: loc.tolbana }
+  combat: { level: 8, skills: [skill.one_handed_sword] }
+- id: npc.kell_the_wagoneer
+  canon_tier: generated
+  name: "Kell"
+  archetype: arch.town_merchant
+  location: loc.tolbana
+  identity: { age: 44, appearance: "Road dust in every seam; names his horses after storms." }
+  personality:
+    traits: [talkative, shrewd, superstitious_about_roads]
+    values: [the_route_running_on_time]
+  goals:
+    - id: goal.kell_route
+      description: "Keep the Tolbana-Town of Beginnings freight route profitable."
+      priority: 0.8
+      status: active
+  needs: { food: 1.0, rest: 1.0, income: 0.9 }
+  occupation: merchant
+  schedule:
+    - { from: "07:00", to: "11:00", activity: load_freight, at: loc.tolbana }
+    - { from: "12:00", to: "17:00", activity: sell_freight, at: dist.tob_market }
+    - { from: "18:00", to: "22:00", activity: socialize, at: loc.tob_inn }
+  combat: { level: 6, skills: [] }
+- id: npc.pell_the_scout
+  canon_tier: generated
+  name: "Pell"
+  archetype: arch.information_broker
+  location: loc.tolbana
+  identity: { age: 24, appearance: "Mud to the knee, a labyrinth sketch-map she won't show for free." }
+  personality:
+    traits: [wiry, boastful, genuinely_good]
+    values: [being_first_to_know_the_way]
+  goals:
+    - id: goal.pell_map
+      description: "Chart the labyrinth's first five levels before anyone else."
+      priority: 0.9
+      status: active
+  needs: { food: 1.0, rest: 1.0, income: 0.6 }
+  occupation: scout
+  schedule:
+    - { from: "06:00", to: "16:00", activity: scout_labyrinth, at: loc.f1_labyrinth }
+    - { from: "18:00", to: "22:00", activity: socialize, at: loc.tolbana }
+  knowledge:
+    - fact: "A safe camp spot on the labyrinth's third level."
+      price_col: 600
+  combat: { level: 11, skills: [skill.hiding, skill.acrobatics] }

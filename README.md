@@ -7,6 +7,35 @@ See [CARDINAL_DESIGN_SPEC.md](CARDINAL_DESIGN_SPEC.md) for the authoritative des
 
 ## Status
 
+**Milestone M5 — Content & narrator** (done):
+- [x] LLM narrator (`--narrator llm`): Anthropic-backed prose rendering with
+      the GM rules encoded in the system prompt (cached), perception-only
+      context, refusal handling — and guaranteed headless degradation: missing
+      package, missing credentials, or any API failure falls back to the
+      deterministic plain narrator, permanently for the session
+- [x] Floor 1 at full population: 15 named NPCs across the Town of Beginnings,
+      Horunka, Tolbana, and the labyrinth approaches — every one with a
+      schedule or an active goal (Kell the wagoneer runs a real daily freight
+      route between towns)
+- [x] Second quest (Wolves at the Treeline) with `col` rewards, tying the
+      dire-wolf ecology to village life
+- [x] v0.1 definition-of-done test: 30 playerless days on Floor 1 produce
+      expired/resolved quests, a non-trivial chronicle, NPC movement, and
+      20+ NPC memories
+
+## Backlog (known gaps, deliberately deferred)
+
+- **Factions as actors**: `factions.py` tick is a stub — relations, treasury,
+  and agendas are data with no collective behavior yet (no turf shifts, no
+  guild wars, no spending). The Maelstrom design exercise showed this is the
+  biggest missing layer.
+- **Hostility on sight**: encounters only start when the player hunts; NPCs/
+  monsters never initiate from disposition or faction hatred.
+- Dual presence (meat body attackable mid-netrun), NPC-piloted vehicles,
+  magazine/reload cycles, per-good stock depth, 2D combat positions,
+  aggro/threat model, buying NPC knowledge (`talk` shows prices, no purchase
+  verb yet).
+
 **Milestone M4 — Economy & quests** (done):
 - [x] Markets (§11): daily repricing `base × (demand/supply)^elasticity`,
       mean-reverting indices (the abstract merchant restock), trades as

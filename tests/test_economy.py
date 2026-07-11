@@ -105,7 +105,9 @@ def test_quest_completion_end_to_end(tmp_path, testworld_path):
     loop.submit("go far village")
     result = loop.submit("give goo")
     assert "Dan gives you 2x Ration" in result.text
+    assert "presses 25" in result.text                 # col reward paid out
     assert "won't forget it" in result.text            # authored success outcome
+    assert save.store.get_player()["col"] == 525       # 500 start + 25 reward
 
     quest = next(q for q in save.store.get_quests()
                  if q["def_id"] == "quest.tw_errand")
