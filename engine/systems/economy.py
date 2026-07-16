@@ -63,7 +63,7 @@ def current_price(ctx: SystemContext, market_id: str, good) -> float:
 
 
 def trade_cost(ctx: SystemContext, market_id: str, good, qty: int,
-               player_buys: bool) -> tuple[int, int]:
+               player_buys: bool, ratio: float | None = None) -> tuple[int, int]:
     """Quote the total col for a trade of `qty` units.
 
     Closes two issues from the Test 3 playtest finding:
@@ -89,7 +89,10 @@ def trade_cost(ctx: SystemContext, market_id: str, good, qty: int,
         return 0, 0
     rule = ctx.registry.rule
     elasticity = rule("economy.price_elasticity", 0.35)
-    ratio = 1.0 if player_buys else rule("economy.merchant_buy_ratio", 0.6)
+    if ratio is None:
+        # retail defaults: customers buy at full price, sell at merchant margin.
+        # Agent traders pass their own wholesale ratio (they ARE the merchants).
+        ratio = 1.0 if player_buys else rule("economy.merchant_buy_ratio", 0.6)
     row = ctx.store.get_market_row(market_id, good.id)
     supply = row["supply_idx"] if row else 1.0
     demand = row["demand_idx"] if row else 1.0

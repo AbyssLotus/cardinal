@@ -24,13 +24,14 @@ from engine.systems import TICK_ORDER, SystemContext
 from engine.systems import combat, economy as economy_system, factions as factions_system, interact
 from engine.systems import skills as skills_system
 from engine.systems import (  # noqa: F401  (imported for the tick table)
-    economy, ecology, factions, npc, quests, weather, worldevents,
+    agents, economy, ecology, factions, npc, quests, weather, worldevents,
 )
 
 _SYSTEM_MODULES = {
     "weather": weather,
     "ecology": ecology,
     "npc": npc,
+    "agents": agents,
     "economy": economy,
     "quests": quests,
     "factions": factions,

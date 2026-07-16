@@ -9,4 +9,4 @@
   stock_categories: [weapon, ammo, armor, gear, material]
 - id: market.cp_waterfront
   settlement: loc.cp_arasaka_waterfront
-  stock_categories: [weapon, armor, gear]
+  stock_categories: [weapon, ammo, armor, gear]

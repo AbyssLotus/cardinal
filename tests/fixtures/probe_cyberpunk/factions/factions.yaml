@@ -34,7 +34,7 @@
     - { with: fac.cp_arasaka, disposition: -0.6 }
     - { with: fac.cp_tyger_claws, disposition: -0.4 }
     - { with: fac.cp_mox, disposition: -0.3 }
-  policies: { recruitment: open }
+  policies: { tax_rate: 0.15, recruitment: open }  # gang tithe on members' takings
 - id: fac.cp_mox
   canon_tier: confirmed
   name: "The Mox"
