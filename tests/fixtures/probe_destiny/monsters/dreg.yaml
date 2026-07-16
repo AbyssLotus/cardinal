@@ -12,3 +12,4 @@ behavior:
 drops:
   - { item: item.d2_primary_ammo, chance: 0.6, qty: [3, 8] }
 xp: 30
+ecology: { reproduction_days: 20 }

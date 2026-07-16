@@ -110,6 +110,8 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
         state = agent_state(ctx, npc)
         if not state.get("alive", True):
             continue
+        if state.get("recovering_until_day", -1) >= day:
+            continue                       # licking wounds; sits the day out
         budget -= 1
         location = _location(ctx, npc)
         policy = npc.policy or "passive"
@@ -178,10 +180,13 @@ def _act_hunter(ctx, npc, state, location, day, rng) -> list[Delta]:
                     drop.item, npc.id, qty=qty)
         _save(ctx, npc, state, location, day)
         return []
-    # lost the fight — real damage, real permadeath
+    # lost the fight — real damage, real permadeath (unless named)
     damage = max(5, monster.stats.attack - 4 + rng.randint(0, 6))
     state["hp"] -= damage
     if state["hp"] <= 0:
+        if npc.survivor:
+            return _survivor_escapes(ctx, npc, state, location, day,
+                                     from_what=f"a {monster.name} pack")
         return _agent_dies(ctx, npc, state, location, day,
                            cause=f"was torn apart by {monster.name}s")
     _save(ctx, npc, state, location, day)
@@ -356,6 +361,16 @@ def _agent_fight(ctx, npc, state, rival, location, day, rng) -> list[Delta]:
             ctx.store.add_item_instance(
                 f"iteminst.{winner.id.split('.')[1]}_{rng.randrange(1 << 30):08x}",
                 row["def_id"], winner.id, qty=row["qty"])
+        if loser.survivor:
+            deltas += _survivor_escapes(ctx, loser, l_state, location, day,
+                                        from_what=winner.name)
+            deltas += _kill_moves_standing(ctx, winner, loser)  # blood still spilled
+            w_state["activity"] = "fighting"
+            _save(ctx, npc, state, location, day)
+            _save(ctx, rival, rival_state,
+                  ctx.store.get_entity(rival.id)["location_id"]
+                  if rival is loser else location, day)
+            return deltas
         deltas += _agent_dies(ctx, loser, l_state, location, day,
                               cause=f"was killed by {winner.name}",
                               save_state=False)
@@ -390,6 +405,28 @@ def _kill_moves_standing(ctx, winner, loser) -> list[Delta]:
         f_state["dispositions"][b_id] = round(max(-1.0, current - hit), 4)
         factions_system.save_faction_state(ctx, faction, f_state)
     return []
+
+
+def _survivor_escapes(ctx, npc, state, location, day,
+                      from_what: str) -> list[Delta]:
+    """Named characters don't die off-screen: they escape at 1 hp, wounded,
+    and retreat home to recover for agents.survivor_recovery_days."""
+    state["alive"] = True
+    state["hp"] = 1
+    state["activity"] = "recovering"
+    state["recovering_until_day"] = day + ctx.registry.rule(
+        "agents.survivor_recovery_days", 4)
+    home = (npc.policy_params.get("turf") or [npc.location])[0] \
+        if npc.policy == "aggressor" else npc.policy_params.get("home", npc.location)
+    place = ctx.registry.find(location)
+    _save(ctx, npc, state, home, day)
+    faction = ctx.registry.find(npc.faction) if npc.faction else None
+    of = f" of {faction.name}" if faction is not None else ""
+    return [Delta(kind="chronicle", payload={
+        "category": "street", "visibility": "public",
+        "headline": f"{npc.name}{of} barely escapes {from_what} at "
+                    f"{getattr(place, 'name', location)}.",
+        "detail": "wounded, gone to ground"})]
 
 
 def _agent_dies(ctx, npc, state, location, day, cause: str,

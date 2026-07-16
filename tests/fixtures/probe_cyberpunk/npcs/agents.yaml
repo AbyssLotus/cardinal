@@ -45,8 +45,9 @@
   policy: aggressor
   capabilities: [combat]
   faction: fac.cp_mox
+  survivor: true       # Lizzie's longest-standing muscle doesn't die off-screen
   col: 100
-  combat: { level: 6, skills: [] }
+  combat: { level: 8, skills: [] }
   policy_params:
     turf: [loc.cp_lizzies_bar, loc.cp_kabuki_market]
 - id: npc.cp_wei
