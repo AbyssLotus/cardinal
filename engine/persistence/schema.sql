@@ -157,3 +157,12 @@ CREATE TABLE IF NOT EXISTS zone_ticks (
     zone_id         TEXT PRIMARY KEY,
     last_ticked_day INTEGER NOT NULL DEFAULT 0
 );
+
+-- §24.5 dynamic entities: runtime-minted definitions (fac.rt_* etc).
+-- Authored world data stays read-only; these live in the save.
+CREATE TABLE IF NOT EXISTS dynamic_entities (
+    id          TEXT PRIMARY KEY,
+    kind        TEXT NOT NULL,
+    def_json    TEXT NOT NULL,
+    created_day INTEGER NOT NULL DEFAULT 0
+);

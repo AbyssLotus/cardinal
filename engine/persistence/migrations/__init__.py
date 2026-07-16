@@ -16,7 +16,7 @@ from typing import Callable
 
 from engine.persistence.store import Store
 
-CURRENT_SAVE_FORMAT = 2
+CURRENT_SAVE_FORMAT = 3
 
 
 def _migrate_0_to_1(store: Store) -> None:
@@ -51,9 +51,21 @@ def _migrate_1_to_2(store: Store) -> None:
         store.conn.execute("ALTER TABLE quests ADD COLUMN assignee TEXT")
 
 
+def _migrate_2_to_3(store: Store) -> None:
+    """Dynamic entities (§24.5): runtime-minted definitions."""
+    store.conn.execute("""
+        CREATE TABLE IF NOT EXISTS dynamic_entities (
+            id          TEXT PRIMARY KEY,
+            kind        TEXT NOT NULL,
+            def_json    TEXT NOT NULL,
+            created_day INTEGER NOT NULL DEFAULT 0
+        )""")
+
+
 MIGRATIONS: dict[int, Callable[[Store], None]] = {
     0: _migrate_0_to_1,
     1: _migrate_1_to_2,
+    2: _migrate_2_to_3,
 }
 
 

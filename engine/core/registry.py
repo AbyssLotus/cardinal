@@ -68,18 +68,37 @@ class Registry:
         self.canon: dict[str, Any] = {"confirmed": [], "inferences": []}
         self._nested_ids: set[str] = set()
         self._nested_parent: dict[str, str] = {}  # dist.x -> loc.y, zone.x -> floor.y
+        # §24.5 runtime overlay: entities minted mid-save (fac.rt_*). Authored
+        # entities always win a lookup; the overlay is consulted second.
+        self.overlay: dict[str, Entity] = {}
 
     # --- lookups ----------------------------------------------------------
 
     def get(self, entity_id: str) -> Entity:
-        return self.entities[entity_id]
+        found = self.find(entity_id)
+        if found is None:
+            raise KeyError(entity_id)
+        return found
 
     def find(self, entity_id: str) -> Entity | None:
-        return self.entities.get(entity_id)
+        return self.entities.get(entity_id) or self.overlay.get(entity_id)
 
     def by_kind(self, prefix: str) -> Iterator[Entity]:
         wanted = prefix + "."
-        return (e for e in self.entities.values() if e.id.startswith(wanted))
+        for e in self.entities.values():
+            if e.id.startswith(wanted):
+                yield e
+        for e in self.overlay.values():
+            if e.id.startswith(wanted):
+                yield e
+
+    def register_dynamic(self, entity: Entity) -> None:
+        if entity.id in self.entities:
+            raise ValueError(f"{entity.id} collides with an authored entity")
+        self.overlay[entity.id] = entity
+
+    def unregister_dynamic(self, entity_id: str) -> None:
+        self.overlay.pop(entity_id, None)
 
     def known_ids(self) -> set[str]:
         return set(self.entities) | self._nested_ids | {self.manifest.id}

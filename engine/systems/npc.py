@@ -174,12 +174,28 @@ def _socialize(ctx: SystemContext, npc, location: str, chance: float, rng) -> li
             continue
         other_def = ctx.registry.find(other["id"])
         other_name = getattr(other_def, "name", other["id"]) if other_def else other["id"]
+        # §25.1: conversations carry topics, not just pleasantries — sourced
+        # from the speaker's authored knowledge or the recent public
+        # chronicle, so eavesdropping yields usable intel.
+        summary = f"Talked with {other_name}."
+        knowledge = list(getattr(npc, "knowledge", []) or [])
+        if knowledge and rng.random() < 0.5:
+            entry = knowledge[rng.randrange(len(knowledge))]
+            topic = getattr(entry, "topic", None) or "something they know"
+            summary = f"Talked with {other_name} about {topic}."
+        else:
+            recent = [e for e in ctx.store.get_chronicle(12)
+                      if e.get("visibility") in (None, "public", "regional")]
+            if recent and rng.random() < 0.4:
+                event = recent[rng.randrange(len(recent))]
+                summary = (f"Talked with {other_name} about the news: "
+                           f"{event['headline']}")
         deltas.append(Delta(kind="npc_memory", payload={
             "npc_id": npc.id,
             "kind": "conversation",
             "subject_id": other["id"],
             "valence": 0.1,
-            "summary": f"Talked with {other_name}.",
+            "summary": summary,
         }))
     return deltas
 

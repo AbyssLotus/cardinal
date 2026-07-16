@@ -95,6 +95,18 @@ def parse(text: str, registry: Registry) -> list[Action]:
     if verb in ("shop", "browse", "market"):
         return [Action("shop", raw_input=text)]
 
+    if verb == "buy" and args and args[0] == "info":
+        joined = " ".join(args[1:])
+        target = joined.partition("from ")[2].strip() if "from " in joined else joined.strip()
+        if not target:
+            raise ParseError("Buy info from whom?")
+        return [Action("buy_info", parameters={"npc": target}, raw_input=text)]
+
+    if verb in ("listen", "eavesdrop"):
+        return [Action("eavesdrop",
+                       parameters={"npc": " ".join(args) if args else None},
+                       raw_input=text)]
+
     if verb in ("buy", "sell") and (" from " in " ".join(args) or " to " in " ".join(args)):
         joined = " ".join(args)
         sep = " from " if verb == "buy" else " to "
@@ -151,6 +163,14 @@ def parse(text: str, registry: Registry) -> list[Action]:
     if verb in ("faction", "factions"):
         return [Action("faction_status", raw_input=text)]
 
+    if verb == "found":
+        if not args:
+            raise ParseError("Found what? Give your faction a name.")
+        # preserve the founder's casing — a banner deserves its capitals
+        raw_name = text.strip()[len("found"):].strip()
+        return [Action("faction_found", parameters={"name": raw_name},
+                       raw_input=text)]
+
     if verb == "barter":
         if not args:
             raise ParseError("Barter with whom?")
@@ -169,6 +189,7 @@ def parse(text: str, registry: Registry) -> list[Action]:
         "equip <item>, use/hack/open <device>, mount <vehicle>, dismount, "
         "shop, buy/sell <item> [qty], buy <item> from <agent>, "
         "sell <item> to <agent>, barter <agent>, steal <agent>, "
+        "listen [npc], buy info from <npc>, found <name>, "
         "talk <npc>, give <item>, "
         "join <faction>, leave, donate <amount>, faction.")
 

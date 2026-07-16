@@ -12,7 +12,21 @@ from pathlib import Path
 
 import yaml
 
+import json as _json
+
 from engine.core.registry import Registry, load_world, strip_qty_suffix
+from engine.schemas import CATEGORY_MODELS
+
+
+def _hydrate_dynamic_entities(registry: Registry, store) -> None:
+    """§24.5: runtime-minted definitions live in the save DB; rebuild the
+    registry overlay from them on every open."""
+    for row in store.get_dynamic_entities():
+        model = CATEGORY_MODELS.get(row["kind"])
+        if model is None:
+            continue
+        registry.overlay[row["id"]] = model.model_validate(
+            _json.loads(row["def_json"]))
 from engine.core.rng import RngManager
 from engine.memory import world_memory
 from engine.persistence.store import Store
@@ -101,6 +115,7 @@ def create_save(save_dir: str | Path, world_path: str | Path, seed: int,
 
         store.save_rng(rng.dump_states())
 
+    _hydrate_dynamic_entities(registry, store)
     return Save(save_path, store, registry, rng, meta)
 
 
@@ -134,4 +149,5 @@ def open_save(save_dir: str | Path) -> Save:
 
     rng = RngManager(meta["seed"])
     rng.load_states(store.load_rng())
+    _hydrate_dynamic_entities(registry, store)
     return Save(save_path, store, registry, rng, meta)
