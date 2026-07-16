@@ -64,6 +64,44 @@ def get_encounter(ctx: SystemContext) -> dict[str, Any] | None:
     return row["state"] if row and row["state"].get("monsters") else None
 
 
+def start_duel(ctx: SystemContext, npc_id: str,
+               location_id: str) -> tuple[dict[str, Any], list[str]]:
+    """Player-vs-agent combat (§22.4): the SAME full state machine as
+    monster combat — stances, techniques, timing gates, stamina — with the
+    agent's live stats on the other side. state['duel'] marks the mode;
+    victory/death branch to agent permadeath + corpse looting instead of
+    populations + drops."""
+    from engine.systems import agents as agents_system
+    combatant = agents_system.duel_combatant(ctx, npc_id)
+    state = {
+        "species": npc_id,
+        "duel": npc_id,
+        "zone": None,
+        "location": location_id,
+        "monsters": [{"tag": combatant.name, "hp": combatant.stats.hp,
+                      "dist": 4.0, "frozen": 0, "attacked_once": False}],
+        "player": {"stamina": ctx.registry.rule("combat.stamina_max", 100),
+                   "guard": "dodge", "frozen": 0, "cooldowns": {},
+                   "pools": {name: spec.get("max", 100)
+                             for name, spec in
+                             (ctx.registry.rule("combat.pools", {}) or {}).items()}},
+        "round": 0,
+        "seconds": 0,
+        "kills": 0,
+    }
+    _save(ctx, state)
+    return state, [f"You square up against {combatant.name} (4m off)."]
+
+
+def combatant_def(ctx: SystemContext, state: dict[str, Any]):
+    """The thing being fought: a registry monster, or a duel adapter over
+    an agent's live state."""
+    if state.get("duel"):
+        from engine.systems import agents as agents_system
+        return agents_system.duel_combatant(ctx, state["duel"])
+    return ctx.registry.get(state["species"])
+
+
 def start_encounter(ctx: SystemContext, species_id: str, zone_id: str,
                     location_id: str) -> tuple[dict[str, Any], list[str]]:
     monster = ctx.registry.get(species_id)
@@ -112,7 +150,7 @@ def resolve_round(ctx: SystemContext, state: dict[str, Any], intent: str,
     """One combat round: the player's declared action plus every monster's."""
     result = RoundResult()
     rng = ctx.rng.stream("combat")
-    monster_def = ctx.registry.get(state["species"])
+    monster_def = combatant_def(ctx, state)
     player = ctx.store.get_player()
     state["round"] += 1
     state["seconds"] += 1
@@ -477,6 +515,9 @@ def _defend(ctx, state, monster, incoming, rng, result) -> bool:
 def _resolve_victory(ctx, state, monster_def, player, rng, result):
     from engine.systems import skills as skills_system
 
+    if state.get("duel"):
+        return _resolve_duel_victory(ctx, state, monster_def, player, rng, result)
+
     kills = state["kills"]
     xp_each = monster_def.xp
     if monster_def.level <= player["level"] - skills_system.LOW_LEVEL_GAP:
@@ -520,6 +561,62 @@ def _resolve_victory(ctx, state, monster_def, player, rng, result):
     result.events.append(f"The field falls quiet. (+{xp_each * kills} XP)")
 
 
+def _resolve_duel_victory(ctx, state, monster_def, player, rng, result):
+    """The agent dies for real — foreground fidelity is the ONE place a
+    survivor-flagged named character can be killed (spec §22.4 + survivor
+    rule: the named die on-screen or not at all). Corpse looting: their
+    col and entire inventory transfer; reputation and faction standing
+    take the hit."""
+    from engine.systems import skills as skills_system
+
+    npc_id = state["duel"]
+    npc = ctx.registry.find(npc_id)
+    row = ctx.store.get_entity(npc_id)
+    agent_state = dict(row["state"]) if row else {}
+    looted_col = agent_state.get("col", 0)
+    agent_state.update({"alive": False, "hp": 0, "col": 0, "activity": "dead"})
+    ctx.store.upsert_entity(npc_id, "npc", npc_id, agent_state,
+                            state.get("location"), 0)
+
+    if looted_col:
+        ctx.store.update_player(col=player["col"] + looted_col)
+        result.events.append(
+            f"You take {looted_col} {ctx.registry.manifest.currency.name} "
+            f"from the body.")
+    for item in list(ctx.store.get_inventory(npc_id)):
+        ctx.store.consume_item(npc_id, item["def_id"], item["qty"])
+        item_def = ctx.registry.find(item["def_id"])
+        durability = (getattr(item_def, "stats", {}) or {}).get("durability_max")
+        ctx.store.add_item_instance(
+            f"iteminst.loot_{rng.randrange(1 << 30):08x}", item["def_id"],
+            "player", durability=durability, qty=item["qty"])
+        result.events.append(
+            f"Looted {item['qty']}x {getattr(item_def, 'name', item['def_id'])}.")
+
+    result.deltas += skills_system.award_xp(ctx.store, ctx.registry, monster_def.xp)
+    result.deltas.append(Delta(kind="reputation", payload={
+        "scope_id": npc_id, "delta": -1.0}))
+    faction = ctx.registry.find(npc.faction) if getattr(npc, "faction", None) else None
+    if faction is not None:
+        penalty = ctx.registry.rule("agents.player_kill_faction_rep", 0.5)
+        result.deltas.append(Delta(kind="reputation", payload={
+            "scope_id": faction.id, "delta": -penalty}))
+        result.events.append(f"{faction.name} will hear about this.")
+    of = f" of {faction.name}" if faction is not None else ""
+    result.deltas.append(Delta(kind="chronicle", payload={
+        "category": "street", "visibility": "public",
+        "headline": f"{monster_def.name}{of} was cut down by "
+                    f"{player['name']} in open combat.",
+        "detail": "duel", "actors": ["player", npc_id]},
+        location_id=state.get("location")))
+    result.deltas.append(Delta(kind="player_history", payload={
+        "kind": "combat", "summary": f"Killed {monster_def.name} in a duel.",
+        "refs": [npc_id]}))
+    _clear(ctx)
+    result.done, result.outcome = True, "victory"
+    result.events.append(f"{monster_def.name} falls. (+{monster_def.xp} XP)")
+
+
 def _resolve_death(ctx, state, monster_def, result):
     """HP 0. Under permadeath the character is deleted from the world's story —
     this must actually work (§8). Worlds where death is a setback, not an
@@ -530,7 +627,9 @@ def _resolve_death(ctx, state, monster_def, result):
         player = ctx.store.get_player()
         result.deltas.append(Delta(kind="chronicle", payload={
             "category": "death",
-            "headline": f"{player['name']} was slain by a {monster_def.name}.",
+            "headline": (f"{player['name']} was slain by {monster_def.name}."
+                         if state.get("duel") else
+                         f"{player['name']} was slain by a {monster_def.name}."),
             "actors": ["player"]}, location_id=state.get("location")))
         result.deltas.append(Delta(kind="player_history", payload={
             "kind": "milestone", "summary": "Died. The world goes on."}))
@@ -652,6 +751,8 @@ def _modifier_effects(ctx) -> dict[str, Any]:
 
 
 def _reduce_population(ctx, state, kills: int) -> None:
+    if state.get("duel") or not state.get("zone"):
+        return
     zone_id = state.get("zone")
     if not zone_id:
         return

@@ -42,12 +42,39 @@ from __future__ import annotations
 
 from typing import Any
 
+from types import SimpleNamespace
+
 from engine.persistence.store import Delta
 from engine.systems import SystemContext
 from engine.systems import economy as economy_system
 from engine.systems import factions as factions_system
 
 WHOLESALE_RATIO = 0.85   # agents trade as merchants, both directions
+
+
+def duel_combatant(ctx: SystemContext, npc_id: str):
+    """A monster-shaped adapter over an agent's LIVE state, so the full
+    foreground combat state machine (spec §22.4) runs against agents
+    unchanged. HP comes from the agent's runtime state — a wounded agent
+    duels wounded. This is the fidelity mode where survivor-flagged
+    named characters CAN die: on-screen, with the player watching."""
+    npc = ctx.registry.find(npc_id)
+    row = ctx.store.get_entity(npc_id)
+    state = dict(row["state"]) if row else agent_state(ctx, npc)
+    level = state.get("level", npc.combat.level)
+    stats = SimpleNamespace(
+        hp=max(1, int(state.get("hp", 60 + level * 12))),
+        attack=8 + level * 2,
+        defense=1 + level // 3,
+        speed=5 + level // 2,
+        reaction_ms=getattr(npc.combat, "reaction_ms", 900),
+        attack_windup_ms=max(500, 1150 - level * 25),
+    )
+    behavior = SimpleNamespace(pack_size=(1, 1), perception_range_m=6.0,
+                               ai_script="", aggression="territorial")
+    return SimpleNamespace(id=npc_id, name=npc.name, level=level,
+                           xp=10 + level * 12, stats=stats, behavior=behavior,
+                           drops=[])
 
 
 def _stable_hash(text: str) -> int:
