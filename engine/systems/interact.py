@@ -53,7 +53,8 @@ def device_state(ctx: SystemContext, device) -> str:
     return runtime["state"].get("state", device.initial_state)
 
 
-def resolve(ctx: SystemContext, device, interaction) -> tuple[list[Delta], list[str]]:
+def resolve(ctx: SystemContext, device, interaction,
+            now_minutes: int | None = None) -> tuple[list[Delta], list[str]]:
     messages: list[str] = []
     deltas: list[Delta] = []
 
@@ -69,6 +70,21 @@ def resolve(ctx: SystemContext, device, interaction) -> tuple[list[Delta], list[
             item_def = ctx.registry.find(interaction.requires_item)
             needed = getattr(item_def, "name", interaction.requires_item)
             return [], [f"You need a {needed} for that."]
+
+    # Lockout after repeated failure (Test 5 playtest finding): without
+    # this, failure on a skill-checked device costs nothing but in-game
+    # time, so any lock in any world is brute-forceable by retry-spam —
+    # the 5% success floor guarantees it. Engine-level default so world
+    # authors don't have to hand-write consequences onto every device;
+    # tunable/disable-able per world via rules.yaml `interact:` keys.
+    lockout_after = ctx.registry.rule("interact.lockout_after_fails", 3)
+    runtime = ctx.store.get_entity(device.id)
+    dstate = dict(runtime["state"]) if runtime else {}
+    if interaction.skill is not None and lockout_after > 0 and now_minutes is not None:
+        locked_until = dstate.get("lockout_until")
+        if locked_until is not None and now_minutes < locked_until:
+            return [], [f"The {device.name} refuses you — its countermeasures "
+                        f"are still up. Give it time."]
 
     if interaction.skill is not None:
         proficiency = ctx.store.get_player_skill(interaction.skill) or 0.0
@@ -91,9 +107,28 @@ def resolve(ctx: SystemContext, device, interaction) -> tuple[list[Delta], list[
                                        target_level=1,
                                        actor_level=ctx.store.get_player()["level"])
 
-    if outcome.set_state is not None:
+    # track the fail streak; trip the lockout when it crosses the threshold
+    if interaction.skill is not None and lockout_after > 0:
+        if succeeded:
+            dstate.pop("fail_streak", None)
+            dstate.pop("lockout_until", None)
+        else:
+            streak = dstate.get("fail_streak", 0) + 1
+            dstate["fail_streak"] = streak
+            if streak >= lockout_after and now_minutes is not None:
+                lockout_minutes = ctx.registry.rule("interact.lockout_minutes", 60)
+                dstate["fail_streak"] = 0
+                dstate["lockout_until"] = now_minutes + lockout_minutes
+                messages.append(f"The {device.name} locks down against your "
+                                f"fumbling. It will take time to try again.")
+        if outcome.set_state is not None:
+            dstate["state"] = outcome.set_state
         ctx.store.upsert_entity(device.id, "device", device.id,
-                                {"state": outcome.set_state}, device.location, 0)
+                                dstate, device.location, 0)
+    elif outcome.set_state is not None:
+        dstate["state"] = outcome.set_state
+        ctx.store.upsert_entity(device.id, "device", device.id,
+                                dstate, device.location, 0)
 
     for effect in outcome.effects:
         deltas += _apply_effect(ctx, effect, messages)

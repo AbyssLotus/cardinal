@@ -372,7 +372,9 @@ class SimulationLoop:
             self._notes.append(f"The {device.name} doesn't answer to "
                                f"{action.parameters['verb']!r}.")
             return []
-        deltas, messages = interact.resolve(self.ctx, device, interaction)
+        now_minutes = self.clock.day * self.clock.minutes_per_day + self.clock.minute
+        deltas, messages = interact.resolve(self.ctx, device, interaction,
+                                            now_minutes=now_minutes)
         self._notes += messages
         return deltas
 

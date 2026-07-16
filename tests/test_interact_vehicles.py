@@ -93,6 +93,70 @@ def test_unknown_device(tmp_path):
     save.store.close()
 
 
+def test_failed_hacks_trip_a_lockout(tmp_path):
+    """Regression test for the Test 5 playtest finding: failure on a
+    skill-checked device used to cost nothing but in-game time, so any
+    lock in any world was brute-forceable by pure retry-spam (the 5%
+    success-chance floor guarantees eventual success). The engine now
+    locks a device down after `interact.lockout_after_fails` consecutive
+    failures (default 3) for `interact.lockout_minutes` (default 60),
+    without every world author having to hand-write failure consequences
+    on every device.
+    """
+    save = create_save(tmp_path / "s1", CYBERPUNK, seed=2)
+    loop = _loop(save)
+
+    # get to the vault: jack into the subnet first
+    for _ in range(15):
+        loop.submit("hack terminal")
+        if save.store.get_player()["location_id"] == "loc.cp_subnet_shallows":
+            break
+    assert save.store.get_player()["location_id"] == "loc.cp_subnet_shallows"
+
+    # Force guaranteed failure so the streak is deterministic.
+    device = save.registry.find("device.cp_datavault")
+    hack = next(i for i in device.interactions if i.verb == "hack")
+    hack.difficulty = 100000  # clamps success chance to the 5% floor... 
+
+    locked = False
+    failures = 0
+    for _ in range(30):
+        result = loop.submit("hack vault")
+        if "locks down" in result.text:
+            locked = True
+            break
+        failures += 1
+    assert locked, "30 straight failures never tripped a lockout"
+    assert failures <= 10                      # tripped promptly, not eventually
+
+    # while locked, attempts are refused outright — no roll, no crack
+    result = loop.submit("hack vault")
+    assert "are still up" in result.text
+    runtime = save.store.get_entity("device.cp_datavault")
+    assert runtime["state"].get("state", "locked") != "emptied"
+    save.store.close()
+
+
+def test_lockout_expires_with_time(tmp_path):
+    save = create_save(tmp_path / "s1", CYBERPUNK, seed=2)
+    loop = _loop(save)
+    for _ in range(15):
+        loop.submit("hack terminal")
+        if save.store.get_player()["location_id"] == "loc.cp_subnet_shallows":
+            break
+    device = save.registry.find("device.cp_datavault")
+    hack = next(i for i in device.interactions if i.verb == "hack")
+    hack.difficulty = 100000
+
+    for _ in range(30):
+        if "locks down" in loop.submit("hack vault").text:
+            break
+    loop.submit("wait 120")                    # sleep off the default 60-min lockout
+    result = loop.submit("hack vault")
+    assert "are still up" not in result.text  # a real attempt happened again
+    save.store.close()
+
+
 # ------------------------------------------------------------- vehicles
 
 
