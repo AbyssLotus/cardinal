@@ -326,12 +326,49 @@ def _try_flee(ctx, state, monster_def, rng, result) -> bool:
 # --------------------------------------------------------------- monster side
 
 
+def _player_reaction_ms(ctx) -> int:
+    """The player's effective reaction time in ms — lower is faster/better.
+
+    There's no authored player stat block (the player is pure runtime
+    state in the save, not content in schemas.py), so this used to be a
+    flat `combat.base_reaction_ms` constant applied identically to every
+    player regardless of level, gear, or proficiency (Test 4 root cause).
+    This builds a real, build-sensitive value instead: the base constant,
+    improved by acrobatics proficiency (if the world defines that skill —
+    it already existed with no combat wiring, per the playtest report)
+    and by character level, floored so it never reaches 0.
+    """
+    base = float(ctx.registry.rule("combat.base_reaction_ms", 800))
+    acrobatics = ctx.store.get_player_skill("skill.acrobatics")
+    if acrobatics:
+        base -= acrobatics * ctx.registry.rule(
+            "combat.acrobatics_reaction_ms_per_proficiency", 0.3)
+    level = ctx.store.get_player()["level"]
+    base -= (level - 1) * ctx.registry.rule("combat.reaction_ms_per_level", 2)
+    floor = ctx.registry.rule("combat.min_reaction_ms", 250)
+    return max(floor, round(base))
+
+
+def _monster_attack_windup_ms(monster_def) -> int:
+    """How telegraphed this monster's own attack is, in ms — higher means
+    more time for the player to react to it. Authored via
+    `attack_windup_ms` in the monster's stats block; falls back to a
+    speed-derived default (a faster monster telegraphs less) for monsters
+    that don't specify one, so this no longer silently reuses the
+    monster's defensive `reaction_ms` stat to also mean its own attack
+    speed (Test 4 finding).
+    """
+    authored = monster_def.stats.attack_windup_ms
+    if authored is not None:
+        return authored
+    return max(400, round(1200 - monster_def.stats.speed * 40))
+
+
 def _monsters_act(ctx, state, monster_def, player, mods, rng, result):
     pstate = state["player"]
     armor = _armor_defense(ctx) + mods.get("defense_add", 0)
-    base_reaction = ctx.registry.rule("combat.base_reaction_ms", 800)
-    act_ms = 300 + monster_def.stats.reaction_ms // 4
-    total_ms = act_ms + 300
+    base_reaction = _player_reaction_ms(ctx)
+    total_ms = _monster_attack_windup_ms(monster_def)
     script = monster_def.behavior.ai_script
     attack_range = 6.0 if "spit" in script else 1.5
     living = _living(state)

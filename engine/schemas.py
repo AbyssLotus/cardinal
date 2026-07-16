@@ -237,7 +237,16 @@ class MonsterStats(ContentModel):
     attack: int
     defense: int = 0
     speed: int = 1
-    reaction_ms: int = 1000
+    reaction_ms: int = 1000  # this monster's OWN defensive reaction (dodging the player)
+    # How telegraphed this monster's own attacks are, in ms — higher means
+    # more time for the player to react. Separate stat from reaction_ms
+    # above (that one is the monster's *defense*; this is its *offense*).
+    # Previously the engine derived a monster's attack windup from its own
+    # reaction_ms, which silently made both concepts the same number and
+    # produced monsters that could never be defended against regardless of
+    # player build (Test 4 playtest finding). Falls back to a speed-derived
+    # default for monsters that don't author one.
+    attack_windup_ms: Optional[int] = None
 
 
 class MonsterBehavior(ContentModel):
