@@ -82,3 +82,13 @@
   col: 500
   combat: { level: 5, skills: [] }
   policy_params: {}
+- id: npc.cp_blister
+  name: "Blister"
+  location: loc.cp_afterlife
+  actor_class: agent
+  policy: bandit
+  capabilities: [combat]
+  col: 60
+  combat: { level: 6, skills: [] }
+  policy_params:
+    turf: [loc.cp_afterlife, loc.cp_kabuki_market, loc.cp_arasaka_waterfront]

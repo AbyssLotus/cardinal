@@ -158,3 +158,46 @@ def test_world_moves_without_player(tmp_path):
               if e["category"] == "street"]
     assert street, "90 days and the streets stayed silent"
     save.store.close()
+
+
+def test_bandits_rob_regardless_of_faction(tmp_path):
+    """Independence is no longer invisibility: Blister (factionless
+    bandit) marks the richest co-located agent — including the
+    independent trader Wei, whom faction-derived hostility could never
+    touch. Greed-driven violence is faction-blind."""
+    save, loop = _run(tmp_path, 60)
+    street = [e["headline"] for e in save.store.get_chronicle(4000)
+              if e["category"] == "street"]
+    blister_events = [h for h in street if "Blister" in h]
+    assert blister_events, "60 days and the bandit never moved on anyone"
+    # his marks include unaffiliated agents (Wei/Nix carry the fattest
+    # purses on his turf), not just faction soldiers
+    independent_names = ("Caravan Wei", "Nix", "Ito")
+    assert any(any(name in h for name in independent_names)
+               for h in blister_events), blister_events
+    save.store.close()
+
+
+def test_bandits_ignore_the_poor(tmp_path):
+    """Below agents.bandit_greed_threshold nobody is worth the trouble —
+    banditry is economics, not bloodlust."""
+    from engine.systems import agents as agents_system
+    save, loop = _run(tmp_path, 1)
+    blister = save.registry.find("npc.cp_blister")
+    # everyone at the Afterlife right now is broke: strip their col
+    for row in save.store.conn.execute(
+            "SELECT id, state_json FROM entities WHERE kind='npc'"):
+        entity = save.store.get_entity(row["id"])
+        if entity is None:
+            continue
+        state = dict(entity["state"])
+        if "col" in state:
+            state["col"] = 10
+            save.store.upsert_entity(row["id"], "npc", row["id"], state,
+                                     entity["location_id"], 1)
+    defs = {n.id: n for n in save.registry.by_kind("npc")
+            if getattr(n, "actor_class", "") == "agent"}
+    mark = agents_system._richest_mark_here(loop.ctx, blister,
+                                            "loc.cp_afterlife", defs)
+    assert mark is None
+    save.store.close()

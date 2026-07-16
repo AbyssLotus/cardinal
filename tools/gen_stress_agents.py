@@ -49,15 +49,20 @@ def main(world: str, count: int, seed: int = 42) -> None:
         i += 1
     for _ in range(n_hunter):
         home = rng.choice(LOCS)
+        # most working people are unaffiliated; gangs are a minority
         emit(i, f"Grunt {i:03d}", "hunter_gatherer",
-             rng.choice(FACTIONS[1:]), rng.randint(50, 300), rng.randint(3, 7),
+             rng.choice(FACTIONS[1:4] + [None] * 5), rng.randint(50, 300),
+             rng.randint(3, 7),
              {"species": "mon.cp_scav", "zone": rng.choice(ZONES),
               "home": home, "sell_at": rng.choice(LOCS)}, home)
         i += 1
     while i < count:
         turf = rng.sample(LOCS, rng.randint(2, 3))
-        emit(i, f"Edgerunner {i:03d}", "aggressor",
-             rng.choice(FACTIONS[:4]), rng.randint(100, 500), rng.randint(4, 9),
+        faction = rng.choice(FACTIONS[:4] + [None, None])
+        # muscle without a cause is a bandit, not an inert aggressor
+        policy = "aggressor" if faction else "bandit"
+        emit(i, f"Edgerunner {i:03d}", policy, faction,
+             rng.randint(100, 500), rng.randint(4, 9),
              {"turf": f"[{', '.join(turf)}]"}, turf[0])
         i += 1
 

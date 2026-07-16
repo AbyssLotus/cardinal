@@ -135,6 +135,9 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
         elif policy == "aggressor":
             deltas += _act_aggressor(ctx, npc, state, location, day, hour, rng,
                                      agent_defs)
+        elif policy == "bandit":
+            deltas += _act_bandit(ctx, npc, state, location, day, hour, rng,
+                                  agent_defs)
         # passive: holds state
         # light recovery between actions — agents heal like the player does
         if state.get("alive", True) and state["hp"] < state["hp_max"]:
@@ -505,6 +508,44 @@ def _act_aggressor(ctx, npc, state, location, day, hour, rng,
         state["activity"] = "patrolling"
         _save(ctx, npc, state, target, day)
     return []
+
+
+def _act_bandit(ctx, npc, state, location, day, hour, rng,
+                agent_defs) -> list[Delta]:
+    """Greed, not ideology: a bandit robs the richest co-located agent
+    above agents.bandit_greed_threshold, faction or no faction. This is
+    what makes independence a real status instead of invisibility —
+    unaffiliated traders are exactly who an opportunist marks first."""
+    turf = npc.policy_params.get("turf", [npc.location])
+    if state.get("last_fight_day") != day:
+        mark = _richest_mark_here(ctx, npc, location, agent_defs)
+        if mark is not None and rng.random() < ctx.registry.rule(
+                "agents.engage_chance", 0.35):
+            state["last_fight_day"] = day
+            return _agent_fight(ctx, npc, state, mark, location, day, rng)
+    if turf:
+        index = (day * 24 + hour) // max(1, ctx.registry.rule(
+            "agents.act_every_hours", 3)) % len(turf)
+        state["activity"] = "casing marks"
+        _save(ctx, npc, state, turf[index], day)
+    return []
+
+
+def _richest_mark_here(ctx, npc, location, agent_defs):
+    greed = ctx.registry.rule("agents.bandit_greed_threshold", 800)
+    best, best_col = None, greed - 1
+    for row in ctx.store.entities_at(location, kind="npc"):
+        other = agent_defs.get(row["id"])
+        if other is None or other.id == npc.id:
+            continue
+        if npc.faction is not None and other.faction == npc.faction:
+            continue                       # even bandits don't rob their own
+        if not row["state"].get("alive", True):
+            continue
+        col = row["state"].get("col", 0)
+        if col > best_col:
+            best, best_col = other, col
+    return best
 
 
 def _hostile_agent_here(ctx, npc, location, agent_defs):

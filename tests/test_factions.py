@@ -324,7 +324,7 @@ def test_watson_365_day_stability(tmp_path):
     assert len(politics) == len(set(politics)), "duplicate chronicle spam"
     assert any("sworn enemies" in h for h in politics)
 
-    assert npc_rows == 13                    # 6 ambient + 7 agents, all rows kept
+    assert npc_rows == 14                    # 6 ambient + 8 agents, all rows kept
     # ambient NPCs never die; agents may (permadeath) but their rows remain
 
     # determinism across the full year: an independent save replays identically
