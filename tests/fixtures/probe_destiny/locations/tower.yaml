@@ -4,3 +4,4 @@ floor: floor.d2_cosmodrome
 type: city
 safe_zone: true
 services: [vault, vendor]
+market: market.d2_tower_bazaar

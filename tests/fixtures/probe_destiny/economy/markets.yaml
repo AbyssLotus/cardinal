@@ -1,0 +1,3 @@
+- id: market.d2_tower_bazaar
+  settlement: loc.d2_tower
+  stock_categories: [weapon, ammo, armor]
