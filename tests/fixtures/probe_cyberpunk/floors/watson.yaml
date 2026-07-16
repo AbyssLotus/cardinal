@@ -2,7 +2,8 @@ id: floor.cp_watson
 name: "Watson District"
 diameter_km: 6
 biome: urban
-settlements: [loc.cp_afterlife]
+settlements: [loc.cp_afterlife, loc.cp_lizzies_bar, loc.cp_kabuki_market,
+              loc.cp_totentanz, loc.cp_arasaka_waterfront]
 zones:
   - id: zone.cp_alleys
     terrain: urban
@@ -11,3 +12,10 @@ zones:
     visibility_m: 40
     monster_populations:
       - { species: mon.cp_scav, carrying_capacity: 60, current: 60 }
+  - id: zone.cp_northside_ruins
+    terrain: urban
+    danger_rating: 6
+    cover_density: 0.8
+    visibility_m: 30
+    monster_populations:
+      - { species: mon.cp_scav, carrying_capacity: 90, current: 90 }

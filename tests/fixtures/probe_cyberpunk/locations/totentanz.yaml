@@ -1,0 +1,6 @@
+id: loc.cp_totentanz
+name: "Totentanz"
+floor: floor.cp_watson
+type: city
+safe_zone: false
+services: [bar]

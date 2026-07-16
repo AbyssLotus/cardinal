@@ -1,3 +1,12 @@
 - id: market.cp_afterlife_fixer
   settlement: loc.cp_afterlife
-  stock_categories: [weapon, ammo, armor, cyberware]
+  stock_categories: [weapon, ammo]
+- id: market.cp_lizzies
+  settlement: loc.cp_lizzies_bar
+  stock_categories: [ammo, gear]
+- id: market.cp_kabuki
+  settlement: loc.cp_kabuki_market
+  stock_categories: [weapon, ammo, armor, gear, material]
+- id: market.cp_waterfront
+  settlement: loc.cp_arasaka_waterfront
+  stock_categories: [weapon, armor, gear]

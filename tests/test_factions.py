@@ -49,6 +49,7 @@ def test_selective_faction_requires_reputation(tmp_path):
     """Arasaka won't look at a nobody; earn standing and the door opens."""
     save = create_save(tmp_path / "s1", CYBERPUNK, seed=1)
     loop = _loop(save)
+    loop.submit("go arasaka waterfront")
     result = loop.submit("join arasaka")
     assert "Make a name for yourself" in result.text
     assert factions.membership(loop.ctx) is None
@@ -121,6 +122,7 @@ def test_donation_requires_membership_and_funds(tmp_path):
     loop = _loop(save)
     assert "Join a faction first" in loop.submit("donate 100").text
     save.store.adjust_reputation("fac.cp_arasaka", 2.0)
+    loop.submit("go arasaka waterfront")
     loop.submit("join arasaka")
     assert "You carry only" in loop.submit("donate 999999").text
     save.store.close()
@@ -156,14 +158,24 @@ def test_faction_members_are_tax_exempt(tmp_path):
     save.store.close()
 
 
-def test_untaxed_market_when_no_faction_controls_it(tmp_path):
-    """Maelstrom's HQ is the subnet, Arasaka holds the Afterlife — so the
-    fixer market IS taxed by Arasaka; verify the controlling-faction
-    resolution picks the right one."""
+def test_market_control_follows_headquarters(tmp_path):
+    """The Afterlife is neutral ground (no HQ there) — untaxed. Kabuki's
+    market pays the Tyger Claws' protection rate; the waterfront pays
+    Arasaka's."""
     save = create_save(tmp_path / "s1", CYBERPUNK, seed=3)
     loop = _loop(save)
-    market = save.registry.find("market.cp_afterlife_fixer")
-    faction, rate = factions.market_tax(loop.ctx, market)
+
+    neutral = save.registry.find("market.cp_afterlife_fixer")
+    faction, rate = factions.market_tax(loop.ctx, neutral)
+    assert faction is None and rate == 0.0
+
+    kabuki = save.registry.find("market.cp_kabuki")
+    faction, rate = factions.market_tax(loop.ctx, kabuki)
+    assert faction is not None and faction.id == "fac.cp_tyger_claws"
+    assert rate == pytest.approx(0.12)
+
+    waterfront = save.registry.find("market.cp_waterfront")
+    faction, rate = factions.market_tax(loop.ctx, waterfront)
     assert faction is not None and faction.id == "fac.cp_arasaka"
     assert rate == pytest.approx(0.08)
     save.store.close()
@@ -274,3 +286,47 @@ def test_faction_status_verb(tmp_path):
     result = loop.submit("faction")
     assert "member of The Vanguard" in result.text
     save.store.close()
+
+
+# ------------------------------------------------------------- year burn
+
+
+def test_watson_365_day_stability(tmp_path):
+    """A full year of Watson politics must run clean: no crashes, faction
+    state stays in bounds, the chronicle records the era's headlines
+    without spamming, NPC life loops stay sustainable, and the world
+    stays deterministic (spec §3.3) across the whole span."""
+    def run(path):
+        save = create_save(path, CYBERPUNK, seed=2077)
+        loop = _loop(save)
+        loop.advance_days(365)
+        states = {}
+        for faction in sorted(save.registry.by_kind("fac"), key=lambda f: f.id):
+            states[faction.id] = factions.faction_state(loop.ctx, faction)
+        politics = [e["headline"] for e in save.store.get_chronicle(3000)
+                    if e["category"] == "politics"]
+        npc_rows = save.store.conn.execute(
+            "SELECT COUNT(*) AS n FROM entities WHERE kind='npc'").fetchone()["n"]
+        save.store.close()
+        return states, politics, npc_rows
+
+    states, politics, npc_rows = run(tmp_path / "a")
+
+    for fac_id, state in states.items():
+        assert 0.0 <= state["cohesion"] <= 1.0, fac_id
+        for other, value in state["dispositions"].items():
+            assert -1.0 <= value <= 1.0, (fac_id, other)
+        assert state["treasury"] >= 0, fac_id
+        assert "_shift_before" not in state, fac_id          # no scratch leakage
+
+    # the year's headlines: enmities declared once each, no spam
+    assert 1 <= len(politics) <= 40
+    assert len(politics) == len(set(politics)), "duplicate chronicle spam"
+    assert any("sworn enemies" in h for h in politics)
+
+    assert npc_rows == 6                                      # nobody vanished
+
+    # determinism across the full year: an independent save replays identically
+    states_b, politics_b, _ = run(tmp_path / "b")
+    assert states == states_b
+    assert politics == politics_b

@@ -1,0 +1,50 @@
+- id: npc.cp_rogue
+  name: "Rogue"
+  location: loc.cp_afterlife
+  occupation: fixer
+  needs: { food: 1.0, rest: 1.0 }
+  schedule:
+    - { from: "12:00", to: "18:00", activity: broker_deals, at: loc.cp_afterlife }
+    - { from: "19:00", to: "02:00", activity: socialize, at: loc.cp_afterlife }
+  knowledge:
+    - { topic: "who runs Kabuki", fact: "The Tyger Claws collect from every stall in Kabuki, and Arasaka lets them.", price_col: 500 }
+- id: npc.cp_susie
+  name: "Susie Q"
+  location: loc.cp_lizzies_bar
+  occupation: gang_boss
+  needs: { food: 1.0, rest: 1.0 }
+  schedule:
+    - { from: "10:00", to: "18:00", activity: run_the_bar, at: loc.cp_lizzies_bar }
+    - { from: "19:00", to: "01:00", activity: socialize, at: loc.cp_lizzies_bar }
+- id: npc.cp_judy
+  name: "Judy"
+  location: loc.cp_lizzies_bar
+  occupation: techie
+  needs: { food: 1.0, rest: 1.0 }
+  schedule:
+    - { from: "11:00", to: "19:00", activity: edit_braindances, at: loc.cp_lizzies_bar }
+    - { from: "20:00", to: "23:00", activity: socialize, at: loc.cp_lizzies_bar }
+- id: npc.cp_royce
+  name: "Royce"
+  location: loc.cp_totentanz
+  occupation: gang_boss
+  needs: { food: 1.0, rest: 1.0 }
+  schedule:
+    - { from: "14:00", to: "22:00", activity: hold_court, at: loc.cp_totentanz }
+    - { from: "22:00", to: "03:00", activity: socialize, at: loc.cp_totentanz }
+- id: npc.cp_kenji
+  name: "Kenji"
+  location: loc.cp_kabuki_market
+  occupation: gang_boss
+  needs: { food: 1.0, rest: 1.0 }
+  schedule:
+    - { from: "09:00", to: "17:00", activity: collect_protection, at: loc.cp_kabuki_market }
+    - { from: "18:00", to: "23:00", activity: socialize, at: loc.cp_kabuki_market }
+- id: npc.cp_stall_keeper
+  name: "Aiko"
+  location: loc.cp_kabuki_market
+  occupation: merchant
+  needs: { food: 1.0, rest: 1.0 }
+  schedule:
+    - { from: "08:00", to: "19:00", activity: keep_shop, at: loc.cp_kabuki_market }
+    - { from: "19:00", to: "22:00", activity: socialize, at: loc.cp_kabuki_market }

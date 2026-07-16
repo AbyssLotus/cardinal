@@ -1,28 +1,69 @@
-# Night City: a corp that won't look at you until you're somebody, and a
-# gang that takes anyone crazy enough to walk in.
+# Watson's power map. Arasaka holds the waterfront and quietly favors the
+# Tyger Claws (canon patronage, expressed as a warm disposition until the
+# covert-clause system lands). The Kabuki Tyger Claws run a protection
+# racket on the market. The Mox exist because of the Tyger Claws and hate
+# them accordingly. Maelstrom hates everyone from Totentanz.
 - id: fac.cp_arasaka
   canon_tier: confirmed
   name: "Arasaka"
   type: corp
-  headquarters: loc.cp_afterlife
+  headquarters: loc.cp_arasaka_waterfront
   leadership: []
   membership_count: 10000
   treasury_col: 5000000
   agenda:
     - { goal: "Control Night City's data economy", priority: 0.9 }
+    - { goal: "Keep Watson's gangs useful and cheap", priority: 0.4 }
   relations:
     - { with: fac.cp_maelstrom, disposition: -0.6 }
+    - { with: fac.cp_tyger_claws, disposition: 0.4 }
+    - { with: fac.cp_mox, disposition: -0.2 }
   policies: { tax_rate: 0.08, recruitment: selective }
 - id: fac.cp_maelstrom
   canon_tier: confirmed
   name: "Maelstrom"
   type: gang
-  headquarters: loc.cp_subnet_shallows
-  leadership: []
+  headquarters: loc.cp_totentanz
+  leadership: [npc.cp_royce]
   membership_count: 200
   treasury_col: 15000
   agenda:
     - { goal: "Flesh is weak; chrome is truth", priority: 0.7 }
+    - { goal: "Hold Northside against all comers", priority: 0.6 }
   relations:
     - { with: fac.cp_arasaka, disposition: -0.6 }
+    - { with: fac.cp_tyger_claws, disposition: -0.4 }
+    - { with: fac.cp_mox, disposition: -0.3 }
   policies: { recruitment: open }
+- id: fac.cp_mox
+  canon_tier: confirmed
+  name: "The Mox"
+  type: gang
+  headquarters: loc.cp_lizzies_bar
+  leadership: [npc.cp_susie]
+  membership_count: 80
+  treasury_col: 8000
+  agenda:
+    - { goal: "Protect our own", priority: 0.9 }
+    - { goal: "Keep Lizzie's open and independent", priority: 0.7 }
+  relations:
+    - { with: fac.cp_tyger_claws, disposition: -0.7 }
+    - { with: fac.cp_maelstrom, disposition: -0.3 }
+    - { with: fac.cp_arasaka, disposition: -0.2 }
+  policies: { tax_rate: 0.02, recruitment: open }
+- id: fac.cp_tyger_claws
+  canon_tier: confirmed
+  name: "Kabuki Tyger Claws"
+  type: gang
+  headquarters: loc.cp_kabuki_market
+  leadership: [npc.cp_kenji]
+  membership_count: 350
+  treasury_col: 60000
+  agenda:
+    - { goal: "Bleed Kabuki's stalls for protection money", priority: 0.8 }
+    - { goal: "Stay in Arasaka's good graces", priority: 0.5 }
+  relations:
+    - { with: fac.cp_mox, disposition: -0.7 }
+    - { with: fac.cp_maelstrom, disposition: -0.4 }
+    - { with: fac.cp_arasaka, disposition: 0.4 }
+  policies: { tax_rate: 0.12, recruitment: selective }

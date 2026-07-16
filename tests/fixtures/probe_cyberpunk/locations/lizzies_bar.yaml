@@ -1,0 +1,7 @@
+id: loc.cp_lizzies_bar
+name: "Lizzie's Bar"
+floor: floor.cp_watson
+type: city
+safe_zone: true
+services: [bar, braindance]
+market: market.cp_lizzies

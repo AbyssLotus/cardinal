@@ -185,8 +185,12 @@ def _decide(ctx: SystemContext, faction, state: dict[str, Any],
         value = dispositions[other_id]
         if value > best_disp and value > -0.5:
             outreach_target, best_disp = other_id, value
-    scores["outreach"] = (round(0.3 + best_disp * 0.4 + drive * 0.1, 4)
-                          if outreach_target else 0.0)
+    outreach_score = 0.0
+    if outreach_target:
+        outreach_score = 0.3 + best_disp * 0.4 + drive * 0.1
+        if best_disp >= 0.95:
+            outreach_score *= 0.4   # the friendship has nowhere left to grow
+    scores["outreach"] = round(outreach_score, 4)
 
     feud_target, worst_disp = None, 1.0
     for other_id in sorted(dispositions):
@@ -207,16 +211,32 @@ def _decide(ctx: SystemContext, faction, state: dict[str, Any],
     if chosen == "consolidate":
         return _act_consolidate(faction, state)
     if chosen == "outreach":
-        return _act_shift(ctx, faction, state, outreach_target, +0.04,
-                          crossing=ctx.registry.rule("factions.accord_threshold", 0.0),
-                          upward=True,
-                          headline=f"{faction.name} reaches an accord with {{other}}.")
+        deltas = _act_shift(ctx, faction, state, outreach_target, +0.04,
+                            crossing=ctx.registry.rule("factions.accord_threshold", 0.0),
+                            upward=True,
+                            headline=f"{faction.name} reaches an accord with {{other}}.")
+        if not deltas:
+            # a second, higher rung: closing ranks at +0.5 is alliance-grade
+            # news even when the accord line was never crossed from below
+            before = state.get("_shift_before", None)
+            after = state["dispositions"].get(outreach_target)
+            if before is not None and before < 0.5 <= after:
+                other = ctx.registry.find(outreach_target)
+                deltas = [Delta(kind="chronicle", payload={
+                    "category": "politics", "visibility": "public",
+                    "headline": f"{faction.name} closes ranks with "
+                                f"{getattr(other, 'name', outreach_target)}.",
+                    "detail": f"disposition {before} -> {after}"})]
+        state.pop("_shift_before", None)
+        return deltas
     # war weariness (spec §4.1): feuding drains cohesion, so feuds exhaust
     # into consolidation instead of grinding silently at the floor forever
     state["cohesion"] = round(max(0.0, state.get("cohesion", 0.6) - 0.03), 4)
-    return _act_shift(ctx, faction, state, feud_target, -0.05,
-                      crossing=-0.5, upward=False,
-                      headline=f"{faction.name} feuds openly with {{other}}.")
+    deltas = _act_shift(ctx, faction, state, feud_target, -0.05,
+                        crossing=-0.5, upward=False,
+                        headline=f"{faction.name} feuds openly with {{other}}.")
+    state.pop("_shift_before", None)
+    return deltas
 
 
 def _act_consolidate(faction, state: dict[str, Any]) -> list[Delta]:
@@ -242,6 +262,7 @@ def _act_shift(ctx: SystemContext, faction, state: dict[str, Any], other_id: str
     before = state["dispositions"].get(other_id, 0.0)
     after = round(max(-1.0, min(1.0, before + step)), 4)
     state["dispositions"][other_id] = after
+    state["_shift_before"] = before
 
     other_state = faction_state(ctx, other)
     mirrored = other_state.setdefault("dispositions", {}).get(faction.id, 0.0)
