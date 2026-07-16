@@ -153,6 +153,11 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
         if (day + _stable_hash(faction.id)) % interval != 0:
             continue
         state = faction_state(ctx, faction)
+        if faction.id.startswith("fac.rt_"):
+            deltas += _tick_runtime_lifecycle(ctx, faction, state, day)
+            if state.get("dissolved"):
+                save_faction_state(ctx, faction, state)
+                continue
         _decay_dispositions(faction, state, decay)
         deltas += _decide(ctx, faction, state, day)
         save_faction_state(ctx, faction, state)
@@ -296,6 +301,103 @@ def _act_shift(ctx: SystemContext, faction, state: dict[str, Any], other_id: str
                 "headline": f"{faction.name} and {other.name} are now sworn enemies.",
                 "detail": f"disposition {before} -> {after}"})]
     return []
+
+
+# ------------------------------------------------------------ runtime founding
+
+
+def resolve_found(ctx: SystemContext, name: str, player: dict,
+                  day: int) -> tuple[list[Delta], list[str]]:
+    """§24.5: the player founds a faction mid-save. Mints a fac.rt_<slug>
+    dynamic entity (never colliding with authored fac.*), seeds its
+    treasury from the founder's col, sets HQ at the founding site, and
+    makes the founder its leader. Founding is a chronicle event."""
+    import json as _json
+    import re as _re
+
+    from engine.schemas import Faction
+
+    if membership(ctx) is not None:
+        return [], ["You already wear someone's colors. Leave first."]
+    name = name.strip()
+    if len(name) < 3:
+        return [], ["A faction needs a real name."]
+    slug = _re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")[:32]
+    faction_id = f"fac.rt_{slug}"
+    if ctx.registry.find(faction_id) is not None:
+        return [], [f"A faction called {name!r} already exists."]
+    cost = ctx.registry.rule("factions.founding_cost", 500)
+    if player["col"] < cost:
+        currency = ctx.registry.manifest.currency.name
+        return [], [f"Founding a faction takes {cost} {currency} seed money; "
+                    f"you carry {player['col']}."]
+
+    definition = {
+        "id": faction_id, "name": name, "type": "guild",
+        "headquarters": player["location_id"], "leadership": [],
+        "membership_count": 1, "treasury_col": cost,
+        "agenda": [{"goal": "Survive and grow", "priority": 0.5}],
+        "relations": [], "policies": {"recruitment": "open"},
+    }
+    faction = Faction.model_validate(definition)
+    ctx.registry.register_dynamic(faction)
+    ctx.store.add_dynamic_entity(faction_id, "factions",
+                                 _json.dumps(definition), day)
+    ctx.store.update_player(col=player["col"] - cost)
+    save_faction_state(ctx, faction, {
+        "treasury": cost, "cohesion": 0.7, "dispositions": {},
+        "founded_day": day, "leader": "player"})
+    ctx.store.upsert_entity(MEMBER_ID, "faction_member", MEMBER_ID,
+                            {"faction": faction_id, "role": "leader",
+                             "joined_day": day},
+                            player["location_id"], day)
+    place = ctx.registry.find(player["location_id"])
+    deltas = [
+        Delta(kind="reputation", payload={"scope_id": faction_id, "delta": 1.0}),
+        Delta(kind="chronicle", payload={
+            "category": "politics", "visibility": "public",
+            "headline": f"A new banner rises: {name} is founded at "
+                        f"{getattr(place, 'name', player['location_id'])}.",
+            "detail": f"seeded with {cost}", "actors": ["player"]}),
+    ]
+    currency = ctx.registry.manifest.currency.name
+    return deltas, [f"You found {name}. {cost} {currency} seeds its treasury; "
+                    f"you are its leader."]
+
+
+def _tick_runtime_lifecycle(ctx: SystemContext, faction, state: dict,
+                            day: int) -> list[Delta]:
+    """Dissolution (§24.1): a leaderless runtime faction runs a countdown;
+    expiry dissolves it — treasury refunds to the last leader if that's
+    the player, the overlay entry is removed, and a chronicle entry
+    closes the arc. Factions must be able to die."""
+    member = membership(ctx)
+    has_leader = (state.get("leader") == "player"
+                  and member is not None and member[0] == faction.id)
+    if has_leader:
+        state.pop("dissolving_since", None)
+        return []
+    if "dissolving_since" not in state:
+        state["dissolving_since"] = day
+        return [Delta(kind="chronicle", payload={
+            "category": "politics", "visibility": "public",
+            "headline": f"{faction.name} stands leaderless.",
+            "detail": "dissolution countdown begins"})]
+    countdown = ctx.registry.rule("factions.dissolution_days", 7)
+    if day - state["dissolving_since"] < countdown:
+        return []
+    treasury = state.get("treasury", 0)
+    if treasury > 0 and state.get("leader") == "player":
+        player = ctx.store.get_player()
+        ctx.store.update_player(col=player["col"] + treasury)
+    state["treasury"] = 0
+    state["dissolved"] = True
+    ctx.registry.unregister_dynamic(faction.id)
+    ctx.store.remove_dynamic_entity(faction.id)
+    return [Delta(kind="chronicle", payload={
+        "category": "politics", "visibility": "public",
+        "headline": f"{faction.name} dissolves; its banner comes down.",
+        "detail": f"treasury of {treasury} dispersed"})]
 
 
 # --------------------------------------------------------------- player verbs

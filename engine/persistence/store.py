@@ -183,6 +183,22 @@ class Store:
             "SELECT value FROM player_reputation WHERE scope_id=?", (scope_id,)).fetchone()
         return row["value"] if row else 0.0
 
+    # --- dynamic entities (§24.5) --------------------------------------------------
+
+    def add_dynamic_entity(self, entity_id: str, kind: str, def_json: str,
+                           created_day: int) -> None:
+        self.conn.execute(
+            "INSERT INTO dynamic_entities(id, kind, def_json, created_day) "
+            "VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET def_json=excluded.def_json",
+            (entity_id, kind, def_json, created_day))
+
+    def remove_dynamic_entity(self, entity_id: str) -> None:
+        self.conn.execute("DELETE FROM dynamic_entities WHERE id=?", (entity_id,))
+
+    def get_dynamic_entities(self) -> list[dict[str, Any]]:
+        return [dict(r) for r in
+                self.conn.execute("SELECT * FROM dynamic_entities ORDER BY id")]
+
     # --- quest instances ---------------------------------------------------------
 
     def upsert_quest(self, instance_id: str, def_id: str, state: str,

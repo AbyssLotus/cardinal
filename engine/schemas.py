@@ -199,7 +199,9 @@ class Relationship(ContentModel):
 
 class Knowledge(ContentModel):
     fact: str
+    topic: Optional[str] = None
     price_col: Optional[int] = None
+    unlocks: Optional[str] = None   # quest.x | loc.y — paid intel with teeth
 
 
 class NpcCombat(ContentModel):

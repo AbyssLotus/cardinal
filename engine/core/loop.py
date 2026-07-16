@@ -345,9 +345,20 @@ class SimulationLoop:
                 self.ctx, action.parameters["amount"], player, self.clock.day)
             self._notes += messages
             return deltas
+        if action.intent == "eavesdrop":
+            return self._resolve_eavesdrop(action.parameters.get("npc"), player)
+        if action.intent == "buy_info":
+            return self._resolve_buy_info(action.parameters["npc"], player)
+        if action.intent == "faction_found":
+            deltas, messages = factions_system.resolve_found(
+                self.ctx, action.parameters["name"], player, self.clock.day)
+            self._notes += messages
+            return deltas
         if action.intent == "faction_status":
             self._notes += factions_system.status_report(self.ctx)
             return []
+        if action.intent in ("wait", "look"):
+            self._bar_gossip(player)
         return []  # wait / look / status change no state
 
     def _resolve_hunt(self, action: Action, player: dict) -> list[Delta]:
@@ -663,6 +674,116 @@ class SimulationLoop:
         self._notes += events
         return [Delta(kind="reputation", payload={"scope_id": agent.id,
                                                   "delta": -0.5})]
+
+    def _resolve_eavesdrop(self, name: str | None, player: dict) -> list[Delta]:
+        """§25.1: a perception check against a socializing NPC surfaces a
+        bounded digest of their ACTUAL npc_memory rows — the engine never
+        invents overheard content. Failure alerts the target."""
+        targets = []
+        for npc in self._npcs_here(player):
+            if getattr(npc, "actor_class", "ambient") != "ambient":
+                continue
+            runtime = self.store.get_entity(npc.id)
+            activity = (runtime["state"].get("activity") if runtime else None) or ""
+            if activity in ("socialize", "gather_rumors"):
+                targets.append(npc)
+        if name:
+            needle = name.lower()
+            targets = [n for n in targets
+                       if needle in n.name.lower() or needle in n.id]
+        if not targets:
+            self._notes.append("No conversation worth catching is in earshot.")
+            return []
+        target = targets[0]
+        hiding = self.store.get_player_skill("skill.hiding") or 0.0
+        chance = max(0.1, min(0.95, 0.6 + hiding / 500))
+        if self.rng.stream("trade").random() >= chance:
+            self._notes.append(f"{target.name} catches you leaning in — the "
+                               f"conversation dies on the spot.")
+            return [Delta(kind="reputation",
+                          payload={"scope_id": target.id, "delta": -0.1})]
+        rows = self.store.conn.execute(
+            "SELECT summary FROM npc_memory WHERE npc_id=? AND kind='conversation' "
+            "ORDER BY id DESC LIMIT 3", (target.id,)).fetchall()
+        if not rows:
+            self._notes.append(f"You catch only small talk from {target.name}.")
+            return []
+        self._notes.append(f"You linger near {target.name} and catch fragments:")
+        for row in rows:
+            self._notes.append(f'  "...{row["summary"]}"')
+        return []
+
+    def _resolve_buy_info(self, name: str, player: dict) -> list[Delta]:
+        """§25.2: purchase an NPC's priced knowledge — debits the player,
+        credits the NPC's real balance, and journals the fact."""
+        needle = name.lower()
+        for npc in self._npcs_here(player):
+            if needle not in npc.name.lower() and needle not in npc.id:
+                continue
+            priced = [k for k in getattr(npc, "knowledge", [])
+                      if k.price_col]
+            if not priced:
+                self._notes.append(f"{npc.name} has nothing to sell you but "
+                                   f"the time of day.")
+                return []
+            entry = priced[0]
+            currency = self.registry.manifest.currency.name
+            if player["col"] < entry.price_col:
+                self._notes.append(f"{npc.name} wants {entry.price_col} "
+                                   f"{currency} for that.")
+                return []
+            self.store.update_player(col=player["col"] - entry.price_col)
+            runtime = self.store.get_entity(npc.id)
+            state = dict(runtime["state"]) if runtime else {}
+            state["col"] = state.get("col", 0) + entry.price_col
+            self.store.upsert_entity(npc.id, "npc", npc.id, state,
+                                     runtime["location_id"] if runtime
+                                     else npc.location, self.clock.day)
+            self._notes.append(f"{npc.name} leans close ({entry.price_col} "
+                               f"{currency} lighter): \"{entry.fact}\"")
+            deltas = [Delta(kind="player_history", payload={
+                "kind": "intel",
+                "summary": f"Paid {npc.name} for: {entry.fact}",
+                "refs": [npc.id]})]
+            if entry.unlocks:
+                unlocked = self.registry.find(entry.unlocks)
+                if unlocked is not None:
+                    self._notes.append(
+                        f"  (You now know of {getattr(unlocked, 'name', entry.unlocks)}.)")
+            return deltas
+        self._notes.append(f"No one called {name!r} is here.")
+        return []
+
+    def _bar_gossip(self, player: dict) -> None:
+        """§25.4: hanging around where people talk surfaces the chronicle.
+        Low-chance, rate-limited per day — waiting in a bar for news is a
+        real, if slow, strategy."""
+        talkers = False
+        for npc in self._npcs_here(player):
+            runtime = self.store.get_entity(npc.id)
+            if runtime and runtime["state"].get("activity") == "socialize":
+                talkers = True
+                break
+        if not talkers:
+            return
+        tracker = self.store.get_entity("gossip.player")
+        state = dict(tracker["state"]) if tracker else {}
+        if state.get("day") != self.clock.day:
+            state = {"day": self.clock.day, "heard": 0}
+        if state["heard"] >= self.registry.rule("gossip.max_per_day", 2):
+            return
+        if self.rng.stream("trade").random() >= self.registry.rule(
+                "gossip.overhear_chance", 0.25):
+            return
+        recent = [e for e in self.store.get_chronicle(15)
+                  if e.get("visibility") in (None, "public", "regional")]
+        if not recent:
+            return
+        event = recent[self.rng.stream("trade").randrange(len(recent))]
+        state["heard"] += 1
+        self.store.upsert_entity("gossip.player", "tracker", "gossip.player",
+                                 state, player["location_id"], self.clock.day)
+        self._notes.append(f'You overhear: "{event["headline"]}"')
 
     def _npcs_here(self, player: dict) -> list:
         found = []
