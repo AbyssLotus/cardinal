@@ -1,0 +1,7 @@
+id: loc.cp_arasaka_waterfront
+name: "Arasaka Waterfront"
+floor: floor.cp_watson
+type: city
+safe_zone: true
+services: [docks, corp_office]
+market: market.cp_waterfront
