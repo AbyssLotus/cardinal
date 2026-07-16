@@ -186,10 +186,36 @@ def _player_attack(ctx, state, monster_def, player, argument, mods, rng, result)
         if mounted is None:
             result.events.append("You'd need to be riding something to ram.")
             return
-        _, vehicle_def = mounted
+        instance, vehicle_def = mounted
         top_speed = max(vehicle_def.speed_kmh.values(), default=10.0)
+        # Latent-exploit guard (Test 4 secondary finding): raw
+        # top_speed × 0.8 with no cost and no cap means any world that
+        # ships a fast vehicle (bike, mech, starship) silently gets a
+        # free, ammo-less, durability-free attack scaling linearly with
+        # speed. Cap the damage and charge the vehicle's own hp per
+        # ram — slamming your ride into a monster should hurt the ride.
+        # Both knobs live in rules.yaml so worlds can retune.
+        ram_cap = ctx.registry.rule("combat.ram_damage_cap", 40)
+        ram_damage = min(ram_cap, round(top_speed * 0.8))
+        self_damage_ratio = ctx.registry.rule("combat.ram_self_damage_ratio", 0.25)
+        vstate = instance["state"]
+        vehicle_hp = vstate.get("hp", (vehicle_def.stats or {}).get("hp", 100))
+        self_damage = max(1, round(ram_damage * self_damage_ratio))
+        vehicle_hp -= self_damage
+        if vehicle_hp <= 0:
+            vstate.update({"hp": 0, "mounted": False, "destroyed": True})
+            ctx.store.upsert_entity(instance["id"], "vehicle", instance["def_id"],
+                                    vstate, instance["location_id"], 0)
+            result.events.append(f"The {vehicle_def.name} crumples from the impact "
+                                 f"— you are thrown clear!")
+            return
+        vstate["hp"] = vehicle_hp
+        ctx.store.upsert_entity(instance["id"], "vehicle", instance["def_id"],
+                                vstate, instance["location_id"], 0)
+        result.events.append(f"The {vehicle_def.name} groans from the impact "
+                             f"({self_damage} damage).")
         technique = {"name": "ram", "delivery": "melee", "hits": 1,
-                     "damage_multiplier": 1.0, "base_damage": round(top_speed * 0.8),
+                     "damage_multiplier": 1.0, "base_damage": ram_damage,
                      "activation_ms": 400, "execution_ms": 300, "post_delay_ms": 500,
                      "range_m": 2.5, "cooldown_s": 2, "ammo_per_use": 0}
         argument = None  # resolved; skip technique lookup

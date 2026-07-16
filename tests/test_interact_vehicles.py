@@ -206,6 +206,42 @@ def test_ram_needs_a_ride(tmp_path, testworld_path):
     save.store.close()
 
 
+def test_ram_is_capped_and_costs_the_vehicle(tmp_path, testworld_path):
+    """Regression test for the Test 4 secondary (latent) finding: ram
+    damage used to be a raw `top_speed × 0.8` with no cap and no cost —
+    dormant only because this world's fastest vehicle is slow. Any world
+    shipping a fast vehicle would inherit a free, ammo-less,
+    durability-free attack scaling linearly with speed. Ram damage is
+    now capped (combat.ram_damage_cap) and each ram costs the vehicle a
+    fraction of the damage dealt (combat.ram_self_damage_ratio).
+    """
+    from engine.systems import combat
+
+    save = create_save(tmp_path / "s1", testworld_path, seed=17)
+    loop = _loop(save)
+    loop.submit("mount autocart")
+
+    # simulate a fast vehicle: crank the definition's top speed sky-high
+    cart_def = save.registry.find("vehicle.tw_autocart")
+    original = dict(cart_def.speed_kmh)
+    cart_def.speed_kmh["road"] = 500.0                  # a starship on wheels
+    try:
+        hp_before = save.store.get_entity("vehicleinst.start_0")["state"].get("hp", 200)
+        loop.submit("hunt slime")
+        result = loop.submit("attack ram")
+        cap = save.registry.rule("combat.ram_damage_cap", 40)
+        # no landed hit may exceed the cap: 500 km/h × 0.8 = 400 uncapped
+        import re
+        for hit in re.findall(r"hits .* for (\d+)", result.text):
+            assert int(hit) <= cap
+        hp_after = save.store.get_entity("vehicleinst.start_0")["state"]["hp"]
+        assert hp_after < hp_before                     # the ram cost the ride
+    finally:
+        cart_def.speed_kmh.clear()
+        cart_def.speed_kmh.update(original)
+    save.store.close()
+
+
 def test_mount_requires_skill(tmp_path, testworld_path):
     save = create_save(tmp_path / "s1", testworld_path, seed=6)
     loop = _loop(save)
