@@ -93,6 +93,70 @@ def test_unknown_device(tmp_path):
     save.store.close()
 
 
+def test_failed_hacks_trip_a_lockout(tmp_path):
+    """Regression test for the Test 5 playtest finding: failure on a
+    skill-checked device used to cost nothing but in-game time, so any
+    lock in any world was brute-forceable by pure retry-spam (the 5%
+    success-chance floor guarantees eventual success). The engine now
+    locks a device down after `interact.lockout_after_fails` consecutive
+    failures (default 3) for `interact.lockout_minutes` (default 60),
+    without every world author having to hand-write failure consequences
+    on every device.
+    """
+    save = create_save(tmp_path / "s1", CYBERPUNK, seed=2)
+    loop = _loop(save)
+
+    # get to the vault: jack into the subnet first
+    for _ in range(15):
+        loop.submit("hack terminal")
+        if save.store.get_player()["location_id"] == "loc.cp_subnet_shallows":
+            break
+    assert save.store.get_player()["location_id"] == "loc.cp_subnet_shallows"
+
+    # Force guaranteed failure so the streak is deterministic.
+    device = save.registry.find("device.cp_datavault")
+    hack = next(i for i in device.interactions if i.verb == "hack")
+    hack.difficulty = 100000  # clamps success chance to the 5% floor... 
+
+    locked = False
+    failures = 0
+    for _ in range(30):
+        result = loop.submit("hack vault")
+        if "locks down" in result.text:
+            locked = True
+            break
+        failures += 1
+    assert locked, "30 straight failures never tripped a lockout"
+    assert failures <= 10                      # tripped promptly, not eventually
+
+    # while locked, attempts are refused outright — no roll, no crack
+    result = loop.submit("hack vault")
+    assert "are still up" in result.text
+    runtime = save.store.get_entity("device.cp_datavault")
+    assert runtime["state"].get("state", "locked") != "emptied"
+    save.store.close()
+
+
+def test_lockout_expires_with_time(tmp_path):
+    save = create_save(tmp_path / "s1", CYBERPUNK, seed=2)
+    loop = _loop(save)
+    for _ in range(15):
+        loop.submit("hack terminal")
+        if save.store.get_player()["location_id"] == "loc.cp_subnet_shallows":
+            break
+    device = save.registry.find("device.cp_datavault")
+    hack = next(i for i in device.interactions if i.verb == "hack")
+    hack.difficulty = 100000
+
+    for _ in range(30):
+        if "locks down" in loop.submit("hack vault").text:
+            break
+    loop.submit("wait 120")                    # sleep off the default 60-min lockout
+    result = loop.submit("hack vault")
+    assert "are still up" not in result.text  # a real attempt happened again
+    save.store.close()
+
+
 # ------------------------------------------------------------- vehicles
 
 
@@ -139,6 +203,42 @@ def test_ram_needs_a_ride(tmp_path, testworld_path):
     loop.submit("hunt slime")
     result = loop.submit("attack ram")
     assert "riding something" in result.text
+    save.store.close()
+
+
+def test_ram_is_capped_and_costs_the_vehicle(tmp_path, testworld_path):
+    """Regression test for the Test 4 secondary (latent) finding: ram
+    damage used to be a raw `top_speed × 0.8` with no cap and no cost —
+    dormant only because this world's fastest vehicle is slow. Any world
+    shipping a fast vehicle would inherit a free, ammo-less,
+    durability-free attack scaling linearly with speed. Ram damage is
+    now capped (combat.ram_damage_cap) and each ram costs the vehicle a
+    fraction of the damage dealt (combat.ram_self_damage_ratio).
+    """
+    from engine.systems import combat
+
+    save = create_save(tmp_path / "s1", testworld_path, seed=17)
+    loop = _loop(save)
+    loop.submit("mount autocart")
+
+    # simulate a fast vehicle: crank the definition's top speed sky-high
+    cart_def = save.registry.find("vehicle.tw_autocart")
+    original = dict(cart_def.speed_kmh)
+    cart_def.speed_kmh["road"] = 500.0                  # a starship on wheels
+    try:
+        hp_before = save.store.get_entity("vehicleinst.start_0")["state"].get("hp", 200)
+        loop.submit("hunt slime")
+        result = loop.submit("attack ram")
+        cap = save.registry.rule("combat.ram_damage_cap", 40)
+        # no landed hit may exceed the cap: 500 km/h × 0.8 = 400 uncapped
+        import re
+        for hit in re.findall(r"hits .* for (\d+)", result.text):
+            assert int(hit) <= cap
+        hp_after = save.store.get_entity("vehicleinst.start_0")["state"]["hp"]
+        assert hp_after < hp_before                     # the ram cost the ride
+    finally:
+        cart_def.speed_kmh.clear()
+        cart_def.speed_kmh.update(original)
     save.store.close()
 
 

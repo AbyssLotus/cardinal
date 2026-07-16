@@ -15,7 +15,10 @@ time_costs:                       # minutes, used by the COST step
   meal: 30
   smithing_base: 90
 combat:
-  base_reaction_ms: 800
+  base_reaction_ms: 800            # fresh level-1, zero-acrobatics player reaction time
+  acrobatics_reaction_ms_per_proficiency: 0.3  # ms shaved off per acrobatics proficiency point
+  reaction_ms_per_level: 2         # ms shaved off per level above 1
+  min_reaction_ms: 250             # floor — reaction can never reach 0
   post_skill_delay_multiplier: 1.0  # sword-skill freeze duration scaling
   ranged:
     thrown_recovery_chance: 0.85    # find your pick again after the fight

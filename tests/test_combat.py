@@ -1,8 +1,10 @@
 """M3: combat, skills, loot, ammo, permadeath — headless and deterministic."""
 
 from engine.core.loop import SimulationLoop
+from engine.core.registry import load_world
 from engine.narrator.plain_narrator import PlainNarrator
 from engine.persistence.saves import create_save
+from engine.systems import combat
 
 
 def _loop(save):
@@ -137,4 +139,68 @@ def test_xp_levels_up_eventually(tmp_path, testworld_path):
     milestones = save.store.conn.execute(
         "SELECT * FROM player_history WHERE kind='milestone'").fetchall()
     assert any("level 2" in r["summary"] for r in milestones)
+    save.store.close()
+
+
+def test_defend_gate_varies_with_player_build(tmp_path, aincrad_path):
+    """Regression test for the Test 4 playtest finding: the guard-stance
+    defend gate used to be `combat.base_reaction_ms` (a flat constant, never
+    modified by anything) compared against a value derived from the
+    *monster's* reaction_ms — meaning some monsters (dire_wolf, and the
+    Floor 1 boss illfang) were mathematically undefendable by ANY player,
+    at ANY level, with ANY gear, forever. Nothing about the player's build
+    could ever change the outcome.
+
+    This asserts the fix directly: a higher-level, acrobatics-trained
+    player has a strictly better (lower) reaction time than a fresh
+    level-1 character with no acrobatics, so the gate is no longer static.
+    """
+    save = create_save(tmp_path / "s1", aincrad_path, seed=1)
+    ctx = _loop(save).ctx
+
+    fresh_reaction = combat._player_reaction_ms(ctx)
+
+    save.store.update_player(level=50)
+    save.store.upsert_player_skill("skill.acrobatics", 1000.0)
+    trained_reaction = combat._player_reaction_ms(ctx)
+
+    assert trained_reaction < fresh_reaction              # build now matters
+    assert trained_reaction >= ctx.registry.rule("combat.min_reaction_ms", 250)
+    save.store.close()
+
+
+def test_no_monster_is_unconditionally_undefendable(tmp_path, aincrad_path):
+    """Every Aincrad monster must be defendable by a sufficiently trained
+    player. Before the fix, dire_wolf and illfang's attack windup was
+    derived from their own reaction_ms in a way that made
+    `base_reaction_ms < total_ms` false for every possible player value —
+    a mechanical impossibility, not just a hard fight. A veteran build
+    (high level + max acrobatics) must now be able to beat that gate for
+    every monster in the bestiary, including the floor boss.
+    """
+    save = create_save(tmp_path / "s1", aincrad_path, seed=1)
+    ctx = _loop(save).ctx
+    save.store.update_player(level=90)
+    save.store.upsert_player_skill("skill.acrobatics", 1000.0)
+    veteran_reaction = combat._player_reaction_ms(ctx)
+
+    registry = load_world(aincrad_path)
+    undefendable = []
+    for monster_def in registry.by_kind("mon"):
+        windup = combat._monster_attack_windup_ms(monster_def)
+        if not (veteran_reaction < windup):
+            undefendable.append(monster_def.id)
+    assert not undefendable, f"still mechanically undefendable: {undefendable}"
+    save.store.close()
+
+
+def test_fresh_player_reaction_matches_prior_default(tmp_path, aincrad_path):
+    """A brand-new level-1, no-acrobatics character should reaction-check
+    at exactly the old flat constant (800ms in Aincrad) — the fix changes
+    what improves the number, not the unbuilt baseline, so starting
+    difficulty is unchanged for a fresh save.
+    """
+    save = create_save(tmp_path / "s1", aincrad_path, seed=1)
+    ctx = _loop(save).ctx
+    assert combat._player_reaction_ms(ctx) == 800
     save.store.close()

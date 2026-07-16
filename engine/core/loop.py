@@ -372,7 +372,9 @@ class SimulationLoop:
             self._notes.append(f"The {device.name} doesn't answer to "
                                f"{action.parameters['verb']!r}.")
             return []
-        deltas, messages = interact.resolve(self.ctx, device, interaction)
+        now_minutes = self.clock.day * self.clock.minutes_per_day + self.clock.minute
+        deltas, messages = interact.resolve(self.ctx, device, interaction,
+                                            now_minutes=now_minutes)
         self._notes += messages
         return deltas
 
@@ -414,16 +416,18 @@ class SimulationLoop:
             return
         qty = action.parameters["qty"]
         currency = self.registry.manifest.currency.name
-        price = economy_system.current_price(self.ctx, market.id, good)
         is_vehicle = good.id.startswith("vehicle.")
 
         if action.intent == "buy":
-            total = int(price * qty)
+            _, total = economy_system.trade_cost(self.ctx, market.id, good, qty,
+                                                 player_buys=True)
             if player["col"] < total:
                 self._notes.append(f"That's {total} {currency}; you carry {player['col']}.")
                 return
             if is_vehicle:
-                qty, total = 1, int(price)
+                qty = 1
+                _, total = economy_system.trade_cost(self.ctx, market.id, good, 1,
+                                                     player_buys=True)
                 state = {"owner": "player", "mounted": False,
                          "hp": (good.stats or {}).get("hp", 100)}
                 if good.fuel is not None:
@@ -443,8 +447,7 @@ class SimulationLoop:
             self._notes.append(f"Bought {qty}x {good.name} for {total} {currency}.")
             return
 
-        # sell — merchants pay a margin under market price
-        ratio = self.registry.rule("economy.merchant_buy_ratio", 0.6)
+        # sell — merchants pay a margin under market price (trade_cost applies it)
         owned = sum(i["qty"] for i in self.store.get_inventory("player")
                     if i["def_id"] == good.id)
         if owned < qty:
@@ -459,11 +462,13 @@ class SimulationLoop:
                     break
                 batch = 1
             remaining -= batch
-        earned = int(price * ratio * (qty - remaining))
+        filled = qty - remaining
+        _, earned = economy_system.trade_cost(self.ctx, market.id, good, filled,
+                                              player_buys=False)
         self.store.update_player(col=player["col"] + earned)
-        economy_system.record_trade(self.ctx, market.id, good, qty - remaining,
+        economy_system.record_trade(self.ctx, market.id, good, filled,
                                     player_buys=False)
-        self._notes.append(f"Sold {qty - remaining}x {good.name} for {earned} {currency}.")
+        self._notes.append(f"Sold {filled}x {good.name} for {earned} {currency}.")
 
     # ------------------------------------------------------------ dialogue & quests
 
