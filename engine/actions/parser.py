@@ -95,6 +95,21 @@ def parse(text: str, registry: Registry) -> list[Action]:
     if verb in ("shop", "browse", "market"):
         return [Action("shop", raw_input=text)]
 
+    if verb in ("buy", "sell") and (" from " in " ".join(args) or " to " in " ".join(args)):
+        joined = " ".join(args)
+        sep = " from " if verb == "buy" else " to "
+        if sep not in joined:
+            raise ParseError(f"{verb.title()} what {sep.strip()} whom?")
+        item_part, _, agent_part = joined.partition(sep)
+        qty = 1
+        pieces = item_part.split()
+        if pieces and pieces[-1].isdigit():
+            qty = int(pieces.pop())
+            item_part = " ".join(pieces)
+        return [Action("agent_trade", parameters={
+            "mode": verb, "item": item_part.strip(), "agent": agent_part.strip(),
+            "qty": qty}, raw_input=text)]
+
     if verb in ("buy", "sell"):
         if not args:
             raise ParseError(f"{verb.capitalize()} what?")
@@ -136,11 +151,25 @@ def parse(text: str, registry: Registry) -> list[Action]:
     if verb in ("faction", "factions"):
         return [Action("faction_status", raw_input=text)]
 
+    if verb == "barter":
+        if not args:
+            raise ParseError("Barter with whom?")
+        return [Action("agent_barter", parameters={"agent": " ".join(args)},
+                       raw_input=text)]
+
+    if verb == "steal":
+        if not args:
+            raise ParseError("Steal from whom?")
+        return [Action("agent_steal", parameters={"agent": " ".join(args)},
+                       raw_input=text)]
+
     raise ParseError(
         f"You don't know how to {verb!r}. Try: look, status, skills, wait <min>, "
         "go <place>, hunt <creature>, attack [technique], guard <stance>, flee, "
         "equip <item>, use/hack/open <device>, mount <vehicle>, dismount, "
-        "shop, buy/sell <item> [qty], talk <npc>, give <item>, "
+        "shop, buy/sell <item> [qty], buy <item> from <agent>, "
+        "sell <item> to <agent>, barter <agent>, steal <agent>, "
+        "talk <npc>, give <item>, "
         "join <faction>, leave, donate <amount>, faction.")
 
 

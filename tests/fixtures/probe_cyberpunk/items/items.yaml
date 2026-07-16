@@ -34,3 +34,7 @@
   stats: { defense: 7, durability_max: 400 }
   weight: 3.0
   market: { base_value_col: 900 }
+- id: item.cp_shard
+  name: "Data Shard"
+  category: gear.shard
+  market: { base_value_col: 40, volatility: 0.2, restock_days: 5 }

@@ -211,6 +211,21 @@ class Npc(Entity):
     name: str
     archetype: Optional[str] = None
     location: str
+    # actor taxonomy (spec §21): ambient = today's scheduled NPCs;
+    # agent = player-type actors run by engine/systems/agents.py;
+    # setpiece = boss-script owned. Promotion is one-way (ambient->agent).
+    actor_class: Literal["ambient", "agent", "setpiece"] = "ambient"
+    policy: Optional[str] = None          # agents: engine policy archetype
+    capabilities: list[str] = Field(default_factory=list)
+    faction: Optional[str] = None         # membership; feeds dues + standing
+    # Named characters with lore weight (a Rita Wheeler, a Rogue) don't die
+    # in background EV resolution — they escape at 1 hp, robbed and wounded,
+    # and sit out recovering. Only full-fidelity (foreground) combat can
+    # kill a survivor. Deaths of the named happen on-screen or not at all.
+    survivor: bool = False
+    col: int = 0                          # agents: real starting balance
+    loadout: list[str] = Field(default_factory=list)
+    policy_params: dict[str, Any] = Field(default_factory=dict)
     identity: dict[str, Any] = Field(default_factory=dict)
     personality: dict[str, Any] = Field(default_factory=dict)
     goals: list[Goal] = Field(default_factory=list)
@@ -406,6 +421,9 @@ class Quest(Entity):
     success: QuestOutcome = Field(default_factory=QuestOutcome)
     failure: QuestOutcome = Field(default_factory=QuestOutcome)
     npc_fallback: dict[str, Any] = Field(default_factory=dict)
+    # §23: what happens when a claiming agent dies mid-quest.
+    # 'reopen' returns the contract to the open pool; 'fail' terminates it.
+    on_assignee_death: str = "reopen"
     repeatable: bool = False
     world_impact: str = "minor"
 

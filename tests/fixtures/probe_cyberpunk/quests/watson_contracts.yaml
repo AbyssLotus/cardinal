@@ -1,0 +1,29 @@
+- id: quest.cp_ammo_run
+  name: "Ammo Run"
+  source: npc.cp_rogue
+  purpose: "A client needs a crate of bullets moved, no questions."
+  requirements:
+    - deliver: { item: item.cp_bullets, qty: 10 }
+  rewards:
+    - { col: 400 }
+  duration_days: 30
+  on_assignee_death: reopen
+  success: { outcome: "The crate changed hands at the Afterlife." }
+  failure: { outcome: "The client stopped waiting. Rogue remembers." }
+  npc_fallback: { chance_npc_resolves_per_day: 1.0 }   # deprecated: must never fire while takers exist
+  repeatable: false
+  world_impact: minor
+- id: quest.cp_last_words
+  name: "Last Words"
+  source: npc.cp_susie
+  purpose: "Susie wants a data shard delivered before it goes stale."
+  requirements:
+    - deliver: { item: item.cp_shard, qty: 1 }
+  rewards:
+    - { col: 150 }
+  duration_days: 20
+  on_assignee_death: fail
+  success: { outcome: "The shard reached its reader in time." }
+  failure: { outcome: "The shard went stale; the words are lost." }
+  repeatable: false
+  world_impact: minor

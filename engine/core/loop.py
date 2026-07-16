@@ -24,13 +24,14 @@ from engine.systems import TICK_ORDER, SystemContext
 from engine.systems import combat, economy as economy_system, factions as factions_system, interact
 from engine.systems import skills as skills_system
 from engine.systems import (  # noqa: F401  (imported for the tick table)
-    economy, ecology, factions, npc, quests, weather, worldevents,
+    agents, economy, ecology, factions, npc, quests, weather, worldevents,
 )
 
 _SYSTEM_MODULES = {
     "weather": weather,
     "ecology": ecology,
     "npc": npc,
+    "agents": agents,
     "economy": economy,
     "quests": quests,
     "factions": factions,
@@ -107,11 +108,19 @@ class SimulationLoop:
             if not argument:
                 return TurnResult("Attack what? (hunt <creature> to seek one out)",
                                   [], 0, ok=False)
-            species = parser._resolve_monster(argument, self.registry)
-            if species is None:
-                return TurnResult(f"You know of no creature called {argument!r}.",
-                                  [], 0, ok=False)
-            actions = [Action("hunt", target=species, raw_input=text)]
+            # §22.4: a co-located agent is a legal target — duel them with
+            # the full combat state machine. Otherwise fall through to hunt.
+            duelist = self._agent_here(argument, self.store.get_player())
+            if duelist is not None:
+                actions = [Action("duel", parameters={"npc_id": duelist.id},
+                                  raw_input=text)]
+            else:
+                species = parser._resolve_monster(argument, self.registry)
+                if species is None:
+                    return TurnResult(
+                        f"You know of no creature or opponent called "
+                        f"{argument!r} here.", [], 0, ok=False)
+                actions = [Action("hunt", target=species, raw_input=text)]
         elif action.intent in ("guard", "flee"):
             return TurnResult("Nothing here is attacking you.", [], 0, ok=False)
 
@@ -303,6 +312,19 @@ class SimulationLoop:
             return []
         if action.intent == "hunt":
             return self._resolve_hunt(action, player)
+        if action.intent == "duel":
+            _, events = combat.start_duel(self.ctx, action.parameters["npc_id"],
+                                          player["location_id"])
+            self._notes += events
+            return []
+        if action.intent == "agent_trade":
+            self._resolve_agent_trade(action, player)
+            return []
+        if action.intent == "agent_barter":
+            self._resolve_agent_barter(action.parameters["agent"], player)
+            return []
+        if action.intent == "agent_steal":
+            return self._resolve_agent_steal(action.parameters["agent"], player)
         if action.intent == "equip":
             self._resolve_equip(action.parameters["name"])
             return []
@@ -502,6 +524,146 @@ class SimulationLoop:
 
     # ------------------------------------------------------------ dialogue & quests
 
+    def _agent_here(self, name: str | None, player: dict):
+        """A living, co-located agent matching the name, else None."""
+        if not name:
+            return None
+        needle = name.lower()
+        for npc in self._npcs_here(player):
+            if getattr(npc, "actor_class", "ambient") != "agent":
+                continue
+            if needle not in npc.name.lower() and needle not in npc.id:
+                continue
+            runtime = self.store.get_entity(npc.id)
+            if runtime is not None and not runtime["state"].get("alive", True):
+                continue
+            return npc
+        return None
+
+    def _resolve_agent_trade(self, action: Action, player: dict) -> None:
+        """Direct trade against the agent's ACTUAL inventory and col
+        (spec §22.4) — not a market facade. Flat base-value pricing."""
+        from engine.systems import agents as agents_system
+        params = action.parameters
+        agent = self._agent_here(params["agent"], player)
+        if agent is None:
+            self._notes.append(f"No one called {params['agent']!r} is here to trade.")
+            return
+        state = agents_system.agent_state(self.ctx, agent)
+        currency = self.registry.manifest.currency.name
+        needle = params["item"].lower()
+        qty = max(1, params["qty"])
+
+        if params["mode"] == "buy":
+            held = None
+            for item in self.store.get_inventory(agent.id):
+                definition = self.registry.find(item["def_id"])
+                if definition is not None and (needle in definition.name.lower()
+                                               or needle in item["def_id"]):
+                    held = (item, definition)
+                    break
+            if held is None:
+                self._notes.append(f"{agent.name} isn't carrying any {params['item']!r}.")
+                return
+            item, definition = held
+            qty = min(qty, item["qty"])
+            price = definition.market.base_value_col * qty
+            if player["col"] < price:
+                self._notes.append(f"{agent.name} wants {price} {currency}; "
+                                   f"you carry {player['col']}.")
+                return
+            self.store.consume_item(agent.id, item["def_id"], qty)
+            durability = (getattr(definition, "stats", {}) or {}).get("durability_max")
+            self.store.add_item_instance(
+                f"iteminst.barter_{self.rng.stream('trade').randrange(1 << 30):08x}",
+                item["def_id"], "player", durability=durability, qty=qty)
+            self.store.update_player(col=player["col"] - price)
+            state["col"] = state.get("col", 0) + price
+            agents_system._save(self.ctx, agent, state, player["location_id"],
+                                self.clock.day)
+            self._notes.append(f"{agent.name} sells you {qty}x {definition.name} "
+                               f"for {price} {currency}.")
+            return
+
+        held = None
+        for item in self.store.get_inventory("player"):
+            definition = self.registry.find(item["def_id"])
+            if definition is not None and (needle in definition.name.lower()
+                                           or needle in item["def_id"]):
+                held = (item, definition)
+                break
+        if held is None:
+            self._notes.append(f"You carry nothing called {params['item']!r}.")
+            return
+        item, definition = held
+        qty = min(qty, item["qty"])
+        price = definition.market.base_value_col * qty
+        if state.get("col", 0) < price:
+            self._notes.append(f"{agent.name} can't cover {price} {currency}.")
+            return
+        self.store.consume_item("player", item["def_id"], qty)
+        durability = (getattr(definition, "stats", {}) or {}).get("durability_max")
+        self.store.add_item_instance(
+            f"iteminst.barter_{self.rng.stream('trade').randrange(1 << 30):08x}",
+            item["def_id"], agent.id, durability=durability, qty=qty)
+        state["col"] = state.get("col", 0) - price
+        self.store.update_player(col=player["col"] + price)
+        agents_system._save(self.ctx, agent, state, player["location_id"],
+                            self.clock.day)
+        self._notes.append(f"{agent.name} buys {qty}x {definition.name} "
+                           f"for {price} {currency}.")
+
+    def _resolve_agent_barter(self, name: str, player: dict) -> None:
+        from engine.systems import agents as agents_system
+        agent = self._agent_here(name, player)
+        if agent is None:
+            self._notes.append(f"No one called {name!r} is here to trade.")
+            return
+        state = agents_system.agent_state(self.ctx, agent)
+        currency = self.registry.manifest.currency.name
+        inventory = self.store.get_inventory(agent.id)
+        self._notes.append(f"{agent.name} shows you their goods "
+                           f"(carrying ~{state.get('col', 0)} {currency}):")
+        if not inventory:
+            self._notes.append("  Nothing but lint.")
+        for item in inventory:
+            definition = self.registry.find(item["def_id"])
+            if definition is None:
+                continue
+            self._notes.append(f"  {item['qty']}x {definition.name} "
+                               f"({definition.market.base_value_col} {currency} each)")
+
+    def _resolve_agent_steal(self, name: str, player: dict) -> list[Delta]:
+        """Opposed steal check (spec §22.4). Success skims their col
+        unseen; failure is a reputation hit AND a fight — they caught
+        your hand in their pocket."""
+        from engine.systems import agents as agents_system
+        agent = self._agent_here(name, player)
+        if agent is None:
+            self._notes.append(f"No one called {name!r} is here to rob.")
+            return []
+        state = agents_system.agent_state(self.ctx, agent)
+        rng = self.rng.stream("trade")
+        level_edge = (player["level"] - state.get("level", 1)) * 0.05
+        chance = max(0.05, min(0.9, 0.45 + level_edge))
+        if rng.random() < chance:
+            take = int(state.get("col", 0) * 0.4)
+            state["col"] = state.get("col", 0) - take
+            agents_system._save(self.ctx, agent, state, player["location_id"],
+                                self.clock.day)
+            self.store.update_player(col=player["col"] + take)
+            currency = self.registry.manifest.currency.name
+            self._notes.append(
+                f"Your fingers find {agent.name}'s purse: {take} {currency}."
+                if take else f"{agent.name}'s pockets are empty. At least "
+                             f"nobody saw.")
+            return []
+        self._notes.append(f"{agent.name} catches your hand in their pocket!")
+        _, events = combat.start_duel(self.ctx, agent.id, player["location_id"])
+        self._notes += events
+        return [Delta(kind="reputation", payload={"scope_id": agent.id,
+                                                  "delta": -0.5})]
+
     def _npcs_here(self, player: dict) -> list:
         found = []
         for npc in sorted(self.registry.by_kind("npc"), key=lambda n: n.id):
@@ -528,7 +690,12 @@ class SimulationLoop:
                     continue
                 instance = instances.get(quest.id)
                 if instance is not None and instance["state"] == "available":
-                    self._notes.append(f'  "{quest.purpose}"')
+                    claim = ""
+                    holder = instance.get("assignee")
+                    if holder and holder != "player":
+                        rival = self.registry.find(holder)
+                        claim = f" [claimed by {getattr(rival, 'name', holder)}]"
+                    self._notes.append(f'  "{quest.purpose}"{claim}')
                     for requirement in quest.requirements:
                         spec = requirement.get("obtain") or requirement.get("deliver")
                         if spec:
@@ -578,10 +745,20 @@ class SimulationLoop:
         return []
 
     def _complete_quest(self, quest, instance, npc, player: dict) -> list[Delta]:
+        # §23 competition: first completed turn-in wins; if an agent had
+        # claimed this contract, the player just beat them to it.
+        prior = instance.get("assignee")
         deltas: list[Delta] = [Delta(kind="quest_state", payload={
             "instance_id": instance["instance_id"], "def_id": quest.id,
             "state": "completed", "available_day": instance["available_day"],
-            "expires_day": instance["expires_day"]})]
+            "expires_day": instance["expires_day"], "assignee": "player"})]
+        if prior and prior != "player":
+            rival = self.registry.find(prior)
+            deltas.append(Delta(kind="chronicle", payload={
+                "category": "discovery", "visibility": "public",
+                "headline": f"The contract {getattr(rival, 'name', prior)} was "
+                            f"working got finished under their nose: {quest.name}.",
+                "detail": "outraced", "actors": [prior]}))
         for reward in quest.rewards:
             if "col" in reward:
                 amount = reward["col"]

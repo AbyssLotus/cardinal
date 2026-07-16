@@ -104,17 +104,24 @@ def controlling_faction(ctx: SystemContext, settlement_id: str):
     return sorted(candidates, key=lambda f: (-f.membership_count, f.id))[0]
 
 
-def market_tax(ctx: SystemContext, market) -> tuple[Any, float]:
+def market_tax(ctx: SystemContext, market,
+               trader_faction: str | None = "__player__") -> tuple[Any, float]:
     """(controlling faction, tax rate) for a market — (None, 0.0) if untaxed.
-    Members of the controlling faction are exempt (the perk of dues)."""
+    Members of the controlling faction are exempt (the perk of dues).
+
+    trader_faction identifies who is trading: the default sentinel means
+    "the player" (membership looked up from the save); agents pass their
+    own faction id (or None for independents)."""
     faction = controlling_faction(ctx, market.settlement)
     if faction is None:
         return None, 0.0
     rate = float((faction.policies or {}).get("tax_rate", 0.0))
     if rate <= 0:
         return None, 0.0
-    member = membership(ctx)
-    if member is not None and member[0] == faction.id:
+    if trader_faction == "__player__":
+        member = membership(ctx)
+        trader_faction = member[0] if member is not None else None
+    if trader_faction == faction.id:
         return faction, 0.0
     return faction, rate
 

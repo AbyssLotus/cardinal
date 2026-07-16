@@ -12,3 +12,4 @@ behavior:
 drops:
   - { item: item.cp_bullets, chance: 0.7, qty: [4, 9] }
 xp: 45
+ecology: { reproduction_days: 25 }   # new crews drift in from other districts

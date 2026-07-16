@@ -1,0 +1,94 @@
+# Watson's agents (spec §22): player-type actors. Hunters deplete the
+# same scav populations the player would; merchants arbitrage the same
+# markets; aggressors patrol turf and kill each other for real —
+# permadeath, robbery, chronicle entries, faction standing hits.
+- id: npc.cp_scorpion
+  name: "Scorpion"
+  location: loc.cp_totentanz
+  actor_class: agent
+  policy: hunter_gatherer
+  capabilities: [hunt, trade, combat]
+  faction: fac.cp_maelstrom
+  col: 120
+  combat: { level: 6, skills: [] }
+  policy_params:
+    species: mon.cp_scav
+    zone: zone.cp_northside_ruins
+    home: loc.cp_totentanz
+    sell_at: loc.cp_afterlife
+- id: npc.cp_dum_dum
+  name: "Dum Dum"
+  location: loc.cp_totentanz
+  actor_class: agent
+  policy: aggressor
+  capabilities: [combat]
+  faction: fac.cp_maelstrom
+  col: 150
+  combat: { level: 7, skills: [] }
+  policy_params:
+    turf: [loc.cp_totentanz, loc.cp_afterlife, loc.cp_kabuki_market]
+- id: npc.cp_ryo
+  name: "Ryo"
+  location: loc.cp_kabuki_market
+  actor_class: agent
+  policy: aggressor
+  capabilities: [combat]
+  faction: fac.cp_tyger_claws
+  col: 200
+  combat: { level: 6, skills: [] }
+  policy_params:
+    turf: [loc.cp_kabuki_market, loc.cp_afterlife]
+- id: npc.cp_rita
+  name: "Rita Wheeler"
+  location: loc.cp_lizzies_bar
+  actor_class: agent
+  policy: aggressor
+  capabilities: [combat]
+  faction: fac.cp_mox
+  survivor: true       # Lizzie's longest-standing muscle doesn't die off-screen
+  col: 100
+  combat: { level: 8, skills: [] }
+  policy_params:
+    turf: [loc.cp_lizzies_bar, loc.cp_kabuki_market]
+- id: npc.cp_wei
+  name: "Caravan Wei"
+  location: loc.cp_afterlife
+  actor_class: agent
+  policy: merchant
+  capabilities: [trade]
+  col: 3000
+  combat: { level: 4, skills: [] }
+  policy_params:
+    good: item.cp_bullets
+    route: [loc.cp_afterlife, loc.cp_kabuki_market]
+- id: npc.cp_ito
+  name: "Ito"
+  location: loc.cp_arasaka_waterfront
+  actor_class: agent
+  policy: merchant
+  capabilities: [trade]
+  faction: fac.cp_arasaka
+  col: 8000
+  combat: { level: 5, skills: [] }
+  policy_params:
+    good: item.cp_bullets
+    route: [loc.cp_kabuki_market, loc.cp_arasaka_waterfront]
+- id: npc.cp_runner
+  name: "Nix"
+  location: loc.cp_afterlife
+  actor_class: agent
+  policy: quest_taker
+  capabilities: [trade, quests]
+  col: 500
+  combat: { level: 5, skills: [] }
+  policy_params: {}
+- id: npc.cp_blister
+  name: "Blister"
+  location: loc.cp_afterlife
+  actor_class: agent
+  policy: bandit
+  capabilities: [combat]
+  col: 60
+  combat: { level: 6, skills: [] }
+  policy_params:
+    turf: [loc.cp_afterlife, loc.cp_kabuki_market, loc.cp_arasaka_waterfront]

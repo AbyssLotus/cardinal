@@ -32,6 +32,7 @@ TICK_ORDER = [
     "weather",
     "ecology",
     "npc",
+    "agents",
     "economy",
     "quests",
     "factions",

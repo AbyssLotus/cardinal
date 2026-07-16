@@ -16,7 +16,7 @@ from typing import Callable
 
 from engine.persistence.store import Store
 
-CURRENT_SAVE_FORMAT = 1
+CURRENT_SAVE_FORMAT = 2
 
 
 def _migrate_0_to_1(store: Store) -> None:
@@ -43,8 +43,17 @@ def _migrate_0_to_1(store: Store) -> None:
         "CREATE INDEX IF NOT EXISTS idx_modifiers_owner ON modifiers(owner_id)")
 
 
+def _migrate_1_to_2(store: Store) -> None:
+    """Quest assignment & competition (§23): quests gain an assignee."""
+    columns = {row["name"] for row in
+               store.conn.execute("PRAGMA table_info(quests)")}
+    if "assignee" not in columns:
+        store.conn.execute("ALTER TABLE quests ADD COLUMN assignee TEXT")
+
+
 MIGRATIONS: dict[int, Callable[[Store], None]] = {
     0: _migrate_0_to_1,
+    1: _migrate_1_to_2,
 }
 
 

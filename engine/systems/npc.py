@@ -38,6 +38,8 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
 
     deltas: list[Delta] = []
     for npc in sorted(ctx.registry.by_kind("npc"), key=lambda n: n.id):
+        if getattr(npc, "actor_class", "ambient") != "ambient":
+            continue  # agents run their own loop (agents.py); setpieces are scripted
         runtime = ctx.store.get_entity(npc.id)
         if runtime is None or not runtime["state"].get("alive", True):
             continue
@@ -126,6 +128,8 @@ def _daily_memory_pass(ctx: SystemContext, day: int) -> list[Delta]:
     deltas: list[Delta] = []
     by_location: dict[str, list[str]] = {}
     for npc in sorted(ctx.registry.by_kind("npc"), key=lambda n: n.id):
+        if getattr(npc, "actor_class", "ambient") != "ambient":
+            continue  # agents run their own loop (agents.py); setpieces are scripted
         runtime = ctx.store.get_entity(npc.id)
         if runtime is not None and runtime["location_id"]:
             by_location.setdefault(runtime["location_id"], []).append(npc.id)
@@ -184,6 +188,8 @@ def seed_runtime_state(ctx: SystemContext, day: int) -> list[Delta]:
     """Called once at save creation: materialize every named NPC as a runtime entity."""
     deltas = []
     for npc in sorted(ctx.registry.by_kind("npc"), key=lambda n: n.id):
+        if getattr(npc, "actor_class", "ambient") != "ambient":
+            continue  # agents run their own loop (agents.py); setpieces are scripted
         home = getattr(npc, "location", None)
         deltas.append(
             Delta(
