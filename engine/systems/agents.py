@@ -33,7 +33,7 @@ Policy archetypes (worlds assign + parameterize via `policy_params`):
 - passive — holds state; acts only when acted upon.
 
 Tunables (rules.yaml `agents:`): act_every_hours (3),
-max_actions_per_tick (8), hostility_threshold (-0.3),
+max_actions_per_tick (32), hostility_threshold (-0.3),
 engage_chance (0.35), kill_disposition_hit (0.1),
 sell_threshold (5), merchant_lot (10).
 """
@@ -98,11 +98,18 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
         return []
     rule = ctx.registry.rule
     cadence = max(1, rule("agents.act_every_hours", 3))
-    budget = rule("agents.max_actions_per_tick", 8)
+    budget = rule("agents.max_actions_per_tick", 32)
     rng = ctx.rng.stream("agents")
     deltas: list[Delta] = []
 
-    for npc in roster:
+    # Fair scheduling: rotate the roster's starting index each tick so the
+    # action budget doesn't permanently starve whoever sorts last. Without
+    # this, a 100-agent world gives the same first-N agents every action
+    # forever (measured: 88/106 agents never acted once in 90 days).
+    start = (day * 24 + hour) % len(roster)
+    rotated = roster[start:] + roster[:start]
+
+    for npc in rotated:
         if budget <= 0:
             break
         if (hour + _stable_hash(npc.id)) % cadence != 0:
