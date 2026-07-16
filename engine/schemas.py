@@ -421,6 +421,9 @@ class Quest(Entity):
     success: QuestOutcome = Field(default_factory=QuestOutcome)
     failure: QuestOutcome = Field(default_factory=QuestOutcome)
     npc_fallback: dict[str, Any] = Field(default_factory=dict)
+    # §23: what happens when a claiming agent dies mid-quest.
+    # 'reopen' returns the contract to the open pool; 'fail' terminates it.
+    on_assignee_death: str = "reopen"
     repeatable: bool = False
     world_impact: str = "minor"
 

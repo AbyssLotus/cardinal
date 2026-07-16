@@ -126,7 +126,9 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
         budget -= 1
         location = _location(ctx, npc)
         policy = npc.policy or "passive"
-        if policy == "hunter_gatherer":
+        if policy == "quest_taker":
+            deltas += _act_quest_taker(ctx, npc, state, location, day, rng)
+        elif policy == "hunter_gatherer":
             deltas += _act_hunter(ctx, npc, state, location, day, rng)
         elif policy == "merchant":
             deltas += _act_merchant(ctx, npc, state, location, day, rng)
@@ -139,6 +141,176 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
             state["hp"] = min(state["hp_max"], state["hp"] + 4)
             _save(ctx, npc, state, _location(ctx, npc), day)
     return deltas
+
+
+# ---------------------------------------------------------------- quest_taker
+
+
+def _requirement_items(quest):
+    """(item_id, qty) pairs for obtain/deliver requirements; None if the
+    quest has requirement types an agent can't execute yet."""
+    pairs = []
+    for requirement in quest.requirements:
+        spec = requirement.get("obtain") or requirement.get("deliver")
+        if not spec:
+            return None
+        pairs.append((spec["item"], spec.get("qty", 1)))
+    return pairs
+
+
+def _act_quest_taker(ctx, npc, state, location, day, rng) -> list[Delta]:
+    """Claim -> acquire -> deliver, all through the real systems: items are
+    bought from real markets (moving indices), delivery happens at the
+    source NPC's actual location, rewards pay real col. Claiming and
+    fulfilment are chronicle-visible moments (spec §23)."""
+    instances = {q["def_id"]: q for q in ctx.store.get_quests()}
+    mine = None
+    for quest in sorted(ctx.registry.by_kind("quest"), key=lambda q: q.id):
+        instance = instances.get(quest.id)
+        if instance is not None and instance["state"] == "available" \
+                and instance.get("assignee") == npc.id:
+            mine = (quest, instance)
+            break
+
+    if mine is None:
+        return _claim_best_open_quest(ctx, npc, state, instances, day)
+
+    quest, instance = mine
+    pairs = _requirement_items(quest)
+    if pairs is None:                      # shouldn't happen post-claim; release
+        return []
+
+    missing = []
+    for item_id, qty in pairs:
+        held = sum(i["qty"] for i in ctx.store.get_inventory(npc.id)
+                   if i["def_id"] == item_id)
+        if held < qty:
+            missing.append((item_id, qty - held))
+
+    if not missing:
+        # deliver at the source's real location
+        source_loc = ctx.registry.resolve_location(
+            _source_location(ctx, quest.source) or "") or \
+            _source_location(ctx, quest.source)
+        if source_loc and location != source_loc:
+            state["activity"] = f"delivering ({quest.name})"
+            _save(ctx, npc, state, source_loc, day)
+            return []
+        for item_id, qty in pairs:
+            ctx.store.consume_item(npc.id, item_id, qty)
+        reward_col = sum(r.get("col", 0) for r in quest.rewards)
+        state["col"] += reward_col
+        state["activity"] = "collecting a bounty"
+        _pay_dues(ctx, npc, state, reward_col)
+        _save(ctx, npc, state, location, day)
+        source = ctx.registry.find(quest.source)
+        return [
+            Delta(kind="quest_state", payload={
+                "instance_id": instance["instance_id"], "def_id": quest.id,
+                "state": "completed", "available_day": instance["available_day"],
+                "expires_day": instance["expires_day"], "assignee": npc.id}),
+            Delta(kind="chronicle", payload={
+                "category": "discovery", "visibility": "public",
+                "headline": f"{npc.name} fulfilled "
+                            f"{getattr(source, 'name', quest.source)}'s contract: "
+                            f"{quest.name}.",
+                "detail": f"reward {reward_col}",
+                "actors": [npc.id, quest.source]}),
+        ]
+
+    # acquire the first missing item from a real market
+    item_id, need = missing[0]
+    good = ctx.registry.find(item_id)
+    if good is None or getattr(good, "market", None) is None:
+        state["activity"] = f"hunting down {item_id} (unbuyable)"
+        _save(ctx, npc, state, location, day)
+        return []
+    market = _market_at(ctx, location)
+    if market is None:
+        target = _nearest_market_settlement(ctx)
+        if target is None:
+            return []
+        state["activity"] = "heading to market"
+        _save(ctx, npc, state, target, day)
+        return []
+    _, cost = economy_system.trade_cost(ctx, market.id, good, need,
+                                        player_buys=True, ratio=WHOLESALE_RATIO)
+    if state["col"] < cost:
+        state["activity"] = "short on funds for the contract"
+        _save(ctx, npc, state, location, day)
+        return []
+    state["col"] -= cost
+    ctx.store.add_item_instance(
+        f"iteminst.{npc.id.split('.')[1]}_{rng.randrange(1 << 30):08x}",
+        item_id, npc.id, qty=need)
+    economy_system.record_trade(ctx, market.id, good, need, player_buys=True)
+    state["activity"] = f"gathering supplies ({quest.name})"
+    _save(ctx, npc, state, location, day)
+    return []
+
+
+def _claim_best_open_quest(ctx, npc, state, instances, day) -> list[Delta]:
+    """Score open contracts by expected margin; claim the best profitable
+    one. Claiming is a chronicle-visible moment."""
+    best, best_margin = None, 0
+    for quest in sorted(ctx.registry.by_kind("quest"), key=lambda q: q.id):
+        instance = instances.get(quest.id)
+        if instance is None or instance["state"] != "available" \
+                or instance.get("assignee"):
+            continue
+        pairs = _requirement_items(quest)
+        if pairs is None:
+            continue
+        cost = 0
+        feasible = True
+        for item_id, qty in pairs:
+            good = ctx.registry.find(item_id)
+            if good is None or getattr(good, "market", None) is None:
+                feasible = False
+                break
+            cost += good.market.base_value_col * qty
+        if not feasible:
+            continue
+        reward = sum(r.get("col", 0) for r in quest.rewards)
+        margin = reward - cost * 1.2       # wholesale + travel slack
+        if margin > best_margin:
+            best, best_margin = (quest, instance), margin
+    if best is None:
+        state["activity"] = "scanning the boards"
+        _save(ctx, npc, state, ctx.store.get_entity(npc.id)["location_id"]
+              if ctx.store.get_entity(npc.id) else npc.location, day)
+        return []
+    quest, instance = best
+    state["activity"] = f"took a contract ({quest.name})"
+    _save(ctx, npc, state,
+          (ctx.store.get_entity(npc.id) or {"location_id": npc.location})["location_id"]
+          or npc.location, day)
+    source = ctx.registry.find(quest.source)
+    return [
+        Delta(kind="quest_state", payload={
+            "instance_id": instance["instance_id"], "def_id": quest.id,
+            "state": "available", "available_day": instance["available_day"],
+            "expires_day": instance["expires_day"], "assignee": npc.id}),
+        Delta(kind="chronicle", payload={
+            "category": "discovery", "visibility": "public",
+            "headline": f"{npc.name} took the contract: {quest.name}.",
+            "detail": quest.purpose, "actors": [npc.id, quest.source]}),
+    ]
+
+
+def _source_location(ctx, npc_id: str):
+    runtime = ctx.store.get_entity(npc_id)
+    if runtime is not None and runtime["location_id"]:
+        return runtime["location_id"]
+    definition = ctx.registry.find(npc_id)
+    return getattr(definition, "location", None) if definition else None
+
+
+def _nearest_market_settlement(ctx):
+    for location in sorted(ctx.registry.by_kind("loc"), key=lambda l: l.id):
+        if getattr(location, "market", None):
+            return location.id
+    return None
 
 
 # ------------------------------------------------------------- hunter_gatherer

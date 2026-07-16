@@ -529,7 +529,12 @@ class SimulationLoop:
                     continue
                 instance = instances.get(quest.id)
                 if instance is not None and instance["state"] == "available":
-                    self._notes.append(f'  "{quest.purpose}"')
+                    claim = ""
+                    holder = instance.get("assignee")
+                    if holder and holder != "player":
+                        rival = self.registry.find(holder)
+                        claim = f" [claimed by {getattr(rival, 'name', holder)}]"
+                    self._notes.append(f'  "{quest.purpose}"{claim}')
                     for requirement in quest.requirements:
                         spec = requirement.get("obtain") or requirement.get("deliver")
                         if spec:
@@ -579,10 +584,20 @@ class SimulationLoop:
         return []
 
     def _complete_quest(self, quest, instance, npc, player: dict) -> list[Delta]:
+        # §23 competition: first completed turn-in wins; if an agent had
+        # claimed this contract, the player just beat them to it.
+        prior = instance.get("assignee")
         deltas: list[Delta] = [Delta(kind="quest_state", payload={
             "instance_id": instance["instance_id"], "def_id": quest.id,
             "state": "completed", "available_day": instance["available_day"],
-            "expires_day": instance["expires_day"]})]
+            "expires_day": instance["expires_day"], "assignee": "player"})]
+        if prior and prior != "player":
+            rival = self.registry.find(prior)
+            deltas.append(Delta(kind="chronicle", payload={
+                "category": "discovery", "visibility": "public",
+                "headline": f"The contract {getattr(rival, 'name', prior)} was "
+                            f"working got finished under their nose: {quest.name}.",
+                "detail": "outraced", "actors": [prior]}))
         for reward in quest.rewards:
             if "col" in reward:
                 amount = reward["col"]

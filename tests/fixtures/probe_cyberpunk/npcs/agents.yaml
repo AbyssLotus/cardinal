@@ -73,3 +73,12 @@
   policy_params:
     good: item.cp_bullets
     route: [loc.cp_kabuki_market, loc.cp_arasaka_waterfront]
+- id: npc.cp_runner
+  name: "Nix"
+  location: loc.cp_afterlife
+  actor_class: agent
+  policy: quest_taker
+  capabilities: [trade, quests]
+  col: 500
+  combat: { level: 5, skills: [] }
+  policy_params: {}

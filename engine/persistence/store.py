@@ -186,13 +186,14 @@ class Store:
     # --- quest instances ---------------------------------------------------------
 
     def upsert_quest(self, instance_id: str, def_id: str, state: str,
-                     available_day: int | None, expires_day: int | None) -> None:
+                     available_day: int | None, expires_day: int | None,
+                     assignee: str | None = None) -> None:
         self.conn.execute(
-            "INSERT INTO quests(instance_id, def_id, state, available_day, expires_day) "
-            "VALUES(?,?,?,?,?) ON CONFLICT(instance_id) DO UPDATE SET "
+            "INSERT INTO quests(instance_id, def_id, state, available_day, expires_day, "
+            "assignee) VALUES(?,?,?,?,?,?) ON CONFLICT(instance_id) DO UPDATE SET "
             "state=excluded.state, available_day=excluded.available_day, "
-            "expires_day=excluded.expires_day",
-            (instance_id, def_id, state, available_day, expires_day),
+            "expires_day=excluded.expires_day, assignee=excluded.assignee",
+            (instance_id, def_id, state, available_day, expires_day, assignee),
         )
 
     def get_quests(self, state: str | None = None) -> list[dict[str, Any]]:
@@ -420,7 +421,8 @@ def _apply_goal_progress(store: Store, delta: Delta, day: int, hour: int) -> Non
 def _apply_quest_state(store: Store, delta: Delta, day: int, hour: int) -> None:
     p = delta.payload
     store.upsert_quest(p["instance_id"], p["def_id"], p["state"],
-                       p.get("available_day"), p.get("expires_day"))
+                       p.get("available_day"), p.get("expires_day"),
+                       p.get("assignee"))
 
 
 def _apply_market_update(store: Store, delta: Delta, day: int, hour: int) -> None:

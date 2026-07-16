@@ -114,7 +114,8 @@ CREATE TABLE IF NOT EXISTS quests (
     def_id        TEXT NOT NULL,
     state         TEXT NOT NULL DEFAULT 'dormant',
     available_day INTEGER,
-    expires_day   INTEGER
+    expires_day   INTEGER,
+    assignee      TEXT              -- 'player' | npc.<id> | NULL (open) — §23
 );
 
 CREATE TABLE IF NOT EXISTS goals (

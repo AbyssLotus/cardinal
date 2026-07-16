@@ -7,6 +7,13 @@ player participates. Day-tick:
   - past `expires_day`, the quest fails: failure.world_effects apply and the
     outcome enters the chronicle regardless of player awareness
 
+§23 additions: quest instances carry an `assignee` (player | npc.<id> |
+NULL = open). quest_taker agents claim and execute contracts through real
+actions (see agents.py). If a claiming agent dies mid-quest, the contract
+reopens or fails per the quest's `on_assignee_death`. `npc_fallback` is
+DEPRECATED: the coin-flip only rolls in worlds with no quest_taker agents,
+and will be removed once all shipped worlds have takers.
+
 All text comes from quest data (purpose, failure.outcome, npc_fallback.outcome);
 the engine composes, never authors.
 """
@@ -54,7 +61,40 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
         if instance["state"] in TERMINAL_STATES:
             continue
 
-        fallback_chance = quest.npc_fallback.get("chance_npc_resolves_per_day", 0.0)
+        # §23: a dead assignee releases the contract — reopen or fail per
+        # the quest's definition; the outcome the old coin-flip couldn't say.
+        assignee = instance.get("assignee")
+        if assignee and assignee != "player":
+            holder = ctx.store.get_entity(assignee)
+            if holder is not None and not holder["state"].get("alive", True):
+                holder_def = ctx.registry.find(assignee)
+                holder_name = getattr(holder_def, "name", assignee)
+                if quest.on_assignee_death == "fail":
+                    deltas += _terminate(ctx, quest, instance, "failed",
+                                         f"{quest.name} died with {holder_name}.",
+                                         day)
+                    for effect in quest.failure.world_effects:
+                        deltas += _apply_world_effect(ctx, effect)
+                else:
+                    deltas.append(Delta(kind="quest_state", payload={
+                        "instance_id": instance["instance_id"], "def_id": quest.id,
+                        "state": "available",
+                        "available_day": instance["available_day"],
+                        "expires_day": instance["expires_day"], "assignee": None}))
+                    deltas.append(Delta(kind="chronicle", payload={
+                        "category": "discovery",
+                        "headline": f"The contract lapses with {holder_name}'s "
+                                    f"death: {quest.purpose}",
+                        "detail": f"({quest.name}: reopened)",
+                        "actors": [quest.source]},
+                        location_id=_npc_location(ctx, quest.source)))
+                continue
+
+        # DEPRECATED (§23): the fallback coin-flip only exists for worlds
+        # with no quest_taker agents; real takers replace it entirely.
+        fallback_chance = 0.0
+        if not _world_has_takers(ctx):
+            fallback_chance = quest.npc_fallback.get("chance_npc_resolves_per_day", 0.0)
         if fallback_chance and rng.random() < fallback_chance:
             deltas += _terminate(ctx, quest, instance, "npc_resolved",
                                  quest.npc_fallback.get(
@@ -71,12 +111,19 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
     return deltas
 
 
+def _world_has_takers(ctx: SystemContext) -> bool:
+    return any(getattr(n, "actor_class", "ambient") == "agent"
+               and n.policy == "quest_taker"
+               for n in ctx.registry.by_kind("npc"))
+
+
 def _terminate(ctx: SystemContext, quest, instance, state: str,
                outcome: str, day: int) -> list[Delta]:
     return [
         Delta(kind="quest_state", payload={
             "instance_id": instance["instance_id"], "def_id": quest.id, "state": state,
             "available_day": instance["available_day"], "expires_day": instance["expires_day"],
+            "assignee": instance.get("assignee"),
         }),
         Delta(
             kind="chronicle",
