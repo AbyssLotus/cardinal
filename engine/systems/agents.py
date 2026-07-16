@@ -102,11 +102,15 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
     rng = ctx.rng.stream("agents")
     deltas: list[Delta] = []
 
+    agent_defs = {npc.id: npc for npc in roster}
     # Fair scheduling: rotate the roster's starting index each tick so the
-    # action budget doesn't permanently starve whoever sorts last. Without
-    # this, a 100-agent world gives the same first-N agents every action
-    # forever (measured: 88/106 agents never acted once in 90 days).
-    start = (day * 24 + hour) % len(roster)
+    # action budget doesn't permanently starve whoever sorts last. The
+    # rotation STRIDES BY THE BUDGET (not by 1): advancing one position per
+    # tick while consuming `budget` positions aliases against the cadence
+    # hash and systematically starves ~12% of large rosters (measured at
+    # both 106 and 1006 agents). Striding by the budget marches the window
+    # through the whole roster every ceil(len/budget) ticks.
+    start = ((day * 24 + hour) * budget) % len(roster)
     rotated = roster[start:] + roster[:start]
 
     for npc in rotated:
@@ -127,7 +131,8 @@ def tick(ctx: SystemContext, granularity: str, day: int, hour: int) -> list[Delt
         elif policy == "merchant":
             deltas += _act_merchant(ctx, npc, state, location, day, rng)
         elif policy == "aggressor":
-            deltas += _act_aggressor(ctx, npc, state, location, day, hour, rng)
+            deltas += _act_aggressor(ctx, npc, state, location, day, hour, rng,
+                                     agent_defs)
         # passive: holds state
         # light recovery between actions — agents heal like the player does
         if state.get("alive", True) and state["hp"] < state["hp_max"]:
@@ -147,6 +152,8 @@ def _act_hunter(ctx, npc, state, location, day, rng) -> list[Delta]:
     threshold = ctx.registry.rule("agents.sell_threshold", 5)
     monster = ctx.registry.find(species) if species else None
     if monster is None or zone_id is None:
+        state["activity"] = "idle (bad hunt config)"
+        _save(ctx, npc, state, location, day)
         return []
 
     carrying = sum(i["qty"] for i in ctx.store.get_inventory(npc.id)
@@ -236,6 +243,8 @@ def _act_merchant(ctx, npc, state, location, day, rng) -> list[Delta]:
     route = params.get("route", [])
     lot = ctx.registry.rule("agents.merchant_lot", 10)
     if good is None or len(route) < 2:
+        state["activity"] = "idle (bad trade config)"
+        _save(ctx, npc, state, location, day)
         return []
 
     prices = {}
@@ -244,6 +253,10 @@ def _act_merchant(ctx, npc, state, location, day, rng) -> list[Delta]:
         if market is not None:
             prices[stop] = economy_system.current_price(ctx, market.id, good)
     if len(prices) < 2:
+        # a broken route is a visible state, not a silent no-op — otherwise
+        # misconfigured agents are indistinguishable from starved ones
+        state["activity"] = "idle (route has <2 markets)"
+        _save(ctx, npc, state, location, day)
         return []
     cheap = min(prices, key=lambda s: (prices[s], s))
     dear = max(prices, key=lambda s: (prices[s], s))
@@ -299,13 +312,14 @@ def _act_merchant(ctx, npc, state, location, day, rng) -> list[Delta]:
 # ---------------------------------------------------------------- aggressor
 
 
-def _act_aggressor(ctx, npc, state, location, day, hour, rng) -> list[Delta]:
+def _act_aggressor(ctx, npc, state, location, day, hour, rng,
+                   agent_defs) -> list[Delta]:
     params = npc.policy_params
     turf = params.get("turf", [npc.location])
 
     # fight a co-located hostile agent (at most one engagement per day)
     if state.get("last_fight_day") != day:
-        rival = _hostile_agent_here(ctx, npc, location)
+        rival = _hostile_agent_here(ctx, npc, location, agent_defs)
         if rival is not None and rng.random() < ctx.registry.rule(
                 "agents.engage_chance", 0.35):
             state["last_fight_day"] = day
@@ -321,7 +335,10 @@ def _act_aggressor(ctx, npc, state, location, day, hour, rng) -> list[Delta]:
     return []
 
 
-def _hostile_agent_here(ctx, npc, location):
+def _hostile_agent_here(ctx, npc, location, agent_defs):
+    """Find a co-located hostile agent using the entities table's location
+    index (one SQL lookup) instead of scanning the whole roster — the
+    difference between O(here) and O(world) per aggressor action."""
     if npc.faction is None:
         return None
     my_faction = ctx.registry.find(npc.faction)
@@ -329,16 +346,16 @@ def _hostile_agent_here(ctx, npc, location):
         return None
     threshold = ctx.registry.rule("agents.hostility_threshold", -0.3)
     my_state = factions_system.faction_state(ctx, my_faction)
-    for other in _agents(ctx):
-        if other.id == npc.id or other.faction in (None, npc.faction):
+    dispositions = my_state.get("dispositions", {})
+    for row in ctx.store.entities_at(location, kind="npc"):
+        other = agent_defs.get(row["id"])
+        if other is None or other.id == npc.id:
             continue
-        other_state = ctx.store.get_entity(other.id)
-        if other_state is None or not other_state["state"].get("alive", True):
+        if other.faction in (None, npc.faction):
             continue
-        if (other_state["location_id"] or other.location) != location:
+        if not row["state"].get("alive", True):
             continue
-        disposition = my_state.get("dispositions", {}).get(other.faction, 0.0)
-        if disposition <= threshold:
+        if dispositions.get(other.faction, 0.0) <= threshold:
             return other
     return None
 
