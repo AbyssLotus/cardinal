@@ -4,3 +4,4 @@ floor: floor.cp_watson
 type: city
 safe_zone: true
 services: [bar, fixer]
+market: market.cp_afterlife_fixer

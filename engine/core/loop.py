@@ -21,7 +21,7 @@ from engine.narrator import perception
 from engine.narrator.base import Narrator
 from engine.persistence.store import Delta, Store
 from engine.systems import TICK_ORDER, SystemContext
-from engine.systems import combat, economy as economy_system, interact
+from engine.systems import combat, economy as economy_system, factions as factions_system, interact
 from engine.systems import skills as skills_system
 from engine.systems import (  # noqa: F401  (imported for the tick table)
     economy, ecology, factions, npc, quests, weather, worldevents,
@@ -309,6 +309,23 @@ class SimulationLoop:
         if action.intent == "skills":
             self._notes += self._skills_report()
             return []
+        if action.intent == "faction_join":
+            deltas, messages = factions_system.resolve_join(
+                self.ctx, action.parameters["name"], player, self.clock.day)
+            self._notes += messages
+            return deltas
+        if action.intent == "faction_leave":
+            deltas, messages = factions_system.resolve_leave(self.ctx, player)
+            self._notes += messages
+            return deltas
+        if action.intent == "faction_donate":
+            deltas, messages = factions_system.resolve_donate(
+                self.ctx, action.parameters["amount"], player, self.clock.day)
+            self._notes += messages
+            return deltas
+        if action.intent == "faction_status":
+            self._notes += factions_system.status_report(self.ctx)
+            return []
         return []  # wait / look / status change no state
 
     def _resolve_hunt(self, action: Action, player: dict) -> list[Delta]:
@@ -421,6 +438,12 @@ class SimulationLoop:
         if action.intent == "buy":
             _, total = economy_system.trade_cost(self.ctx, market.id, good, qty,
                                                  player_buys=True)
+            # faction_tax (Part 1 §11, implemented per faction spec M9): the
+            # faction headquartered in this settlement taxes purchases; its
+            # own members are exempt; revenue credits the faction treasury.
+            tax_faction, tax_rate = factions_system.market_tax(self.ctx, market)
+            tax = round(total * tax_rate) if tax_faction is not None else 0
+            total += tax
             if player["col"] < total:
                 self._notes.append(f"That's {total} {currency}; you carry {player['col']}.")
                 return
@@ -428,6 +451,8 @@ class SimulationLoop:
                 qty = 1
                 _, total = economy_system.trade_cost(self.ctx, market.id, good, 1,
                                                      player_buys=True)
+                tax = round(total * tax_rate) if tax_faction is not None else 0
+                total += tax
                 state = {"owner": "player", "mounted": False,
                          "hp": (good.stats or {}).get("hp", 100)}
                 if good.fuel is not None:
@@ -441,10 +466,15 @@ class SimulationLoop:
                 self.store.add_item_instance(instance_id, good.id, "player",
                                              durability=durability, qty=qty)
             self.store.update_player(col=player["col"] - total)
+            if tax_faction is not None and tax > 0:
+                factions_system.credit_treasury(self.ctx, tax_faction, tax)
             economy_system.record_trade(self.ctx, market.id, good, qty, player_buys=True)
             self.store.add_player_history(self.clock.day, self.clock.hour, "craft",
                                           f"Bought {qty}x {good.name} for {total} {currency}.")
-            self._notes.append(f"Bought {qty}x {good.name} for {total} {currency}.")
+            note = f"Bought {qty}x {good.name} for {total} {currency}."
+            if tax > 0:
+                note += f" ({tax} {currency} {tax_faction.name} tax)"
+            self._notes.append(note)
             return
 
         # sell — merchants pay a margin under market price (trade_cost applies it)

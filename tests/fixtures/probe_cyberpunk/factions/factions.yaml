@@ -1,0 +1,28 @@
+# Night City: a corp that won't look at you until you're somebody, and a
+# gang that takes anyone crazy enough to walk in.
+- id: fac.cp_arasaka
+  canon_tier: confirmed
+  name: "Arasaka"
+  type: corp
+  headquarters: loc.cp_afterlife
+  leadership: []
+  membership_count: 10000
+  treasury_col: 5000000
+  agenda:
+    - { goal: "Control Night City's data economy", priority: 0.9 }
+  relations:
+    - { with: fac.cp_maelstrom, disposition: -0.6 }
+  policies: { tax_rate: 0.08, recruitment: selective }
+- id: fac.cp_maelstrom
+  canon_tier: confirmed
+  name: "Maelstrom"
+  type: gang
+  headquarters: loc.cp_subnet_shallows
+  leadership: []
+  membership_count: 200
+  treasury_col: 15000
+  agenda:
+    - { goal: "Flesh is weak; chrome is truth", priority: 0.7 }
+  relations:
+    - { with: fac.cp_arasaka, disposition: -0.6 }
+  policies: { recruitment: open }

@@ -118,11 +118,30 @@ def parse(text: str, registry: Registry) -> list[Action]:
             raise ParseError("Give what?")
         return [Action("give", parameters={"name": " ".join(args)}, raw_input=text)]
 
+    if verb == "join":
+        if not args:
+            raise ParseError("Join what faction?")
+        return [Action("faction_join", parameters={"name": " ".join(args)},
+                       raw_input=text)]
+
+    if verb == "leave":
+        return [Action("faction_leave", raw_input=text)]
+
+    if verb == "donate":
+        if not args or not args[0].isdigit():
+            raise ParseError("Donate how much? e.g. 'donate 100'")
+        return [Action("faction_donate", parameters={"amount": int(args[0])},
+                       raw_input=text)]
+
+    if verb in ("faction", "factions"):
+        return [Action("faction_status", raw_input=text)]
+
     raise ParseError(
         f"You don't know how to {verb!r}. Try: look, status, skills, wait <min>, "
         "go <place>, hunt <creature>, attack [technique], guard <stance>, flee, "
         "equip <item>, use/hack/open <device>, mount <vehicle>, dismount, "
-        "shop, buy/sell <item> [qty], talk <npc>, give <item>.")
+        "shop, buy/sell <item> [qty], talk <npc>, give <item>, "
+        "join <faction>, leave, donate <amount>, faction.")
 
 
 def _resolve_monster(name: str, registry: Registry) -> str | None:

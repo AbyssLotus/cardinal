@@ -1,0 +1,29 @@
+# Tower politics: the Vanguard holds the city; the House of Devils prowls
+# the Cosmodrome. Open recruitment vs. a faction no Guardian may join.
+- id: fac.d2_vanguard
+  canon_tier: confirmed
+  name: "The Vanguard"
+  type: state
+  headquarters: loc.d2_tower
+  leadership: []
+  membership_count: 500
+  treasury_col: 100000
+  agenda:
+    - { goal: "Defend the Last City", priority: 0.9 }
+    - { goal: "Reclaim the Cosmodrome", priority: 0.5 }
+  relations:
+    - { with: fac.d2_devils, disposition: -0.7 }
+  policies: { tax_rate: 0.05, recruitment: open }
+- id: fac.d2_devils
+  canon_tier: confirmed
+  name: "House of Devils"
+  type: horde
+  headquarters: null
+  leadership: []
+  membership_count: 800
+  treasury_col: 20000
+  agenda:
+    - { goal: "Strip the Cosmodrome for salvage", priority: 0.8 }
+  relations:
+    - { with: fac.d2_vanguard, disposition: -0.7 }
+  policies: { recruitment: closed }
