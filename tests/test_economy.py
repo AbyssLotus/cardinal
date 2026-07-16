@@ -86,6 +86,59 @@ def test_insufficient_funds(tmp_path, testworld_path):
     save.store.close()
 
 
+def test_crashed_market_cannot_be_bought_for_free(tmp_path, testworld_path):
+    """Regression test for the Test 3 playtest finding: dumping stock to
+    crash a market's price below 1 col used to let `int(price * qty)`
+    truncate every subsequent buy to 0 col, making goods free and — via
+    an untouched second market — a source of infinite profit.
+    """
+    save = create_save(tmp_path / "s1", testworld_path, seed=3)
+    loop = _loop(save)
+    loop.advance_days(1)
+
+    # Simulate a crashed market directly (mirrors the report's live method
+    # of dumping ~20,000 units in one sale to force the index down).
+    save.store.upsert_market_row("market.tw_hub", "item.tw_ration",
+                                 supply_idx=50.0, demand_idx=1.0, price=0.4)
+
+    before = save.store.get_player()["col"]
+    result = loop.submit("buy ration 1")
+    assert "Bought 1x Ration for 0 " not in result.text   # never free
+    after = save.store.get_player()["col"]
+    assert after < before                                 # col actually spent
+    assert before - after >= 1                             # floored at 1 col/unit
+
+    # Buying 60 units one at a time (as the live exploit did) must cost at
+    # least 1 col each — no infinite free stock to launder elsewhere.
+    before = save.store.get_player()["col"]
+    for _ in range(60):
+        loop.submit("buy ration 1")
+    spent = before - save.store.get_player()["col"]
+    assert spent >= 60
+    save.store.close()
+
+
+def test_large_dump_has_intra_trade_slippage(tmp_path, testworld_path):
+    """A single massive sell shouldn't price its entire quantity at one
+    flat pre-trade quote — later units in the same trade should earn
+    less than earlier ones as the price drifts (Test 3 compounding
+    factor: 'zero within-trade slippage').
+    """
+    save = create_save(tmp_path / "s1", testworld_path, seed=3)
+    loop = _loop(save)
+    loop.advance_days(1)
+    save.store.add_item_instance("iteminst.dumptest", "item.tw_ration", "player", qty=2000)
+
+    before = save.store.get_player()["col"]
+    loop.submit("sell ration 2000")
+    earned = save.store.get_player()["col"] - before
+
+    row = save.store.get_market_row("market.tw_hub", "item.tw_ration")
+    flat_quote_earnings = row["price"] * 0.6 * 2000
+    assert earned < flat_quote_earnings                    # drifted down, not flat
+    save.store.close()
+
+
 def test_talk_lists_quest_needs(tmp_path, testworld_path):
     save = create_save(tmp_path / "s1", testworld_path, seed=5)
     loop = _loop(save)
