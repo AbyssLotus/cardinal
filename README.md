@@ -43,6 +43,29 @@ archive/      — the frozen v0.1 proof of concept (evidence, not precedent)
 3. Nothing imports world content. Packages arrive through the loader as data, or not at all.
 4. Every layer's public surface is explicit; bypass is a build failure, not a code review note.
 
+## Design note — implementation language: Rust
+
+The reference engine is built in **Rust**. Declared here as an implementation profile per
+Vol. V Ch. 10 §10.3 (implementations carry profiles; the spec carries law). The reasons
+are the spec's own demands:
+
+- **Efficiency without a runtime tax.** The hot tier is cache-friendly columnar iteration
+  (Vol. V Ch. 2); per-tick arenas want deterministic, GC-free allocation (§2.3). Rust
+  delivers both at C-class speed, which is what makes planet-scale aggregate worlds and
+  century soaks practical (Vol. V Ch. 8 §8.3 budgets).
+- **Determinism as a compile-time ally.** No data races by construction (Vol. V Ch. 4,
+  Door 5), explicit integer/fixed-point arithmetic for the ledgers (§4.1 Level 2), and
+  wrapper types that can refuse unordered iteration at compile time (§4.1 Door 2).
+- **Fearless parallelism.** Stage-2 evaluation parallelizes across immutable snapshots
+  (Vol. V Ch. 3, Ch. 5 §5.1); Rust's ownership model makes the no-shared-mutable-state
+  rule a compiler guarantee instead of a code-review hope.
+- **The dependency law, enforced.** Crate boundaries make Vol. V Ch. 1 §1.1 mechanical:
+  kernel, each domain, each service as its own crate — a domain importing a domain is a
+  build failure, exactly as specified.
+
+The v0.1 proof of concept was Python; it is archived as evidence, not precedent
+(Vol. V Ch. 10 §10.6, the Sacred Implementation).
+
 ## Status
 
 **Rebuild phase — scaffold.** The v0.1 proof of concept (six milestones, playable,
