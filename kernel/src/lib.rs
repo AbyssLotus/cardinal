@@ -14,15 +14,21 @@
 //! within the workspace. A kernel still gaining features in year three is absorbing
 //! someone's domain (Vol. V Ch. 1, Designer Note) — keep it small, keep it law.
 //!
-//! ## Build order (Vol. V Ch. 10 §10.4)
-//! [`hash`] comes first: every determinism test reduces to comparing per-tick state
-//! hashes across twin runs (Vol. V Ch. 4 §4.2). The remaining modules are scaffolded to
-//! their governing sections and filled in roadmap order.
+//! ## Shape
+//! [`value`] and [`fact`] are the atoms of committed reality; [`store`] holds them behind
+//! its contract; [`system`] and [`proposal`] are how change is proposed; [`domain`] plugs
+//! owners in; [`tick`] runs the seven stages; [`hash`] is the determinism digest; [`rng`]
+//! the seeded streams; [`events`] the chronicle; [`identity`] permanent ids.
 
+pub mod domain;
 pub mod events;
+pub mod fact;
 pub mod hash;
 pub mod identity;
+pub mod proposal;
 pub mod rng;
 pub mod scheduler;
 pub mod store;
+pub mod system;
 pub mod tick;
+pub mod value;
