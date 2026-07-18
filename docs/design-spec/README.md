@@ -1,13 +1,13 @@
-# Cardinal Definitive Reference — Volume I: First Principles
+# Cardinal Definitive Reference
 
-This volume defines the constitutional philosophy and architectural boundaries of Cardinal.
+The authoritative design for Cardinal, published as a series of volumes that sit above the
+prior implementation specification (preserved at
+[docs/archive/CARDINAL_DESIGN_SPEC.md](../archive/CARDINAL_DESIGN_SPEC.md)).
 
-## Chapters
+## Volumes
 
-1. [Why Cardinal Exists](01_Why_Cardinal_Exists.md)
-2. [The Ontology of a Cardinal World](02_The_Ontology_of_a_Cardinal_World.md)
-3. [The Laws of Cardinal](03_The_Laws_of_Cardinal.md)
-4. [The Architecture of Reality](04_The_Architecture_of_Reality.md)
-5. [The Near-Life Horizon](05_The_Near_Life_Horizon.md)
-
-These chapters are intended to sit above the existing implementation design specification. They define why the engine exists, what its core concepts mean, which invariants are non-negotiable, how its major architectural layers relate, and what direction future development should take.
+1. [Volume I: First Principles](volume-1-first-principles/README.md) — the constitutional
+   philosophy and architectural boundaries of Cardinal.
+2. [Volume II: Constructing Reality](volume-2-constructing-reality/README.md) — the
+   engineering contracts for representing reality, advancing time, transforming state
+   through systems, separating information from truth, and persisting it.
