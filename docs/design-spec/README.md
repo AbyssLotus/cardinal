@@ -18,6 +18,11 @@ prior implementation specification (preserved at
    assembled: the package contract, rules and domain selection, content composition,
    generation, scenarios, versioning and migration, validation and testing, and five
    demonstration worlds on the unmodified engine.
+5. [Volume V: Reference Architecture](volume-5-reference-architecture/README.md) — how
+   Cardinal should be built: engine layering, the reality store, the simulation kernel,
+   determinism, scale, events, persistence machinery, observability and testing, AI
+   integration, and extension — tradeoffs discussed, invariants restated, innovation
+   unfrozen.
 
-Volume V (Reference Architecture) is planned; the construction roadmap is at
-[ROADMAP.md](ROADMAP.md).
+The specification is complete through Volume V; the construction roadmap that guided
+Volumes III–V is preserved at [ROADMAP.md](ROADMAP.md).
