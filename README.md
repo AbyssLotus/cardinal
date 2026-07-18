@@ -66,6 +66,32 @@ are the spec's own demands:
 The v0.1 proof of concept was Python; it is archived as evidence, not precedent
 (Vol. V Ch. 10 §10.6, the Sacred Implementation).
 
+## Code documentation standard
+
+All code in this repository is **well-commented for easy comprehension** — the
+specification demands an engine a future engineer (or future Claude session) can pick up
+cold (Vol. V Ch. 10, Designer Note), and the code must meet the same bar as the volumes.
+Requirements:
+
+- **Every public item carries a doc comment** (`///`): what it is, what it guarantees,
+  and which spec section governs it (e.g. `/// The only mutation path in the engine —
+  Vol. V Ch. 2 §2.1 clause 1`). Rustdoc must build clean with no missing-docs warnings
+  on public surfaces.
+- **Every module opens with a charter comment** (`//!`): its duty, its boundaries, and
+  its governing chapters — the directory READMEs' discipline, carried down to the file.
+- **Inline comments explain *why*, and spec law above all**: the constraint the code
+  serves, the invariant it upholds, the anti-pattern it is avoiding, the tradeoff taken.
+  A reader should never have to reverse-engineer *why* a line defends an invariant.
+- **Invariants are cited where enforced.** Code that implements a numbered engineering
+  invariant names it in a comment at the enforcement site, so the spec and the code
+  stay auditable against each other (Vol. V Ch. 10 §10.3 — spec drift is either
+  corrected or ratified, never ambient).
+- **Non-obvious algorithms get a paragraph**, not a name-drop: the approach, the reason
+  it was chosen, and what would break if it changed (determinism and ordering hazards
+  especially — Vol. V Ch. 4).
+
+Uncommented code does not merge. Clarity is a review criterion equal to correctness.
+
 ## Status
 
 **Rebuild phase — scaffold.** The v0.1 proof of concept (six milestones, playable,
