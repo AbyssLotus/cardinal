@@ -20,6 +20,10 @@ not algorithms.
 11. [Emergence](11_Emergence.md) — how phenomena no domain owns arise, and the discipline that protects them
 12. [Cross-Domain Interaction](12_Cross_Domain_Interaction.md) — the ownership matrix, effect chains, and composition law
 
+Appendix A: [The Ownership Matrix](APPENDIX_A_Ownership_Matrix.md) — the complete
+fact-ownership table and the twelve settled boundary rulings, recorded as normative
+precedent.
+
 Each chapter defines the domain's purpose, responsibilities, non-responsibilities, canonical
 concepts, domain interactions, common queries, architectural contracts, engineering
 invariants, anti-patterns, and future evolution.
