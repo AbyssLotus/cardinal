@@ -51,8 +51,14 @@ mod tests {
     #[test]
     fn order_has_seven_stages_commit_before_chronicle() {
         assert_eq!(Stage::ORDER.len(), 7);
-        let commit = Stage::ORDER.iter().position(|s| *s == Stage::Commit).unwrap();
-        let chronicle = Stage::ORDER.iter().position(|s| *s == Stage::Chronicle).unwrap();
+        let commit = Stage::ORDER
+            .iter()
+            .position(|s| *s == Stage::Commit)
+            .unwrap();
+        let chronicle = Stage::ORDER
+            .iter()
+            .position(|s| *s == Stage::Chronicle)
+            .unwrap();
         // Only committed reality is chronicled (Vol. V Ch. 3 §3.1).
         assert!(commit < chronicle);
     }
