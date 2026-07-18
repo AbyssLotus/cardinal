@@ -12,9 +12,10 @@
 //! boundary exists to surface.
 //!
 //! ## First slice (Vol. V Ch. 10 §10.4)
-//! The environment is the first reality made to move: a region's [`schema::TEMPERATURE`]
+//! The environment is the first reality made to move: each region's [`schema::TEMPERATURE`]
 //! evolved by [`systems::DiurnalCycle`] and [`systems::WeatherNoise`], reconciled by
-//! [`composition::compose_temperature`], through the kernel's seven-stage tick.
+//! [`composition::compose_temperature`], through the kernel's seven-stage tick. A world may
+//! hold many regions; each carries its own temperature and its own weather substream.
 
 pub mod composition;
 pub mod schema;
@@ -29,26 +30,41 @@ use kernel::value::Value;
 
 /// The Physical Reality domain, plugged into the kernel (Appendix A owner).
 ///
-/// Configured for a single-region world — the minimal slice that exercises the pipeline.
-/// Multi-region scheduling and the rest of Physical's fact types (space, topology,
-/// materials) are later steps.
+/// Configured over a set of regions, each of which carries an environmental temperature.
+/// The rest of Physical's fact types (space, topology, materials) are later steps.
 pub struct PhysicalDomain {
-    region: EntityId,
+    regions: Vec<EntityId>,
     ticks_per_day: u64,
     diurnal_amplitude_centi_c: i64,
     weather_max_swing_centi_c: i64,
 }
 
 impl PhysicalDomain {
-    /// Configure the domain for one region.
-    pub const fn new(
+    /// Configure the domain for a single region (the minimal world).
+    pub fn new(
         region: EntityId,
         ticks_per_day: u64,
         diurnal_amplitude_centi_c: i64,
         weather_max_swing_centi_c: i64,
     ) -> Self {
+        Self::with_regions(
+            vec![region],
+            ticks_per_day,
+            diurnal_amplitude_centi_c,
+            weather_max_swing_centi_c,
+        )
+    }
+
+    /// Configure the domain over many regions, each with the same climate parameters but
+    /// its own independent weather substream (keyed by region — Vol. V Ch. 4 §4.1).
+    pub fn with_regions(
+        regions: Vec<EntityId>,
+        ticks_per_day: u64,
+        diurnal_amplitude_centi_c: i64,
+        weather_max_swing_centi_c: i64,
+    ) -> Self {
         Self {
-            region,
+            regions,
             ticks_per_day,
             diurnal_amplitude_centi_c,
             weather_max_swing_centi_c,
@@ -66,17 +82,19 @@ impl Domain for PhysicalDomain {
     }
 
     fn systems(&self) -> Vec<Box<dyn System>> {
-        vec![
-            Box::new(systems::DiurnalCycle::new(
-                self.region,
+        let mut out: Vec<Box<dyn System>> = Vec::with_capacity(self.regions.len() * 2);
+        for &region in &self.regions {
+            out.push(Box::new(systems::DiurnalCycle::new(
+                region,
                 self.ticks_per_day,
                 self.diurnal_amplitude_centi_c,
-            )),
-            Box::new(systems::WeatherNoise::new(
-                self.region,
+            )));
+            out.push(Box::new(systems::WeatherNoise::new(
+                region,
                 self.weather_max_swing_centi_c,
-            )),
-        ]
+            )));
+        }
+        out
     }
 
     fn compose(

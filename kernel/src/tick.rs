@@ -1,18 +1,18 @@
 //! The tick pipeline — Vol. V Ch. 3 §3.1.
 //!
 //! A tick advances committed reality by exactly one step through seven ordered stages.
-//! Systems evaluate hermetically (committed reads in, proposals out); nothing mutates until
-//! `commit` calls the store's single write path (Vol. V Ch. 2 §2.1). A failed tick leaves
-//! reality exactly at N-1 (Vol. V Ch. 3 §3.5.5). The narrator runs in `observe` and is
-//! never a dependency of the computation (Vol. V Ch. 9 §9.5.2), so a full tick runs with
-//! the narrator disabled.
+//! Systems evaluate hermetically (committed reads scoped to their declared read set in,
+//! proposals out); nothing mutates until `commit` calls the store's single write path
+//! (Vol. V Ch. 2 §2.1). A failed tick leaves reality exactly at N-1 (Vol. V Ch. 3 §3.5.5).
+//! The narrator runs in `observe` and is never a dependency of the computation
+//! (Vol. V Ch. 9 §9.5.2), so a full tick runs with the narrator disabled.
 
 use crate::domain::{Domain, ResolveError, Resolved, ValidationError};
 use crate::events::ChronicleEntry;
 use crate::fact::{Cause, Fact, FactKey, FactType, Provenance, SystemId};
 use crate::proposal::{Change, Proposal};
 use crate::store::{CommitBatch, RealityStore};
-use crate::system::{CommittedView, System, TickContext};
+use crate::system::{CommittedView, ScopedView, System, TickContext};
 use std::collections::BTreeMap;
 
 /// The seven ordered stages of a single tick (Vol. V Ch. 3 §3.1).
@@ -56,6 +56,14 @@ impl Stage {
 /// (Vol. V Ch. 3 §3.5.5), and the error names the stage that stopped it.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TickError {
+    /// A system proposed a change to a fact type outside its declared write set
+    /// (Vol. V Ch. 3 §3.5, invariant 2) — a hermeticity violation caught in Evaluate.
+    UndeclaredWrite {
+        /// The offending system.
+        system: SystemId,
+        /// The fact type it tried to write without declaring.
+        fact_type: FactType,
+    },
     /// A proposal targeted a fact type no enabled domain owns (Appendix A).
     Unowned(FactType),
     /// Proposals against a fact could not be composed (Resolve stage — Vol. V Ch. 3 §3.1).
@@ -81,9 +89,11 @@ pub fn run_tick<S: RealityStore>(
     seed: u64,
     chronicle: &mut Vec<ChronicleEntry>,
 ) -> Result<(), TickError> {
-    // 1. SCHEDULE — due systems in a deterministic order (sorted by id). The full
-    //    DAG-from-read/write-sets scheduler is the next refinement (Vol. V Ch. 3 §3.2);
-    //    with no declared happens-before edges, a stable id sort is a valid order.
+    // 1. SCHEDULE — due systems in a deterministic order (sorted by id). Under hermetic
+    //    evaluation every system reads committed N-1 state, so execution order does not
+    //    change committed reality; a stable id sort is therefore a valid deterministic
+    //    order, and the DAG-from-read/write-sets scheduler is deferred until it earns its
+    //    keep with parallelism (Vol. V Ch. 3 §3.2; Ch. 5).
     let mut due: Vec<&dyn System> = systems
         .iter()
         .filter(|s| s.cadence().is_due(tick))
@@ -91,13 +101,24 @@ pub fn run_tick<S: RealityStore>(
         .collect();
     due.sort_by_key(|s| s.id().name());
 
-    // 2. EVALUATE — hermetic: committed reads in, proposals out (Vol. V Ch. 3 §3.1).
+    // 2. EVALUATE — hermetic: each system reads a view scoped to its declared read set, and
+    //    may only propose to facts in its declared write set (Vol. V Ch. 3 §3.1, §3.5).
     let mut proposals: Vec<Proposal> = Vec::new();
     {
         let view: &dyn CommittedView = &*store;
         for sys in &due {
+            let scoped = ScopedView::new(view, sys.reads());
             let ctx = TickContext::new(tick, seed, sys.id().code());
-            proposals.extend(sys.evaluate(view, &ctx));
+            let emitted = sys.evaluate(&scoped, &ctx);
+            for p in &emitted {
+                if !sys.writes().contains(&p.target.fact_type) {
+                    return Err(TickError::UndeclaredWrite {
+                        system: sys.id(),
+                        fact_type: p.target.fact_type,
+                    });
+                }
+            }
+            proposals.extend(emitted);
         }
     }
 
