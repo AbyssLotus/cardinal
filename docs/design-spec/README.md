@@ -11,3 +11,9 @@ prior implementation specification (preserved at
 2. [Volume II: Constructing Reality](volume-2-constructing-reality/README.md) — the
    engineering contracts for representing reality, advancing time, transforming state
    through systems, separating information from truth, and persisting it.
+3. [Volume III: Domains of Reality](volume-3-domains-of-reality/README.md) — every major
+   simulation domain: its purpose, owned facts, boundaries, interactions, invariants, and
+   anti-patterns, closing with emergence and the cross-domain composition law.
+
+Volumes IV (World Packages) and V (Reference Architecture) are planned; the construction
+roadmap is at [ROADMAP.md](ROADMAP.md).
