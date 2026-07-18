@@ -20,7 +20,11 @@ pub struct SubstreamKey {
 impl SubstreamKey {
     /// Construct a substream key from its `(system, tick, scope)` components.
     pub const fn new(system: u32, tick: u64, scope: u64) -> Self {
-        Self { system, tick, scope }
+        Self {
+            system,
+            tick,
+            scope,
+        }
     }
 
     /// The identifier of the system drawing from this substream.

@@ -19,10 +19,10 @@
 //! hashes across twin runs (Vol. V Ch. 4 §4.2). The remaining modules are scaffolded to
 //! their governing sections and filled in roadmap order.
 
+pub mod events;
 pub mod hash;
 pub mod identity;
-pub mod store;
-pub mod scheduler;
 pub mod rng;
+pub mod scheduler;
+pub mod store;
 pub mod tick;
-pub mod events;
