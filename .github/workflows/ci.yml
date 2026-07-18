@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-test-doc:
+    name: build · test · doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      # Informational: rustfmt versions can drift, so this never blocks a PR.
+      - name: Format check
+        run: cargo fmt --all --check
+        continue-on-error: true
+
+      # missing_docs and unsafe_code are denied by the workspace lints, so a doc gap or any
+      # unsafe block fails this build directly — the layer law is enforced the same way,
+      # because a domain cannot use another domain without a dependency it does not declare.
+      - name: Build workspace
+        run: cargo build --workspace --all-targets
+
+      # Runs the kernel unit tests and the determinism twin-run harness.
+      - name: Test workspace
+        run: cargo test --workspace
+
+      - name: Build docs
+        run: cargo doc --workspace --no-deps
