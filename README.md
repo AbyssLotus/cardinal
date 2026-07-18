@@ -3,7 +3,9 @@
 A persistent world simulation engine. Narrative emerges from system interaction —
 the narrator only describes state the simulation has already computed and committed.
 
-See [CARDINAL_DESIGN_SPEC.md](CARDINAL_DESIGN_SPEC.md) for the authoritative design.
+See [docs/design-spec/README.md](docs/design-spec/README.md) — *Cardinal Definitive Reference, Volume I: First Principles* — for
+the authoritative design. It sits above the prior implementation specification, preserved for
+reference at [docs/archive/CARDINAL_DESIGN_SPEC.md](docs/archive/CARDINAL_DESIGN_SPEC.md).
 
 ## Status
 
