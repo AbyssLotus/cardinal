@@ -1,0 +1,17 @@
+[package]
+name = "resources"
+description = "Resources domain (Vol. III Ch. 3): definitions, deposits, grades, non-living stocks, regeneration."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+# LAW (Vol. V Ch. 1 §1.1, rule 2): a domain depends on `kernel` ONLY. Adding any other
+# domain here is an architectural-law violation -- cross-domain effect goes through
+# committed proposals and events (Vol. III Ch. 12 §12.1), never a direct dependency.
+[dependencies]
+kernel.workspace = true

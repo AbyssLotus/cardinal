@@ -1,0 +1,15 @@
+[package]
+name = "tools"
+description = "Tools frontend: inspectors, meters, transcript viewers over the observe/replay planes (Vol. V Ch. 6 & 8)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+observe.workspace = true
+replay.workspace = true
