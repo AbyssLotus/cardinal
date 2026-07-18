@@ -1,0 +1,75 @@
+# Cardinal — reference engine workspace.
+#
+# The four-layer dependency law (Vol. V Ch. 1 §1.1) is made mechanical here: each layer is
+# its own crate (or set of crates), and dependencies may point downward ONLY —
+# frontends -> services -> domains -> kernel. A domain that imports another domain cannot
+# compile, because it would have to declare that domain as a dependency, and that
+# declaration is a visible, reviewable violation (§1.1 rule 2). Structure reads as the
+# architecture (§1.3).
+#
+# Edition note: this scaffold targets Rust edition 2021 (resolver 2) for broad toolchain
+# availability. The code is forward-compatible with current stable; bumping to edition 2024
+# is a mechanical follow-up once the pinned toolchain floor is raised.
+
+[workspace]
+resolver = "2"
+members = [
+    "kernel",
+
+    # domains/ — one crate per Volume III domain (Appendix A owners).
+    "domains/physical",
+    "domains/living",
+    "domains/resources",
+    "domains/economy",
+    "domains/society",
+    "domains/culture",
+    "domains/knowledge",
+    "domains/conflict",
+    "domains/institutions",
+    "domains/ecology",
+
+    # services/ — operate AROUND the world (read-only / persistence).
+    "services/persistence",
+    "services/packages",
+    "services/observe",
+    "services/replay",
+
+    # frontends/ — consume entitled streams, submit validated input.
+    "frontends/cli",
+    "frontends/narrator",
+    "frontends/tools",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.75"
+authors = ["AbyssLotus"]
+repository = "https://github.com/AbyssLotus/cardinal"
+
+# Path dependencies, declared once. A crate opts in with e.g. `kernel.workspace = true`.
+# The set a crate is ALLOWED to list is constrained by the layer law above — see each
+# crate's Cargo.toml for the rule that binds it.
+[workspace.dependencies]
+kernel       = { path = "kernel" }
+physical     = { path = "domains/physical" }
+living       = { path = "domains/living" }
+resources    = { path = "domains/resources" }
+economy      = { path = "domains/economy" }
+society      = { path = "domains/society" }
+culture      = { path = "domains/culture" }
+knowledge    = { path = "domains/knowledge" }
+conflict     = { path = "domains/conflict" }
+institutions = { path = "domains/institutions" }
+ecology      = { path = "domains/ecology" }
+persistence  = { path = "services/persistence" }
+packages     = { path = "services/packages" }
+observe      = { path = "services/observe" }
+replay       = { path = "services/replay" }
+
+# Lints inherited by every crate (`[lints] workspace = true`). These encode the repo's
+# documentation and safety standards as build gates, not review notes.
+[workspace.lints.rust]
+missing_docs      = "deny"   # every public item carries a doc comment (root README standard)
+unsafe_code       = "deny"   # determinism/safety posture; a crate may override with rationale
+unreachable_pub   = "warn"   # keep public surfaces intentional and explicit (Vol. V Ch. 1)

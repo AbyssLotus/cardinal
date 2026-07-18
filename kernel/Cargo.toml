@@ -1,0 +1,16 @@
+[package]
+name = "kernel"
+description = "Cardinal kernel: reality store, tick pipeline, scheduler, RNG, chronicle, identity (Vol. II; Vol. V Ch. 1-4)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+# LAW (Vol. V Ch. 1 §1.1): the kernel is the bottom of the graph. It has NO workspace
+# dependencies — not a domain, not a service, not a frontend. Anything here would invert
+# the dependency law. The kernel knows facts, ticks, and streams; never a deer or a sword.
+[dependencies]

@@ -1,0 +1,14 @@
+[package]
+name = "narrator"
+description = "Narrator frontend: turns entitled observation streams into prose; never a state dependency (Vol. V Ch. 9)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+observe.workspace = true

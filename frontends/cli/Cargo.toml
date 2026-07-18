@@ -1,0 +1,21 @@
+[package]
+name = "cli"
+description = "Cardinal CLI frontend: loads worlds via `packages`, reads entitled streams via `observe`."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "cardinal"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+# Frontend seam (Vol. V Ch. 1 §1.1): consumes SERVICES. A frontend may depend on services
+# (and, where needed, on domain/kernel types) -- never the reverse.
+[dependencies]
+packages.workspace = true
+observe.workspace = true
