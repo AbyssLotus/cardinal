@@ -14,6 +14,10 @@ prior implementation specification (preserved at
 3. [Volume III: Domains of Reality](volume-3-domains-of-reality/README.md) — every major
    simulation domain: its purpose, owned facts, boundaries, interactions, invariants, and
    anti-patterns, closing with emergence and the cross-domain composition law.
+4. [Volume IV: World Packages](volume-4-world-packages/README.md) — how worlds are
+   assembled: the package contract, rules and domain selection, content composition,
+   generation, scenarios, versioning and migration, validation and testing, and five
+   demonstration worlds on the unmodified engine.
 
-Volumes IV (World Packages) and V (Reference Architecture) are planned; the construction
-roadmap is at [ROADMAP.md](ROADMAP.md).
+Volume V (Reference Architecture) is planned; the construction roadmap is at
+[ROADMAP.md](ROADMAP.md).
