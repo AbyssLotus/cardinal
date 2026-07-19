@@ -165,6 +165,11 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         humidity_baseline: package.physical_rules.humidity_baseline,
         humidity_swing: package.physical_rules.humidity_swing,
         humidity_drying_divisor: package.physical_rules.humidity_drying_divisor,
+        pressure_sea_level: package.physical_rules.pressure_sea_level,
+        pressure_elevation_factor: package.physical_rules.pressure_elevation_factor,
+        pressure_weather_swing: package.physical_rules.pressure_weather_swing,
+        pressure_settle_divisor: package.physical_rules.pressure_settle_divisor,
+        wind_gradient_divisor: package.physical_rules.wind_gradient_divisor,
     };
     let physical = PhysicalDomain::new(region_ids, config);
     systems.extend(physical.systems());

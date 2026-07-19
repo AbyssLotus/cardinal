@@ -6,15 +6,22 @@
 //! (a deterministic day/night swing plus stochastic weather), illumination (the sun's
 //! position), and humidity (weather). Implement causes, never outcomes (Vol. III Ch. 11).
 
-use crate::schema::{HUMIDITY, ILLUMINATION, TEMPERATURE};
+use crate::schema::{
+    ADJACENT_TO, ELEVATION, HUMIDITY, ILLUMINATION, PRESSURE, TEMPERATURE, WIND_SPEED, WIND_TOWARD,
+};
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::identity::EntityId;
 use kernel::proposal::{Change, Proposal};
 use kernel::system::{Cadence, CommittedView, System, TickContext};
+use kernel::value::Value;
 
 const TEMPERATURE_RW: &[FactType] = &[TEMPERATURE];
 const ILLUMINATION_W: &[FactType] = &[ILLUMINATION];
 const HUMIDITY_RW: &[FactType] = &[HUMIDITY];
+const PRESSURE_READS: &[FactType] = &[PRESSURE, ELEVATION];
+const PRESSURE_WRITES: &[FactType] = &[PRESSURE];
+const WIND_READS: &[FactType] = &[ADJACENT_TO, PRESSURE];
+const WIND_WRITES: &[FactType] = &[WIND_SPEED, WIND_TOWARD];
 const NOTHING: &[FactType] = &[];
 
 /// An integer triangle wave in `0..=amp` over `period`, peaking at mid-period.
@@ -240,5 +247,200 @@ impl System for Precipitation {
             Change::Delta(drift + noise),
             Cause::new("precipitation"),
         )]
+    }
+}
+
+/// Atmospheric pressure dynamics (Vol. III Ch. 1 §1.10): pressure settles toward a baseline
+/// that falls with elevation, perturbed by stochastic weather. Reads the region's elevation
+/// and its own pressure; creates the fact at the elevation baseline on the first tick.
+pub struct PressureSystem {
+    region: EntityId,
+    sea_level: i64,
+    elevation_factor: i64,
+    weather_swing: i64,
+    settle_divisor: i64,
+}
+
+impl PressureSystem {
+    /// Configure pressure for `region`. `sea_level` is baseline pressure at the datum;
+    /// `elevation_factor` is decapascals dropped per metre of elevation; `weather_swing` and
+    /// `settle_divisor` govern the stochastic perturbation and the drift back to baseline
+    /// (world-package rules, Vol. IV Ch. 2).
+    pub const fn new(
+        region: EntityId,
+        sea_level: i64,
+        elevation_factor: i64,
+        weather_swing: i64,
+        settle_divisor: i64,
+    ) -> Self {
+        Self {
+            region,
+            sea_level,
+            elevation_factor,
+            weather_swing,
+            settle_divisor,
+        }
+    }
+
+    fn baseline(&self, elevation_cm: i64) -> i64 {
+        // Elevation stored in centimetres; drop pressure per metre climbed.
+        (self.sea_level - (elevation_cm / 100) * self.elevation_factor).max(0)
+    }
+}
+
+impl System for PressureSystem {
+    fn id(&self) -> SystemId {
+        SystemId::new("physical.pressure")
+    }
+    fn reads(&self) -> &'static [FactType] {
+        PRESSURE_READS
+    }
+    fn writes(&self) -> &'static [FactType] {
+        PRESSURE_WRITES
+    }
+    fn cadence(&self) -> Cadence {
+        Cadence::EveryTick
+    }
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+        let elevation = view
+            .read(FactKey::new(self.region, ELEVATION))
+            .and_then(|f| f.value.as_int())
+            .unwrap_or(0);
+        let baseline = self.baseline(elevation);
+        let key = FactKey::new(self.region, PRESSURE);
+        match view.read(key) {
+            None => vec![Proposal::new(
+                self.id(),
+                key,
+                ctx.tick(),
+                Change::Create(Value::Int(baseline)),
+                Cause::new("pressure_baseline"),
+            )],
+            Some(fact) => match fact.value.as_int() {
+                None => Vec::new(),
+                Some(current) => {
+                    let drift = (baseline - current) / self.settle_divisor.max(1);
+                    let swing = self.weather_swing.max(0);
+                    let mut rng = ctx.rng(self.region.raw());
+                    let noise = rng.below((swing as u64) * 2 + 1) as i64 - swing;
+                    vec![Proposal::new(
+                        self.id(),
+                        key,
+                        ctx.tick(),
+                        Change::Delta(drift + noise),
+                        Cause::new("pressure_weather"),
+                    )]
+                }
+            },
+        }
+    }
+}
+
+/// Wind as the consequence of pressure gradients across the topology (Vol. III Ch. 1 §1.10,
+/// "Wind flows"). Reads the region's pressure and every neighbour's pressure (via adjacency),
+/// then blows toward the lowest-pressure neighbour with a speed proportional to the gradient
+/// — a genuinely multi-fact, topology-aware system that writes both wind facts. Calm (speed
+/// zero, no direction) when no neighbour is lower. Wind therefore lags pressure by one tick,
+/// as effects chain across commits (Vol. III Ch. 12 §12.2).
+pub struct WindSystem {
+    region: EntityId,
+    gradient_divisor: i64,
+    max_wind: i64,
+}
+
+impl WindSystem {
+    /// Configure wind for `region`. `gradient_divisor` scales speed per unit pressure
+    /// difference (larger = gentler); `max_wind` clamps the speed (world-package rules).
+    pub const fn new(region: EntityId, gradient_divisor: i64, max_wind: i64) -> Self {
+        Self {
+            region,
+            gradient_divisor,
+            max_wind,
+        }
+    }
+}
+
+impl System for WindSystem {
+    fn id(&self) -> SystemId {
+        SystemId::new("physical.wind")
+    }
+    fn reads(&self) -> &'static [FactType] {
+        WIND_READS
+    }
+    fn writes(&self) -> &'static [FactType] {
+        WIND_WRITES
+    }
+    fn cadence(&self) -> Cadence {
+        Cadence::EveryTick
+    }
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+        let my_pressure = match view
+            .read(FactKey::new(self.region, PRESSURE))
+            .and_then(|f| f.value.as_int())
+        {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
+
+        // Scan neighbours (a cardinality-many read) for the lowest pressure; deterministic
+        // tie-break by smallest entity id.
+        let mut best: Option<(EntityId, i64)> = None;
+        for f in view.read_all(FactKey::new(self.region, ADJACENT_TO)) {
+            if let Value::Entity(neighbour) = f.value {
+                if let Some(np) = view
+                    .read(FactKey::new(neighbour, PRESSURE))
+                    .and_then(|nf| nf.value.as_int())
+                {
+                    let better = match best {
+                        None => true,
+                        Some((bn, bp)) => np < bp || (np == bp && neighbour.raw() < bn.raw()),
+                    };
+                    if better {
+                        best = Some((neighbour, np));
+                    }
+                }
+            }
+        }
+
+        let speed_key = FactKey::new(self.region, WIND_SPEED);
+        let toward_key = FactKey::new(self.region, WIND_TOWARD);
+        match best {
+            Some((neighbour, np)) if np < my_pressure => {
+                let speed =
+                    ((my_pressure - np) / self.gradient_divisor.max(1)).clamp(0, self.max_wind);
+                vec![
+                    Proposal::new(
+                        self.id(),
+                        speed_key,
+                        ctx.tick(),
+                        Change::Set(Value::Int(speed)),
+                        Cause::new("pressure_gradient"),
+                    ),
+                    Proposal::new(
+                        self.id(),
+                        toward_key,
+                        ctx.tick(),
+                        Change::Set(Value::Entity(neighbour)),
+                        Cause::new("pressure_gradient"),
+                    ),
+                ]
+            }
+            _ => vec![
+                Proposal::new(
+                    self.id(),
+                    speed_key,
+                    ctx.tick(),
+                    Change::Set(Value::Int(0)),
+                    Cause::new("calm"),
+                ),
+                Proposal::new(
+                    self.id(),
+                    toward_key,
+                    ctx.tick(),
+                    Change::Tombstone,
+                    Cause::new("calm"),
+                ),
+            ],
+        }
     }
 }

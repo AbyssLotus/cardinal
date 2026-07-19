@@ -1,8 +1,8 @@
 //! # Physical Reality domain -- Vol. III Ch. 1
 //!
-//! Owns (Appendix A): space (position, containment, elevation), connectivity, materials,
-//! and environmental state. "Physical Reality rarely owns the actors. It owns the stage upon
-//! which they act" (Vol. III Ch. 1 §1.13).
+//! Owns (Appendix A): space (position, containment, elevation, adjacency), connectivity,
+//! materials, and environmental state. "Physical Reality rarely owns the actors. It owns the
+//! stage upon which they act" (Vol. III Ch. 1 §1.13).
 //!
 //! **Mandatory in every world** (Vol. IV Ch. 2 §2.1): the one domain that may never be
 //! disabled -- every fact needs somewhere to exist (Vol. III Ch. 1 §1.4).
@@ -12,12 +12,14 @@
 //! facts, never direct calls (Vol. III Ch. 12 §12.1).
 //!
 //! ## What this crate represents so far
-//! Single-valued facts over many regions: [`schema::CONTAINED_IN`] (immediate containment,
-//! walked into a hierarchy) and [`schema::ELEVATION`] as space; and the environmental fields
-//! [`schema::TEMPERATURE`], [`schema::ILLUMINATION`] (a day/night cycle), and
-//! [`schema::HUMIDITY`] (weather), each varying across space and time (Vol. III Ch. 1 §1.10).
-//! Many-valued relationships -- a location's overlapping regions (§1.7) and a region's
-//! neighbours across topologies (§1.5) -- await a cardinality-many fact model.
+//! Space: [`schema::CONTAINED_IN`] (immediate containment, walked into a hierarchy),
+//! [`schema::ELEVATION`], and [`schema::ADJACENT_TO`] (a cardinality-many topology). The
+//! environmental fields, each varying across space and time (Vol. III Ch. 1 §1.10):
+//! [`schema::TEMPERATURE`], [`schema::ILLUMINATION`] (a day/night cycle), [`schema::HUMIDITY`]
+//! (weather), [`schema::PRESSURE`] (falls with elevation, drifts with weather), and wind --
+//! [`schema::WIND_SPEED`] and [`schema::WIND_TOWARD`] -- which flows down the pressure
+//! gradient across adjacent regions. Overlapping regions (§1.7) and materials (§1.9) remain
+//! to build on the multi-value foundation.
 
 pub mod composition;
 pub mod schema;
@@ -31,8 +33,8 @@ use kernel::system::System;
 use kernel::value::Value;
 
 /// The tunable rules the physical domain consumes, all sourced from the world package
-/// (Vol. IV Ch. 2 §2.2, invariant 5) — no climate or field number is hardcoded in engine
-/// code.
+/// (Vol. IV Ch. 2 §2.2, invariant 5) — no climate, field, or wind number is hardcoded in
+/// engine code.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PhysicalConfig {
     /// Ticks in one day/night cycle (shared by temperature and illumination).
@@ -49,13 +51,24 @@ pub struct PhysicalConfig {
     pub humidity_swing: i64,
     /// Divisor governing how fast humidity returns to baseline (larger = slower).
     pub humidity_drying_divisor: i64,
+    /// Baseline atmospheric pressure at the datum, in decapascals.
+    pub pressure_sea_level: i64,
+    /// Decapascals of pressure lost per metre of elevation.
+    pub pressure_elevation_factor: i64,
+    /// Maximum per-tick pressure weather perturbation, in decapascals.
+    pub pressure_weather_swing: i64,
+    /// Divisor governing how fast pressure returns to its baseline (larger = slower).
+    pub pressure_settle_divisor: i64,
+    /// Divisor scaling wind speed per unit pressure gradient (larger = gentler wind).
+    pub wind_gradient_divisor: i64,
 }
 
 /// The Physical Reality domain, plugged into the kernel (Appendix A owner of the stage).
 ///
 /// Configured over a set of regions sharing one set of environmental rules; each region
-/// carries its own temperature, illumination, and humidity, evolving under its own weather
-/// substreams. Elevation and containment are seeded facts (state, not system-driven here).
+/// carries its own temperature, illumination, humidity, pressure, and wind, evolving under
+/// its own weather substreams. Elevation, containment, and adjacency are seeded facts (state,
+/// not system-driven here).
 pub struct PhysicalDomain {
     regions: Vec<EntityId>,
     config: PhysicalConfig,
@@ -77,6 +90,9 @@ impl Domain for PhysicalDomain {
         fact_type == schema::TEMPERATURE
             || fact_type == schema::ILLUMINATION
             || fact_type == schema::HUMIDITY
+            || fact_type == schema::PRESSURE
+            || fact_type == schema::WIND_SPEED
+            || fact_type == schema::WIND_TOWARD
             || fact_type == schema::ELEVATION
             || fact_type == schema::CONTAINED_IN
             || fact_type == schema::ADJACENT_TO
@@ -92,7 +108,7 @@ impl Domain for PhysicalDomain {
     }
 
     fn systems(&self) -> Vec<Box<dyn System>> {
-        let mut out: Vec<Box<dyn System>> = Vec::with_capacity(self.regions.len() * 4);
+        let mut out: Vec<Box<dyn System>> = Vec::with_capacity(self.regions.len() * 6);
         for &region in &self.regions {
             out.push(Box::new(systems::DiurnalCycle::new(
                 region,
@@ -114,6 +130,18 @@ impl Domain for PhysicalDomain {
                 self.config.humidity_swing,
                 self.config.humidity_drying_divisor,
             )));
+            out.push(Box::new(systems::PressureSystem::new(
+                region,
+                self.config.pressure_sea_level,
+                self.config.pressure_elevation_factor,
+                self.config.pressure_weather_swing,
+                self.config.pressure_settle_divisor,
+            )));
+            out.push(Box::new(systems::WindSystem::new(
+                region,
+                self.config.wind_gradient_divisor,
+                schema::MAX_WIND,
+            )));
         }
         out
     }
@@ -128,8 +156,12 @@ impl Domain for PhysicalDomain {
             composition::compose_additive(current, changes)
         } else if fact_type == schema::ILLUMINATION || fact_type == schema::HUMIDITY {
             composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
-        } else if fact_type == schema::CONTAINED_IN {
-            composition::compose_containment(current, changes)
+        } else if fact_type == schema::PRESSURE {
+            composition::compose_bounded(current, changes, 0, schema::MAX_PRESSURE)
+        } else if fact_type == schema::WIND_SPEED {
+            composition::compose_bounded(current, changes, 0, schema::MAX_WIND)
+        } else if fact_type == schema::CONTAINED_IN || fact_type == schema::WIND_TOWARD {
+            composition::compose_entity_ref(current, changes)
         } else {
             Err(ResolveError::new(
                 "physical: fact type not owned by this domain",
@@ -146,10 +178,12 @@ impl Domain for PhysicalDomain {
                     ));
                 }
             }
-        } else if fact_type == schema::CONTAINED_IN {
+        } else if fact_type == schema::CONTAINED_IN || fact_type == schema::WIND_TOWARD {
             if let Resolved::Write(v) = value {
                 if !matches!(v, Value::Entity(_)) {
-                    return Err(ValidationError::new("containment must reference an entity"));
+                    return Err(ValidationError::new(
+                        "this spatial fact must reference an entity",
+                    ));
                 }
             }
         }

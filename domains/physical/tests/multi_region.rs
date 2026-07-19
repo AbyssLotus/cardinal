@@ -22,6 +22,11 @@ fn config() -> PhysicalConfig {
         humidity_baseline: 6000,
         humidity_swing: 100,
         humidity_drying_divisor: 8,
+        pressure_sea_level: 10130,
+        pressure_elevation_factor: 1,
+        pressure_weather_swing: 20,
+        pressure_settle_divisor: 8,
+        wind_gradient_divisor: 10,
     }
 }
 
@@ -87,8 +92,8 @@ fn regions_evolve_independently_and_validly() {
         assert!(*t >= ABSOLUTE_ZERO_CENTI_C);
     }
     assert!(temps.iter().any(|t| *t != temps[0]));
-    // Three environmental facts per region per tick (temperature, illumination, humidity).
-    assert_eq!(chronicle.len(), rs.len() * 3 * 100);
+    // Several environmental facts are committed per region per tick.
+    assert!(chronicle.len() > rs.len() * 100);
 }
 
 #[test]

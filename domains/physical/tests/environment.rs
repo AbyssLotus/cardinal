@@ -22,6 +22,11 @@ fn config() -> PhysicalConfig {
         humidity_baseline: 6000,
         humidity_swing: 100,
         humidity_drying_divisor: 8,
+        pressure_sea_level: 10130,
+        pressure_elevation_factor: 1,
+        pressure_weather_swing: 20,
+        pressure_settle_divisor: 8,
+        wind_gradient_divisor: 10,
     }
 }
 

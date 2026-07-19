@@ -13,7 +13,7 @@ use kernel::system::CommittedView;
 use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use packages::{engine_version, load, parse_world, LoadedWorld};
-use physical::schema::{ADJACENT_TO, CONTAINED_IN, TEMPERATURE};
+use physical::schema::{ADJACENT_TO, CONTAINED_IN, TEMPERATURE, WIND_SPEED, WIND_TOWARD};
 
 const MENAGERIE: &str = include_str!("../../../worlds/menagerie.world");
 
@@ -148,4 +148,37 @@ fn regions_are_adjacent_in_the_loaded_world() {
 
     assert!(neighbours(&world, 1).contains(&2));
     assert!(neighbours(&world, 2).contains(&1)); // symmetric
+}
+
+#[test]
+fn wind_develops_between_adjacent_regions_in_the_loaded_world() {
+    // Region 1 (alpine, high) and region 2 (lowland, low) border each other; pressure falls
+    // with elevation, so wind blows from the lowland toward the alpine region.
+    let pkg = parse_world(MENAGERIE).unwrap();
+    let mut world = load(&pkg, engine_version()).unwrap();
+    let mut chronicle: Vec<ChronicleEntry> = Vec::new();
+    for t in 1..=60 {
+        world.tick(t, 42, &mut chronicle).expect("tick commits");
+    }
+
+    let toward = match world
+        .store()
+        .read(FactKey::new(EntityId::from_raw(2), WIND_TOWARD))
+        .map(|f| f.value)
+    {
+        Some(Value::Entity(e)) => Some(e.raw()),
+        _ => None,
+    };
+    let speed = world
+        .store()
+        .read(FactKey::new(EntityId::from_raw(2), WIND_SPEED))
+        .and_then(|f| f.value.as_int())
+        .unwrap_or(0);
+
+    assert_eq!(
+        toward,
+        Some(1),
+        "lowland wind should blow toward the alpine region"
+    );
+    assert!(speed > 0, "lowland should have a nonzero wind speed");
 }

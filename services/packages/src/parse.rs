@@ -61,6 +61,11 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut humidity_baseline: Option<i64> = None;
     let mut humidity_swing: Option<i64> = None;
     let mut humidity_drying_divisor: Option<i64> = None;
+    let mut pressure_sea_level: Option<i64> = None;
+    let mut pressure_elevation_factor: Option<i64> = None;
+    let mut pressure_weather_swing: Option<i64> = None;
+    let mut pressure_settle_divisor: Option<i64> = None;
+    let mut wind_gradient_divisor: Option<i64> = None;
     let mut set_point: Option<i64> = None;
     let mut warm_response: Option<i64> = None;
     let mut cold_response: Option<i64> = None;
@@ -121,6 +126,17 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "humidity_drying_divisor" => {
                     humidity_drying_divisor = Some(parse_num(value, line_no)?)
                 }
+                "pressure_sea_level" => pressure_sea_level = Some(parse_num(value, line_no)?),
+                "pressure_elevation_factor" => {
+                    pressure_elevation_factor = Some(parse_num(value, line_no)?)
+                }
+                "pressure_weather_swing" => {
+                    pressure_weather_swing = Some(parse_num(value, line_no)?)
+                }
+                "pressure_settle_divisor" => {
+                    pressure_settle_divisor = Some(parse_num(value, line_no)?)
+                }
+                "wind_gradient_divisor" => wind_gradient_divisor = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -201,6 +217,23 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         humidity_drying_divisor: require(
             humidity_drying_divisor,
             "rules.physical.humidity_drying_divisor",
+        )?,
+        pressure_sea_level: require(pressure_sea_level, "rules.physical.pressure_sea_level")?,
+        pressure_elevation_factor: require(
+            pressure_elevation_factor,
+            "rules.physical.pressure_elevation_factor",
+        )?,
+        pressure_weather_swing: require(
+            pressure_weather_swing,
+            "rules.physical.pressure_weather_swing",
+        )?,
+        pressure_settle_divisor: require(
+            pressure_settle_divisor,
+            "rules.physical.pressure_settle_divisor",
+        )?,
+        wind_gradient_divisor: require(
+            wind_gradient_divisor,
+            "rules.physical.wind_gradient_divisor",
         )?,
     };
     let living_rules = match (set_point, warm_response, cold_response) {

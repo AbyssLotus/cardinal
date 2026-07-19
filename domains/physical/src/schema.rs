@@ -48,6 +48,21 @@ pub const ILLUMINATION: FactType = FactType::new("physical.environment.illuminat
 /// (Vol. III Ch. 1 §1.10, environmental state).
 pub const HUMIDITY: FactType = FactType::new("physical.environment.humidity");
 
+/// Atmospheric pressure at a location, in decapascals (hPa x 10) as fixed-point
+/// (Vol. III Ch. 1 §1.10). Falls with elevation and drifts with weather; the pressure
+/// gradient between adjacent regions is what drives wind.
+pub const PRESSURE: FactType = FactType::new("physical.environment.pressure");
+
+/// Wind speed at a location, in centimetres per second (Vol. III Ch. 1 §1.10, "Wind flows").
+/// Magnitude only; direction is [`WIND_TOWARD`].
+pub const WIND_SPEED: FactType = FactType::new("physical.environment.wind_speed");
+
+/// The neighbouring region the wind blows toward — wind's direction expressed *in the
+/// graph* rather than as a compass bearing, since space is representation-independent
+/// (Vol. III Ch. 1 §1.4; "downwind" is a spatial relation, §1.6). An entity ref to the
+/// downwind region; absent when the air is calm.
+pub const WIND_TOWARD: FactType = FactType::new("physical.environment.wind_toward");
+
 // ---- Physical constants (laws of the mechanism, not tunable world rules) ----------------
 
 /// Absolute zero in centidegrees Celsius (−273.15 °C) — the floor below which temperature is
@@ -56,3 +71,10 @@ pub const ABSOLUTE_ZERO_CENTI_C: i64 = -27315;
 
 /// The maximum value of a percentage field (illumination, humidity): 100.00%.
 pub const PERCENT_FULL: i64 = 10000;
+
+/// Ceiling for atmospheric pressure (decapascals) — clamps the field to a sane range, well
+/// above any real surface pressure (~1013 hPa = 10130 decapascals).
+pub const MAX_PRESSURE: i64 = 20000;
+
+/// Ceiling for wind speed (centimetres/second) — clamps the field well above any real wind.
+pub const MAX_WIND: i64 = 100000;

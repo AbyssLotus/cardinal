@@ -74,10 +74,11 @@ pub fn compose_bounded(
     }
 }
 
-/// Resolve containment: a `Set`/`Create` names the new container (an entity ref); two
-/// competing containers with no declared tie-break fail; a `Tombstone` removes containment
-/// (the entity exists nowhere). Containment takes no numeric delta. Used by `contained_in`.
-pub fn compose_containment(
+/// Resolve a single entity-reference fact: a `Set`/`Create` names the referenced entity;
+/// two competing references with no declared tie-break fail; a `Tombstone` clears it. Such a
+/// fact takes no numeric delta and no Add/Remove. Used by `contained_in` (an entity's
+/// container) and `wind_toward` (the downwind region).
+pub fn compose_entity_ref(
     current: Option<Value>,
     changes: &[Change],
 ) -> Result<Resolved, ResolveError> {
@@ -89,22 +90,24 @@ pub fn compose_containment(
         match change {
             Change::Set(v) | Change::Create(v) => {
                 if !matches!(v, Value::Entity(_)) {
-                    return Err(ResolveError::new("containment must reference an entity"));
+                    return Err(ResolveError::new("this fact must reference an entity"));
                 }
                 if set_seen {
                     return Err(ResolveError::new(
-                        "two competing containers with no declared tie-break",
+                        "two competing entity references with no declared tie-break",
                     ));
                 }
                 set_seen = true;
                 container = Some(*v);
             }
             Change::Delta(_) => {
-                return Err(ResolveError::new("containment cannot take a numeric delta"))
+                return Err(ResolveError::new(
+                    "an entity-reference fact cannot take a numeric delta",
+                ))
             }
             Change::Add(_) | Change::Remove(_) => {
                 return Err(ResolveError::new(
-                    "containment is single-valued; use Set/Create, not Add/Remove",
+                    "an entity-reference fact is single-valued; use Set/Create, not Add/Remove",
                 ))
             }
             Change::Tombstone => tombstone = true,
@@ -114,20 +117,20 @@ pub fn compose_containment(
     if tombstone {
         if set_seen {
             return Err(ResolveError::new(
-                "containment tombstone conflicts with a set on the same tick",
+                "an entity-reference tombstone conflicts with a set on the same tick",
             ));
         }
         return Ok(Resolved::Tombstone);
     }
 
-    container
-        .map(Resolved::Write)
-        .ok_or(ResolveError::new("containment resolved with no value"))
+    container.map(Resolved::Write).ok_or(ResolveError::new(
+        "entity-reference fact resolved with no value",
+    ))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{compose_additive, compose_bounded, compose_containment};
+    use super::{compose_additive, compose_bounded, compose_entity_ref};
     use kernel::domain::Resolved;
     use kernel::identity::EntityId;
     use kernel::proposal::Change;
@@ -173,14 +176,14 @@ mod tests {
     }
 
     #[test]
-    fn containment_sets_the_container() {
+    fn entity_ref_sets_the_reference() {
         let region = Value::Entity(EntityId::from_raw(7));
-        let r = compose_containment(None, &[Change::Create(region)]).unwrap();
+        let r = compose_entity_ref(None, &[Change::Create(region)]).unwrap();
         assert_eq!(r, Resolved::Write(region));
     }
 
     #[test]
-    fn containment_rejects_a_numeric_delta() {
-        assert!(compose_containment(None, &[Change::Delta(1)]).is_err());
+    fn entity_ref_rejects_a_numeric_delta() {
+        assert!(compose_entity_ref(None, &[Change::Delta(1)]).is_err());
     }
 }

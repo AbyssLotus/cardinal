@@ -16,6 +16,11 @@ illumination_peak = 10000            # full daylight at midday (100.00%)
 humidity_baseline = 6000             # 60.00% relative humidity
 humidity_swing = 100                 # +/- 1.00% per-tick weather jitter
 humidity_drying_divisor = 8          # how fast humidity returns to baseline
+pressure_sea_level = 10130           # ~1013 hPa baseline at the datum
+pressure_elevation_factor = 1        # decapascals lost per metre of elevation
+pressure_weather_swing = 20          # +/- per-tick pressure jitter
+pressure_settle_divisor = 8          # how fast pressure returns to baseline
+wind_gradient_divisor = 10           # larger = gentler wind per unit pressure gap
 
 # Initial reality: three regions -- temperature (centidegrees C) and elevation (centimetres).
 [regions]

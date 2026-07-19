@@ -16,6 +16,11 @@ illumination_peak = 10000
 humidity_baseline = 5500
 humidity_swing = 80
 humidity_drying_divisor = 8
+pressure_sea_level = 10130           # ~1013 hPa baseline at the datum
+pressure_elevation_factor = 1        # decapascals lost per metre of elevation
+pressure_weather_swing = 20          # +/- per-tick pressure jitter
+pressure_settle_divisor = 8          # how fast pressure returns to baseline
+wind_gradient_divisor = 10           # larger = gentler wind per unit pressure gap
 
 [rules.living]
 set_point_centi_c = 3700     # 37.00 C metabolic set point

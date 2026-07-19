@@ -58,6 +58,16 @@ pub struct PhysicalRules {
     pub humidity_swing: i64,
     /// Divisor governing how fast humidity returns to baseline (larger = slower).
     pub humidity_drying_divisor: i64,
+    /// Baseline atmospheric pressure at the datum, in decapascals.
+    pub pressure_sea_level: i64,
+    /// Decapascals of pressure lost per metre of elevation.
+    pub pressure_elevation_factor: i64,
+    /// Maximum per-tick pressure weather perturbation, in decapascals.
+    pub pressure_weather_swing: i64,
+    /// Divisor governing how fast pressure returns to baseline (larger = slower).
+    pub pressure_settle_divisor: i64,
+    /// Divisor scaling wind speed per unit pressure gradient (larger = gentler wind).
+    pub wind_gradient_divisor: i64,
 }
 
 /// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2).
