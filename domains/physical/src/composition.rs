@@ -1,21 +1,19 @@
 //! Proposal-composition for Physical Reality-owned fact types (Vol. IV Ch. 2).
 //!
 //! Composition rules decide how competing proposals against an owned fact reconcile before
-//! commit (Vol. V Ch. 3 §3.1, Resolve). Every tunable threshold lives in the world package,
-//! never here (Vol. IV Ch. 2 §2.2).
+//! commit (Vol. V Ch. 3 §3.1, Resolve). Scalar fields sum their deltas; percentage fields
+//! sum then clamp to their range; containment is set-valued. Every tunable threshold lives
+//! in the world package, never here (Vol. IV Ch. 2 §2.2).
 
 use kernel::domain::{ResolveError, Resolved};
 use kernel::proposal::Change;
 use kernel::value::Value;
 
-/// Compose competing temperature proposals into one resolved outcome.
-///
-/// Rule: at most one `Set`/`Create` may establish the base (two competing sets are an
-/// undeclared conflict and fail — Vol. V Ch. 3 §3.5, invariant 4); then all `Delta`s sum
-/// onto it. With no proposal touching the base, deltas apply to the current committed
-/// value. A `Tombstone` may not share the tick with a set or delta. This is the
-/// owner-declared rule the kernel's Resolve stage calls (Vol. IV Ch. 2).
-pub fn compose_temperature(
+/// Sum deltas onto the current value: at most one `Set`/`Create` establishes the base (two
+/// competing sets are an undeclared conflict and fail — Vol. V Ch. 3 §3.5, invariant 4),
+/// then all `Delta`s sum onto it. A `Tombstone` may not share the tick with a set or delta.
+/// The base for a fact with no committed value is zero. Used by temperature and elevation.
+pub fn compose_additive(
     current: Option<Value>,
     changes: &[Change],
 ) -> Result<Resolved, ResolveError> {
@@ -29,10 +27,10 @@ pub fn compose_temperature(
             Change::Set(v) | Change::Create(v) => {
                 let n = v
                     .as_int()
-                    .ok_or(ResolveError::new("temperature must be an integer value"))?;
+                    .ok_or(ResolveError::new("this fact requires an integer value"))?;
                 if set_seen {
                     return Err(ResolveError::new(
-                        "two competing temperature sets with no declared tie-break",
+                        "two competing sets with no declared tie-break",
                     ));
                 }
                 set_seen = true;
@@ -46,7 +44,7 @@ pub fn compose_temperature(
     if tombstone {
         if set_seen || delta_sum != 0 {
             return Err(ResolveError::new(
-                "temperature tombstone conflicts with a set or delta on the same tick",
+                "tombstone conflicts with a set or delta on the same tick",
             ));
         }
         return Ok(Resolved::Tombstone);
@@ -56,17 +54,78 @@ pub fn compose_temperature(
     Ok(Resolved::Write(Value::Int(start.saturating_add(delta_sum))))
 }
 
+/// Sum deltas as [`compose_additive`], then clamp the result into `[min, max]`. Used by the
+/// percentage fields (illumination, humidity), so a random-walk of weather deltas can never
+/// drive them out of range and abort a tick. Tombstones pass through unclamped.
+pub fn compose_bounded(
+    current: Option<Value>,
+    changes: &[Change],
+    min: i64,
+    max: i64,
+) -> Result<Resolved, ResolveError> {
+    match compose_additive(current, changes)? {
+        Resolved::Write(Value::Int(n)) => Ok(Resolved::Write(Value::Int(n.clamp(min, max)))),
+        other => Ok(other),
+    }
+}
+
+/// Resolve containment: a `Set`/`Create` names the new container (an entity ref); two
+/// competing containers with no declared tie-break fail; a `Tombstone` removes containment
+/// (the entity exists nowhere). Containment takes no numeric delta. Used by `contained_in`.
+pub fn compose_containment(
+    current: Option<Value>,
+    changes: &[Change],
+) -> Result<Resolved, ResolveError> {
+    let mut container: Option<Value> = current;
+    let mut set_seen = false;
+    let mut tombstone = false;
+
+    for change in changes {
+        match change {
+            Change::Set(v) | Change::Create(v) => {
+                if !matches!(v, Value::Entity(_)) {
+                    return Err(ResolveError::new("containment must reference an entity"));
+                }
+                if set_seen {
+                    return Err(ResolveError::new(
+                        "two competing containers with no declared tie-break",
+                    ));
+                }
+                set_seen = true;
+                container = Some(*v);
+            }
+            Change::Delta(_) => {
+                return Err(ResolveError::new("containment cannot take a numeric delta"))
+            }
+            Change::Tombstone => tombstone = true,
+        }
+    }
+
+    if tombstone {
+        if set_seen {
+            return Err(ResolveError::new(
+                "containment tombstone conflicts with a set on the same tick",
+            ));
+        }
+        return Ok(Resolved::Tombstone);
+    }
+
+    container
+        .map(Resolved::Write)
+        .ok_or(ResolveError::new("containment resolved with no value"))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::compose_temperature;
+    use super::{compose_additive, compose_bounded, compose_containment};
     use kernel::domain::Resolved;
+    use kernel::identity::EntityId;
     use kernel::proposal::Change;
     use kernel::value::Value;
 
     #[test]
-    fn deltas_sum_onto_current() {
-        // Two systems each nudge temperature; resolution sums their deltas (Vol. IV Ch. 2).
-        let r = compose_temperature(
+    fn additive_sums_deltas_onto_current() {
+        let r = compose_additive(
             Some(Value::Int(2000)),
             &[Change::Delta(30), Change::Delta(-12)],
         )
@@ -75,8 +134,8 @@ mod tests {
     }
 
     #[test]
-    fn set_establishes_base_then_deltas_apply() {
-        let r = compose_temperature(
+    fn additive_set_then_deltas() {
+        let r = compose_additive(
             Some(Value::Int(2000)),
             &[Change::Set(Value::Int(500)), Change::Delta(25)],
         )
@@ -85,11 +144,33 @@ mod tests {
     }
 
     #[test]
-    fn two_competing_sets_are_a_conflict() {
-        let err = compose_temperature(
+    fn additive_two_sets_conflict() {
+        assert!(compose_additive(
             None,
-            &[Change::Set(Value::Int(100)), Change::Set(Value::Int(200))],
-        );
-        assert!(err.is_err());
+            &[Change::Set(Value::Int(1)), Change::Set(Value::Int(2))]
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn bounded_clamps_into_range() {
+        // A large positive delta is clamped to the ceiling.
+        let hi = compose_bounded(Some(Value::Int(9900)), &[Change::Delta(500)], 0, 10000).unwrap();
+        assert_eq!(hi, Resolved::Write(Value::Int(10000)));
+        // A large negative delta is clamped to the floor.
+        let lo = compose_bounded(Some(Value::Int(100)), &[Change::Delta(-500)], 0, 10000).unwrap();
+        assert_eq!(lo, Resolved::Write(Value::Int(0)));
+    }
+
+    #[test]
+    fn containment_sets_the_container() {
+        let region = Value::Entity(EntityId::from_raw(7));
+        let r = compose_containment(None, &[Change::Create(region)]).unwrap();
+        assert_eq!(r, Resolved::Write(region));
+    }
+
+    #[test]
+    fn containment_rejects_a_numeric_delta() {
+        assert!(compose_containment(None, &[Change::Delta(1)]).is_err());
     }
 }

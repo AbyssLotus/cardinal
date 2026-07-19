@@ -12,6 +12,10 @@ domains = physical, living
 ticks_per_day = 24
 diurnal_amplitude_centi_c = 400
 weather_max_swing_centi_c = 40
+illumination_peak = 10000
+humidity_baseline = 5500
+humidity_swing = 80
+humidity_drying_divisor = 8
 
 [rules.living]
 set_point_centi_c = 3700     # 37.00 C metabolic set point
@@ -19,11 +23,16 @@ warm_response = 6            # pull toward the set point (larger = slower)
 cold_response = 3            # pull toward ambient temperature (larger = slower)
 
 [regions]
-# region_id = starting temperature (centidegrees Celsius)
-1 = -800                     # a frigid region, -8.00 C
-2 = 2600                     # a warm region, 26.00 C
+# region_id = temperature[, elevation]
+1 = -800, 240000             # a frigid alpine region, -8.00 C at 2400 m
+2 = 2600, 10000              # a warm lowland region, 26.00 C at 100 m
 
 [organisms]
 # organism_id = region_id, starting body heat (centidegrees Celsius)
 10 = 1, 3700
 20 = 2, 3700
+
+[containment]
+# child_id = parent_id -- each region sits within continent 1000 (hierarchical containment)
+1 = 1000
+2 = 1000

@@ -10,9 +10,10 @@ use kernel::fact::FactKey;
 use kernel::identity::EntityId;
 use kernel::store::RealityStore;
 use kernel::system::CommittedView;
+use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use packages::{engine_version, load, parse_world, LoadedWorld};
-use physical::schema::TEMPERATURE;
+use physical::schema::{CONTAINED_IN, TEMPERATURE};
 
 const MENAGERIE: &str = include_str!("../../../worlds/menagerie.world");
 
@@ -102,4 +103,27 @@ fn living_does_not_perturb_physical() {
         temp_trajectory(&combined, 42),
         temp_trajectory(&physical_only, 42)
     );
+}
+
+#[test]
+fn containment_hierarchy_is_seeded() {
+    // The loader seeds the physical containment links the world file declares:
+    // organism 10 -> region 1 -> continent 1000. Living reads the first hop to find its
+    // region; the rest of the hierarchy is there for any consumer to walk.
+    let pkg = parse_world(MENAGERIE).unwrap();
+    let world = load(&pkg, engine_version()).unwrap();
+
+    let org_in = world
+        .store()
+        .read(FactKey::new(EntityId::from_raw(10), CONTAINED_IN))
+        .expect("organism containment seeded")
+        .value;
+    assert_eq!(org_in, Value::Entity(EntityId::from_raw(1)));
+
+    let region_in = world
+        .store()
+        .read(FactKey::new(EntityId::from_raw(1), CONTAINED_IN))
+        .expect("region containment seeded")
+        .value;
+    assert_eq!(region_in, Value::Entity(EntityId::from_raw(1000)));
 }

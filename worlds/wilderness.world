@@ -12,9 +12,14 @@ domains = physical
 ticks_per_day = 24
 diurnal_amplitude_centi_c = 500      # +5.00 C peak day/night swing
 weather_max_swing_centi_c = 50       # +/- 0.50 C per-tick weather jitter
+illumination_peak = 10000            # full daylight at midday (100.00%)
+humidity_baseline = 6000             # 60.00% relative humidity
+humidity_swing = 100                 # +/- 1.00% per-tick weather jitter
+humidity_drying_divisor = 8          # how fast humidity returns to baseline
 
-# Initial reality: three regions, each with a starting temperature (centidegrees Celsius).
+# Initial reality: three regions -- temperature (centidegrees C) and elevation (centimetres).
 [regions]
-1 = 1500
-2 = 1800
-3 = 2100
+# region_id = temperature[, elevation]
+1 = 1500, 20000
+2 = 1800, 45000
+3 = 2100, 5000

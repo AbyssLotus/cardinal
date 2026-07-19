@@ -8,14 +8,15 @@
 //!
 //! **Domains never import domains** (Vol. V Ch. 1 §1.1, rule 2; Vol. III Ch. 12, inv. 1).
 //! This crate depends on `kernel` and nothing else in the workspace. Its first system,
-//! [`systems::Thermoregulation`], *consumes* Physical Reality's temperature fact — but by
-//! its published id ([`schema::AMBIENT_TEMPERATURE`]), reading committed reality, never
-//! calling or importing the physical crate (Vol. III Ch. 12 §12.1).
+//! [`systems::Thermoregulation`], *consumes* two Physical Reality facts — an organism's
+//! containment ([`schema::CONTAINED_IN`], to learn its region) and that region's temperature
+//! ([`schema::AMBIENT_TEMPERATURE`]) — but by their published ids, reading committed reality,
+//! never calling or importing the physical crate (Vol. III Ch. 12 §12.1).
 //!
 //! ## First slice (Vol. V Ch. 10 §10.4)
 //! The first cross-domain interaction: organisms whose [`schema::BODY_HEAT`] is defended
-//! toward a metabolic set point while the region's temperature pulls it toward ambient —
-//! two domains meeting only in the fact store.
+//! toward a metabolic set point while the temperature of the region they inhabit pulls it
+//! toward ambient — two domains meeting only in the fact store.
 
 pub mod composition;
 pub mod schema;
@@ -28,33 +29,23 @@ use kernel::proposal::Change;
 use kernel::system::System;
 use kernel::value::Value;
 
-/// One organism placed in the world: its entity id and the region it inhabits.
-///
-/// The region link is configuration for now; representing it as a Physical-owned containment
-/// fact is a later step (Appendix A, regions and containment).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct OrganismPlacement {
-    /// The organism entity.
-    pub organism: EntityId,
-    /// The region the organism inhabits, whose temperature it senses.
-    pub region: EntityId,
-}
-
 /// The Living Systems domain, plugged into the kernel (Appendix A owner of vital state).
 ///
-/// Configured over a set of placed organisms sharing one set of metabolic rules. Per-species
-/// rules keyed on declared categories are a later refinement (Vol. IV Ch. 2 §2.2).
+/// Configured over a set of organism entities sharing one set of metabolic rules. Each
+/// organism's region is a Physical containment fact it reads at run time, not domain
+/// configuration. Per-species rules keyed on declared categories are a later refinement
+/// (Vol. IV Ch. 2 §2.2).
 pub struct LivingDomain {
-    organisms: Vec<OrganismPlacement>,
+    organisms: Vec<EntityId>,
     set_point_centi_c: i64,
     warm_response: i64,
     cold_response: i64,
 }
 
 impl LivingDomain {
-    /// Configure the domain for a set of organisms and shared metabolic rules.
+    /// Configure the domain for a set of organism entities and shared metabolic rules.
     pub fn new(
-        organisms: Vec<OrganismPlacement>,
+        organisms: Vec<EntityId>,
         set_point_centi_c: i64,
         warm_response: i64,
         cold_response: i64,
@@ -80,10 +71,9 @@ impl Domain for LivingDomain {
     fn systems(&self) -> Vec<Box<dyn System>> {
         self.organisms
             .iter()
-            .map(|o| {
+            .map(|&organism| {
                 Box::new(systems::Thermoregulation::new(
-                    o.organism,
-                    o.region,
+                    organism,
                     self.set_point_centi_c,
                     self.warm_response,
                     self.cold_response,

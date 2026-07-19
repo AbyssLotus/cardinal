@@ -1,6 +1,6 @@
-//! Multi-region environment: many regions each carry their own temperature, evolve
-//! independently under their own weather substream, and the whole world stays
-//! deterministic (Vol. V Ch. 3-4).
+//! Multi-region environment: many regions each carry their own temperature, illumination,
+//! and humidity, evolving independently under their own weather substreams, and the whole
+//! world stays deterministic (Vol. V Ch. 3-4).
 
 use kernel::domain::Domain;
 use kernel::events::ChronicleEntry;
@@ -11,7 +11,19 @@ use kernel::system::CommittedView;
 use kernel::tick::run_tick;
 use kernel::value::Value;
 use physical::schema::{ABSOLUTE_ZERO_CENTI_C, TEMPERATURE};
-use physical::PhysicalDomain;
+use physical::{PhysicalConfig, PhysicalDomain};
+
+fn config() -> PhysicalConfig {
+    PhysicalConfig {
+        ticks_per_day: 24,
+        diurnal_amplitude_centi_c: 500,
+        weather_max_swing_centi_c: 50,
+        illumination_peak: 10000,
+        humidity_baseline: 6000,
+        humidity_swing: 100,
+        humidity_drying_divisor: 8,
+    }
+}
 
 fn regions(n: u64) -> Vec<EntityId> {
     (1..=n).map(EntityId::from_raw).collect()
@@ -20,7 +32,7 @@ fn regions(n: u64) -> Vec<EntityId> {
 fn seeded_world(rs: &[EntityId]) -> MemoryStore {
     let mut store = MemoryStore::new();
     for (i, r) in rs.iter().enumerate() {
-        let temp = 1500 + (i as i64) * 200; // regions start at different temperatures
+        let temp = 1500 + (i as i64) * 200;
         store.seed(
             FactKey::new(*r, TEMPERATURE),
             Fact::new(
@@ -34,7 +46,7 @@ fn seeded_world(rs: &[EntityId]) -> MemoryStore {
 
 fn run(seed: u64, ticks: u64, rs: &[EntityId]) -> Vec<[u8; 32]> {
     let mut store = seeded_world(rs);
-    let domain = PhysicalDomain::with_regions(rs.to_vec(), 24, 500, 50);
+    let domain = PhysicalDomain::new(rs.to_vec(), config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle: Vec<ChronicleEntry> = Vec::new();
@@ -50,7 +62,7 @@ fn run(seed: u64, ticks: u64, rs: &[EntityId]) -> Vec<[u8; 32]> {
 fn regions_evolve_independently_and_validly() {
     let rs = regions(4);
     let mut store = seeded_world(&rs);
-    let domain = PhysicalDomain::with_regions(rs.clone(), 24, 500, 50);
+    let domain = PhysicalDomain::new(rs.clone(), config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle = Vec::new();
@@ -71,14 +83,12 @@ fn regions_evolve_independently_and_validly() {
         })
         .collect();
 
-    // Every region stayed physically valid.
     for t in &temps {
         assert!(*t >= ABSOLUTE_ZERO_CENTI_C);
     }
-    // Regions diverged from one another (independent weather + starting points).
     assert!(temps.iter().any(|t| *t != temps[0]));
-    // One committed write per region per tick.
-    assert_eq!(chronicle.len(), rs.len() * 100);
+    // Three environmental facts per region per tick (temperature, illumination, humidity).
+    assert_eq!(chronicle.len(), rs.len() * 3 * 100);
 }
 
 #[test]

@@ -7,9 +7,10 @@
 //! committed facts, exactly where a later tick would leave it.
 //!
 //! It is also the layer where cross-domain worlds are assembled: `physical` and `living` are
-//! both wired here from package data. The domains themselves never reference each other
-//! (Vol. III Ch. 12, invariant 1) — living consumes temperature by its published id, and the
-//! loader simply enables both and seeds their facts.
+//! both wired here from package data. The domains never reference each other
+//! (Vol. III Ch. 12, invariant 1) — living finds an organism's region and temperature in the
+//! store by their published ids, and the loader simply enables both and seeds their facts,
+//! including the physical containment links that place organisms in regions.
 
 use crate::model::WorldPackage;
 use crate::version::Version;
@@ -22,9 +23,9 @@ use kernel::system::System;
 use kernel::tick::{run_tick, TickError};
 use kernel::value::Value;
 use living::schema::BODY_HEAT;
-use living::{LivingDomain, OrganismPlacement};
-use physical::schema::TEMPERATURE;
-use physical::PhysicalDomain;
+use living::LivingDomain;
+use physical::schema::{CONTAINED_IN, ELEVATION, TEMPERATURE};
+use physical::{PhysicalConfig, PhysicalDomain};
 use std::fmt;
 
 /// Why a world package could not be loaded.
@@ -76,7 +77,6 @@ pub struct LoadedWorld {
 
 impl fmt::Debug for LoadedWorld {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // The domains/systems are trait objects; summarise counts rather than contents.
         f.debug_struct("LoadedWorld")
             .field("facts", &self.store.len())
             .field("domains", &self.domains.len())
@@ -151,41 +151,65 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     let mut systems: Vec<Box<dyn System>> = Vec::new();
     let mut store = MemoryStore::new();
 
-    // 3a. Physical Reality: configured from package rules (invariant 5), regions seeded.
+    // 3a. Physical Reality: configured from package rules (invariant 5).
     let region_ids: Vec<EntityId> = package
         .regions
         .iter()
         .map(|r| EntityId::from_raw(r.id))
         .collect();
-    let physical = PhysicalDomain::with_regions(
-        region_ids,
-        package.physical_rules.ticks_per_day,
-        package.physical_rules.diurnal_amplitude_centi_c,
-        package.physical_rules.weather_max_swing_centi_c,
-    );
+    let config = PhysicalConfig {
+        ticks_per_day: package.physical_rules.ticks_per_day,
+        diurnal_amplitude_centi_c: package.physical_rules.diurnal_amplitude_centi_c,
+        weather_max_swing_centi_c: package.physical_rules.weather_max_swing_centi_c,
+        illumination_peak: package.physical_rules.illumination_peak,
+        humidity_baseline: package.physical_rules.humidity_baseline,
+        humidity_swing: package.physical_rules.humidity_swing,
+        humidity_drying_divisor: package.physical_rules.humidity_drying_divisor,
+    };
+    let physical = PhysicalDomain::new(region_ids, config);
     systems.extend(physical.systems());
     domains.push(Box::new(physical));
+
+    // Seed regions' initial physical state: temperature always, elevation when specified.
     for region in &package.regions {
         store.seed(
             FactKey::new(EntityId::from_raw(region.id), TEMPERATURE),
             seeded(Value::Int(region.temperature_centi_c)),
         );
+        if let Some(elev) = region.elevation {
+            store.seed(
+                FactKey::new(EntityId::from_raw(region.id), ELEVATION),
+                seeded(Value::Int(elev)),
+            );
+        }
     }
 
-    // 3b. Living Systems (optional): configured from package rules, organisms seeded. Living
-    //     consumes Physical's temperature by id — no wiring between the domains is needed.
+    // Seed containment (a Physical fact): organisms within their regions, plus any extra
+    // links the package declares (e.g. a region within a continent) — Vol. III Ch. 1 §1.8.
+    for o in &package.organisms {
+        store.seed(
+            FactKey::new(EntityId::from_raw(o.id), CONTAINED_IN),
+            seeded(Value::Entity(EntityId::from_raw(o.region_id))),
+        );
+    }
+    for c in &package.containment {
+        store.seed(
+            FactKey::new(EntityId::from_raw(c.child_id), CONTAINED_IN),
+            seeded(Value::Entity(EntityId::from_raw(c.parent_id))),
+        );
+    }
+
+    // 3b. Living Systems (optional): configured from package rules. Living reads organism
+    //     containment and region temperature by id — no wiring between domains is needed.
     if has_living {
         let rules = package.living_rules.ok_or(LoadError::LivingRulesMissing)?;
-        let placements: Vec<OrganismPlacement> = package
+        let organism_ids: Vec<EntityId> = package
             .organisms
             .iter()
-            .map(|o| OrganismPlacement {
-                organism: EntityId::from_raw(o.id),
-                region: EntityId::from_raw(o.region_id),
-            })
+            .map(|o| EntityId::from_raw(o.id))
             .collect();
         let living = LivingDomain::new(
-            placements,
+            organism_ids,
             rules.set_point_centi_c,
             rules.warm_response,
             rules.cold_response,

@@ -15,10 +15,13 @@ pub struct WorldPackage {
     pub physical_rules: PhysicalRules,
     /// Tunable rules for the living domain, present only if the domain is selected.
     pub living_rules: Option<LivingRules>,
-    /// The regions the world begins with, each with a starting temperature.
+    /// The regions the world begins with.
     pub regions: Vec<RegionSpec>,
     /// The organisms the world begins with (living domain), each placed in a region.
     pub organisms: Vec<OrganismSpec>,
+    /// Extra containment links seeded at generation (e.g. region within a continent),
+    /// beyond the organism-in-region links implied by [`WorldPackage::organisms`].
+    pub containment: Vec<ContainmentSpec>,
 }
 
 /// A package's identity card (Vol. IV Ch. 1 §1.2, The Manifest).
@@ -34,16 +37,24 @@ pub struct Manifest {
     pub domains: Vec<String>,
 }
 
-/// Tunable climate rules the physical domain consumes (Vol. IV Ch. 2 §2.2). Every number
-/// here is package data; none is hardcoded in the engine (invariant 5).
+/// Tunable environmental rules the physical domain consumes (Vol. IV Ch. 2 §2.2). Every
+/// number here is package data; none is hardcoded in the engine (invariant 5).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PhysicalRules {
-    /// Ticks in one day/night cycle.
+    /// Ticks in one day/night cycle (shared by temperature and illumination).
     pub ticks_per_day: u64,
     /// Peak diurnal temperature swing, in centidegrees Celsius.
     pub diurnal_amplitude_centi_c: i64,
-    /// Maximum per-tick weather perturbation, in centidegrees Celsius.
+    /// Maximum per-tick temperature weather perturbation, in centidegrees Celsius.
     pub weather_max_swing_centi_c: i64,
+    /// Illumination at midday, in hundredths of a percent (0..=10000).
+    pub illumination_peak: i64,
+    /// Humidity baseline the weather drifts toward, in hundredths of a percent.
+    pub humidity_baseline: i64,
+    /// Maximum per-tick humidity weather perturbation, in hundredths of a percent.
+    pub humidity_swing: i64,
+    /// Divisor governing how fast humidity returns to baseline (larger = slower).
+    pub humidity_drying_divisor: i64,
 }
 
 /// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2).
@@ -57,24 +68,35 @@ pub struct LivingRules {
     pub cold_response: i64,
 }
 
-/// One region the world begins with (Vol. IV Ch. 4, generation): an id and a starting
-/// temperature in centidegrees Celsius.
+/// One region the world begins with (Vol. IV Ch. 4, generation): an id, a starting
+/// temperature, and an optional elevation, in fixed-point centi-units.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct RegionSpec {
     /// The region entity's raw id.
     pub id: u64,
     /// Its initial temperature, in centidegrees Celsius.
     pub temperature_centi_c: i64,
+    /// Its elevation in centimetres above the datum, if the package specifies one.
+    pub elevation: Option<i64>,
 }
 
 /// One organism the world begins with (Vol. IV Ch. 4, generation): an id, the region it
-/// inhabits, and its starting body heat in centidegrees Celsius.
+/// inhabits (seeded as a containment fact), and its starting body heat.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct OrganismSpec {
     /// The organism entity's raw id.
     pub id: u64,
-    /// The raw id of the region it inhabits (whose temperature it senses).
+    /// The raw id of the region it inhabits (seeded as `contained_in`).
     pub region_id: u64,
     /// Its initial body heat, in centidegrees Celsius.
     pub body_heat_centi_c: i64,
+}
+
+/// A seeded containment link (Vol. III Ch. 1 §1.8): `child` exists within `parent`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ContainmentSpec {
+    /// The contained entity's raw id.
+    pub child_id: u64,
+    /// The container entity's raw id.
+    pub parent_id: u64,
 }
