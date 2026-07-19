@@ -36,3 +36,7 @@ cold_response = 3            # pull toward ambient temperature (larger = slower)
 # child_id = parent_id -- each region sits within continent 1000 (hierarchical containment)
 1 = 1000
 2 = 1000
+
+[adjacency]
+# region_a = region_b -- an undirected border between the alpine and lowland regions
+1 = 2

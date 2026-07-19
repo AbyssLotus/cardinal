@@ -19,6 +19,11 @@ pub enum Change {
     Delta(i64),
     /// Remove the fact; identity is retained via tombstoning (Vol. V Ch. 2 §2.1, clause 4).
     Tombstone,
+    /// Add a value to a cardinality-many (set-valued) fact. Adding a present value is a no-op.
+    Add(Value),
+    /// Remove a value from a cardinality-many (set-valued) fact. Removing an absent value is
+    /// a no-op.
+    Remove(Value),
 }
 
 /// One system's requested change to one fact, with its basis and cause

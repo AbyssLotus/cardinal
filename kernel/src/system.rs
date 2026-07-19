@@ -34,8 +34,13 @@ impl Cadence {
 /// (Vol. V Ch. 2 §2.1, clause 3). Implemented by the store; the tick loop wraps it in a
 /// read-set-scoped view before handing it to a system.
 pub trait CommittedView {
-    /// Read one committed fact, or `None` if absent.
+    /// Read one committed value at `key`, or `None` if absent. For a cardinality-many fact
+    /// this returns the least value; use [`CommittedView::read_all`] for the whole set.
     fn read(&self, key: FactKey) -> Option<Fact>;
+
+    /// Read every committed value at `key`, in deterministic order. A cardinality-one fact
+    /// yields zero or one; a cardinality-many fact yields the whole set.
+    fn read_all(&self, key: FactKey) -> Vec<Fact>;
 }
 
 /// A committed view scoped to a system's declared read set (Vol. V Ch. 3 §3.1).
@@ -62,6 +67,14 @@ impl CommittedView for ScopedView<'_> {
             self.inner.read(key)
         } else {
             None
+        }
+    }
+
+    fn read_all(&self, key: FactKey) -> Vec<Fact> {
+        if self.allowed.contains(&key.fact_type) {
+            self.inner.read_all(key)
+        } else {
+            Vec::new()
         }
     }
 }
@@ -136,6 +149,9 @@ mod tests {
     impl CommittedView for MapView {
         fn read(&self, key: FactKey) -> Option<Fact> {
             self.0.get(&key).copied()
+        }
+        fn read_all(&self, key: FactKey) -> Vec<Fact> {
+            self.0.get(&key).copied().into_iter().collect()
         }
     }
 

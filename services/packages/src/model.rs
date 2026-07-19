@@ -22,6 +22,9 @@ pub struct WorldPackage {
     /// Extra containment links seeded at generation (e.g. region within a continent),
     /// beyond the organism-in-region links implied by [`WorldPackage::organisms`].
     pub containment: Vec<ContainmentSpec>,
+    /// Undirected adjacency edges between regions -- the world's topology (Vol. III Ch. 1
+    /// §1.5), seeded as a cardinality-many physical fact in both directions.
+    pub adjacency: Vec<AdjacencySpec>,
 }
 
 /// A package's identity card (Vol. IV Ch. 1 §1.2, The Manifest).
@@ -99,4 +102,14 @@ pub struct ContainmentSpec {
     pub child_id: u64,
     /// The container entity's raw id.
     pub parent_id: u64,
+}
+
+/// A seeded undirected adjacency edge (Vol. III Ch. 1 §1.5): regions `a` and `b` border each
+/// other.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct AdjacencySpec {
+    /// One region's raw id.
+    pub a: u64,
+    /// The neighbouring region's raw id.
+    pub b: u64,
 }

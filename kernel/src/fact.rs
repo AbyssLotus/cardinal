@@ -8,6 +8,21 @@
 use crate::identity::EntityId;
 use crate::value::Value;
 
+/// How many values a fact type may hold for a single entity (Vol. V Ch. 2 §2.1; the
+/// cardinality-one / cardinality-many distinction of a fact store).
+///
+/// A cardinality-one fact is a function of its entity — one temperature per region. A
+/// cardinality-many fact is set-valued — a region's several neighbours, a location's several
+/// overlapping regions (Vol. III Ch. 1 §1.5, §1.7). The owning domain declares which via
+/// `Domain::cardinality`; the kernel stores and resolves each accordingly.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Cardinality {
+    /// At most one value per entity. Set/Delta/Tombstone changes; the value is replaced.
+    One,
+    /// A set of values per entity. Add/Remove changes; values accumulate as a set.
+    Many,
+}
+
 /// The type of a fact, namespaced by its owning domain (e.g. `"physical.env.temperature"`).
 ///
 /// Each fact type has exactly one owning domain (Appendix A). The name is a stable static

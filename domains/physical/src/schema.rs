@@ -26,6 +26,13 @@ pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
 /// §1.3, elevation). May be negative (below the datum). A spatial property of place.
 pub const ELEVATION: FactType = FactType::new("physical.space.elevation");
 
+/// The regions directly connected to this one in a topology (Vol. III Ch. 1 §1.5). A
+/// **cardinality-many** relationship: a region has several neighbours. Value is an entity
+/// ref; seed both directions for an undirected edge. Distinct topologies (roads, rivers)
+/// would be distinct fact types layered over the same regions, not a single graph
+/// (Vol. III Ch. 1 §1.5, No Single Topology).
+pub const ADJACENT_TO: FactType = FactType::new("physical.space.adjacent_to");
+
 // ---- Environmental state (facets of one shared environment, Vol. III Ch. 1 §1.10) ------
 
 /// Ambient temperature of a location, as fixed-point centidegrees Celsius. Owned by Physical

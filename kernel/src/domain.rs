@@ -6,7 +6,7 @@
 //! (Vol. IV Ch. 2), and the coherence checks that validate a resolved value. The kernel
 //! calls these; a domain never writes another domain's facts (Appendix A, Ruling 9).
 
-use crate::fact::FactType;
+use crate::fact::{Cardinality, FactType};
 use crate::proposal::Change;
 use crate::system::System;
 use crate::value::Value;
@@ -56,6 +56,14 @@ pub trait Domain {
 
     /// Whether this domain owns `fact_type` (Appendix A: one fact, one owner).
     fn owns(&self, fact_type: FactType) -> bool;
+
+    /// The cardinality of an owned fact type (Vol. V Ch. 2 §2.1). Defaults to
+    /// [`Cardinality::One`]; owners override for set-valued facts. The kernel uses this to
+    /// store and resolve the fact: single-value replacement, or set accumulation.
+    fn cardinality(&self, fact_type: FactType) -> Cardinality {
+        let _ = fact_type;
+        Cardinality::One
+    }
 
     /// The systems this domain contributes to the tick.
     fn systems(&self) -> Vec<Box<dyn System>>;

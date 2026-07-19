@@ -13,7 +13,7 @@ use kernel::system::CommittedView;
 use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use packages::{engine_version, load, parse_world, LoadedWorld};
-use physical::schema::{CONTAINED_IN, TEMPERATURE};
+use physical::schema::{ADJACENT_TO, CONTAINED_IN, TEMPERATURE};
 
 const MENAGERIE: &str = include_str!("../../../worlds/menagerie.world");
 
@@ -126,4 +126,26 @@ fn containment_hierarchy_is_seeded() {
         .expect("region containment seeded")
         .value;
     assert_eq!(region_in, Value::Entity(EntityId::from_raw(1000)));
+}
+
+#[test]
+fn regions_are_adjacent_in_the_loaded_world() {
+    // The [adjacency] section seeds a symmetric cardinality-many topology fact.
+    let pkg = parse_world(MENAGERIE).unwrap();
+    let world = load(&pkg, engine_version()).unwrap();
+
+    fn neighbours(world: &LoadedWorld, region: u64) -> Vec<u64> {
+        world
+            .store()
+            .read_all(FactKey::new(EntityId::from_raw(region), ADJACENT_TO))
+            .into_iter()
+            .filter_map(|f| match f.value {
+                Value::Entity(e) => Some(e.raw()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    assert!(neighbours(&world, 1).contains(&2));
+    assert!(neighbours(&world, 2).contains(&1)); // symmetric
 }

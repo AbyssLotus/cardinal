@@ -10,7 +10,7 @@
 use crate::identity::EntityId;
 
 /// A primitive committed value. Fact payloads are built from these atoms.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Value {
     /// A 64-bit signed integer. Real quantities use this as fixed-point (owner-defined scale).
     Int(i64),

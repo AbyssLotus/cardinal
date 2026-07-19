@@ -24,7 +24,7 @@ use kernel::tick::{run_tick, TickError};
 use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use living::LivingDomain;
-use physical::schema::{CONTAINED_IN, ELEVATION, TEMPERATURE};
+use physical::schema::{ADJACENT_TO, CONTAINED_IN, ELEVATION, TEMPERATURE};
 use physical::{PhysicalConfig, PhysicalDomain};
 use std::fmt;
 
@@ -196,6 +196,19 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         store.seed(
             FactKey::new(EntityId::from_raw(c.child_id), CONTAINED_IN),
             seeded(Value::Entity(EntityId::from_raw(c.parent_id))),
+        );
+    }
+
+    // Seed adjacency (a cardinality-many Physical fact) in both directions per edge, so the
+    // topology is symmetric -- a region borders its neighbour and vice versa (§1.5).
+    for e in &package.adjacency {
+        store.seed(
+            FactKey::new(EntityId::from_raw(e.a), ADJACENT_TO),
+            seeded(Value::Entity(EntityId::from_raw(e.b))),
+        );
+        store.seed(
+            FactKey::new(EntityId::from_raw(e.b), ADJACENT_TO),
+            seeded(Value::Entity(EntityId::from_raw(e.a))),
         );
     }
 

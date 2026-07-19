@@ -24,7 +24,7 @@ pub mod schema;
 pub mod systems;
 
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
-use kernel::fact::FactType;
+use kernel::fact::{Cardinality, FactType};
 use kernel::identity::EntityId;
 use kernel::proposal::Change;
 use kernel::system::System;
@@ -79,6 +79,16 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::HUMIDITY
             || fact_type == schema::ELEVATION
             || fact_type == schema::CONTAINED_IN
+            || fact_type == schema::ADJACENT_TO
+    }
+
+    fn cardinality(&self, fact_type: FactType) -> Cardinality {
+        // Adjacency is set-valued: a region has several neighbours (Vol. III Ch. 1 §1.5).
+        if fact_type == schema::ADJACENT_TO {
+            Cardinality::Many
+        } else {
+            Cardinality::One
+        }
     }
 
     fn systems(&self) -> Vec<Box<dyn System>> {

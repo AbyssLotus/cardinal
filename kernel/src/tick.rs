@@ -9,11 +9,11 @@
 
 use crate::domain::{Domain, ResolveError, Resolved, ValidationError};
 use crate::events::ChronicleEntry;
-use crate::fact::{Cause, Fact, FactKey, FactType, Provenance, SystemId};
+use crate::fact::{Cardinality, Cause, Fact, FactKey, FactType, Provenance, SystemId};
 use crate::proposal::{Change, Proposal};
-use crate::store::{CommitBatch, RealityStore};
+use crate::store::{CommitBatch, RealityStore, Resolution};
 use crate::system::{CommittedView, ScopedView, System, TickContext};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The seven ordered stages of a single tick (Vol. V Ch. 3 §3.1).
 ///
@@ -80,7 +80,7 @@ pub enum TickError {
 /// [`TickError`] names where it stopped (Vol. V Ch. 3 §3.5.5).
 ///
 /// `systems` are the systems to run (typically gathered from `domains`); `domains` supply
-/// ownership, composition, and validation for each touched fact type.
+/// ownership, cardinality, composition, and validation for each touched fact type.
 pub fn run_tick<S: RealityStore>(
     store: &mut S,
     domains: &[&dyn Domain],
@@ -90,10 +90,8 @@ pub fn run_tick<S: RealityStore>(
     chronicle: &mut Vec<ChronicleEntry>,
 ) -> Result<(), TickError> {
     // 1. SCHEDULE — due systems in a deterministic order (sorted by id). Under hermetic
-    //    evaluation every system reads committed N-1 state, so execution order does not
-    //    change committed reality; a stable id sort is therefore a valid deterministic
-    //    order, and the DAG-from-read/write-sets scheduler is deferred until it earns its
-    //    keep with parallelism (Vol. V Ch. 3 §3.2; Ch. 5).
+    //    evaluation execution order does not change committed reality, so a stable id sort is
+    //    a valid order; the DAG scheduler is deferred until parallelism (Vol. V Ch. 3 §3.2).
     let mut due: Vec<&dyn System> = systems
         .iter()
         .filter(|s| s.cadence().is_due(tick))
@@ -122,8 +120,8 @@ pub fn run_tick<S: RealityStore>(
         }
     }
 
-    // 3. RESOLVE — group proposals per fact (deterministic key order), apply the owning
-    //    domain's declared composition rule (Vol. V Ch. 3 §3.1; Vol. IV Ch. 2).
+    // 3-4. RESOLVE + VALIDATE — group proposals per fact (deterministic key order), then
+    //      resolve each by its owner's cardinality and rules (Vol. V Ch. 3 §3.1).
     let mut grouped: BTreeMap<FactKey, Vec<Proposal>> = BTreeMap::new();
     for p in proposals {
         grouped.entry(p.target).or_default().push(p);
@@ -136,41 +134,85 @@ pub fn run_tick<S: RealityStore>(
         // Deterministic within-group order before composing (Vol. V Ch. 3 §3.1).
         let mut props = group.clone();
         props.sort_by_key(|p| p.system.name());
-        let changes: Vec<Change> = props.iter().map(|p| p.change).collect();
-        let current = store.read(*key).map(|f| f.value);
-
-        let resolved = owner
-            .compose(key.fact_type, current, &changes)
-            .map_err(TickError::Resolve)?;
-
-        // 4. VALIDATE — owner coherence check on the resolved value (Vol. V Ch. 3 §3.1).
-        owner
-            .validate(key.fact_type, &resolved)
-            .map_err(TickError::Validate)?;
-
         let (system, cause) = attribution(&props);
-        match resolved {
-            Resolved::Write(value) => {
-                let prov = Provenance::new(system, tick, cause);
-                batch.writes.push((*key, Fact::new(value, prov)));
+        let provenance = Provenance::new(system, tick, cause);
+
+        match owner.cardinality(key.fact_type) {
+            Cardinality::One => {
+                let changes: Vec<Change> = props.iter().map(|p| p.change).collect();
+                let current = store.read(*key).map(|f| f.value);
+                let resolved = owner
+                    .compose(key.fact_type, current, &changes)
+                    .map_err(TickError::Resolve)?;
+                owner
+                    .validate(key.fact_type, &resolved)
+                    .map_err(TickError::Validate)?;
+                match resolved {
+                    Resolved::Write(value) => batch.resolutions.push(Resolution::One {
+                        key: *key,
+                        fact: Fact::new(value, provenance),
+                    }),
+                    Resolved::Tombstone => batch.resolutions.push(Resolution::Clear { key: *key }),
+                }
             }
-            Resolved::Tombstone => batch.tombstones.push(*key),
+            Cardinality::Many => {
+                // Set semantics: start from the committed set, apply each Add/Remove. Adding a
+                // present value or removing an absent one is a no-op — set-valued composition
+                // needs no conflict rule (Vol. V Ch. 2 §2.1, cardinality-many).
+                let mut set: BTreeSet<crate::value::Value> =
+                    store.read_all(*key).into_iter().map(|f| f.value).collect();
+                for p in &props {
+                    match p.change {
+                        Change::Add(v) => {
+                            set.insert(v);
+                        }
+                        Change::Remove(v) => {
+                            set.remove(&v);
+                        }
+                        _ => {
+                            return Err(TickError::Resolve(ResolveError::new(
+                                "cardinality-many fact accepts only Add/Remove changes",
+                            )))
+                        }
+                    }
+                }
+                let facts = set
+                    .into_iter()
+                    .map(|v| Fact::new(v, provenance))
+                    .collect::<Vec<_>>();
+                batch
+                    .resolutions
+                    .push(Resolution::Many { key: *key, facts });
+            }
         }
     }
 
-    // 5. COMMIT — the single mutation path; reality becomes N (Vol. V Ch. 2 §2.1).
-    //    Nothing above mutated the store, so any error before here left it at N-1.
+    // 5. COMMIT — the single mutation path; reality becomes N (Vol. V Ch. 2 §2.1). Nothing
+    //    above mutated the store, so any error before here left it at N-1.
     store.apply(batch.clone());
 
     // 6. CHRONICLE — one entry per committed write, from its proposals' cause
-    //    (Vol. V Ch. 6 §6.1).
-    for (key, fact) in &batch.writes {
-        chronicle.push(ChronicleEntry::new(
-            tick,
-            key.entity,
-            key.fact_type,
-            fact.provenance.cause,
-        ));
+    //    (Vol. V Ch. 6 §6.1). Removals are not chronicled in this build.
+    for resolution in &batch.resolutions {
+        match resolution {
+            Resolution::One { key, fact } => chronicle.push(ChronicleEntry::new(
+                tick,
+                key.entity,
+                key.fact_type,
+                fact.provenance.cause,
+            )),
+            Resolution::Many { key, facts } => {
+                if let Some(first) = facts.first() {
+                    chronicle.push(ChronicleEntry::new(
+                        tick,
+                        key.entity,
+                        key.fact_type,
+                        first.provenance.cause,
+                    ));
+                }
+            }
+            Resolution::Clear { .. } => {}
+        }
     }
 
     // 7. OBSERVE — read-only notification hook; nothing on the critical path here yet

@@ -38,6 +38,11 @@ pub fn compose_additive(
             }
             Change::Delta(d) => delta_sum = delta_sum.saturating_add(*d),
             Change::Tombstone => tombstone = true,
+            Change::Add(_) | Change::Remove(_) => {
+                return Err(ResolveError::new(
+                    "this fact is single-valued; use Set/Create/Delta, not Add/Remove",
+                ))
+            }
         }
     }
 
@@ -96,6 +101,11 @@ pub fn compose_containment(
             }
             Change::Delta(_) => {
                 return Err(ResolveError::new("containment cannot take a numeric delta"))
+            }
+            Change::Add(_) | Change::Remove(_) => {
+                return Err(ResolveError::new(
+                    "containment is single-valued; use Set/Create, not Add/Remove",
+                ))
             }
             Change::Tombstone => tombstone = true,
         }
