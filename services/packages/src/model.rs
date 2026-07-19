@@ -11,10 +11,14 @@ use crate::version::{EngineReq, Version};
 pub struct WorldPackage {
     /// Identity, version, and engine requirement.
     pub manifest: Manifest,
-    /// Tunable rules for the physical domain (the only domain wired so far).
+    /// Tunable rules for the physical domain.
     pub physical_rules: PhysicalRules,
+    /// Tunable rules for the living domain, present only if the domain is selected.
+    pub living_rules: Option<LivingRules>,
     /// The regions the world begins with, each with a starting temperature.
     pub regions: Vec<RegionSpec>,
+    /// The organisms the world begins with (living domain), each placed in a region.
+    pub organisms: Vec<OrganismSpec>,
 }
 
 /// A package's identity card (Vol. IV Ch. 1 §1.2, The Manifest).
@@ -42,6 +46,17 @@ pub struct PhysicalRules {
     pub weather_max_swing_centi_c: i64,
 }
 
+/// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct LivingRules {
+    /// Metabolic set-point body heat, in centidegrees Celsius.
+    pub set_point_centi_c: i64,
+    /// Divisor governing pull toward the set point (larger = slower).
+    pub warm_response: i64,
+    /// Divisor governing pull toward ambient temperature (larger = slower).
+    pub cold_response: i64,
+}
+
 /// One region the world begins with (Vol. IV Ch. 4, generation): an id and a starting
 /// temperature in centidegrees Celsius.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -50,4 +65,16 @@ pub struct RegionSpec {
     pub id: u64,
     /// Its initial temperature, in centidegrees Celsius.
     pub temperature_centi_c: i64,
+}
+
+/// One organism the world begins with (Vol. IV Ch. 4, generation): an id, the region it
+/// inhabits, and its starting body heat in centidegrees Celsius.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct OrganismSpec {
+    /// The organism entity's raw id.
+    pub id: u64,
+    /// The raw id of the region it inhabits (whose temperature it senses).
+    pub region_id: u64,
+    /// Its initial body heat, in centidegrees Celsius.
+    pub body_heat_centi_c: i64,
 }

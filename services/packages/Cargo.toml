@@ -13,3 +13,4 @@ workspace = true
 [dependencies]
 kernel.workspace = true
 physical.workspace = true
+living.workspace = true

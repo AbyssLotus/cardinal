@@ -5,6 +5,11 @@
 //! (Vol. IV Ch. 2, invariant 2), configures each enabled domain from its package rules
 //! (invariant 5), and seeds initial reality through the store — the world begins as a set of
 //! committed facts, exactly where a later tick would leave it.
+//!
+//! It is also the layer where cross-domain worlds are assembled: `physical` and `living` are
+//! both wired here from package data. The domains themselves never reference each other
+//! (Vol. III Ch. 12, invariant 1) — living consumes temperature by its published id, and the
+//! loader simply enables both and seeds their facts.
 
 use crate::model::WorldPackage;
 use crate::version::Version;
@@ -16,6 +21,8 @@ use kernel::store::MemoryStore;
 use kernel::system::System;
 use kernel::tick::{run_tick, TickError};
 use kernel::value::Value;
+use living::schema::BODY_HEAT;
+use living::{LivingDomain, OrganismPlacement};
 use physical::schema::TEMPERATURE;
 use physical::PhysicalDomain;
 use std::fmt;
@@ -32,6 +39,9 @@ pub enum LoadError {
     },
     /// Physical Reality was not selected, but every world requires it (Vol. IV Ch. 2).
     PhysicalNotSelected,
+    /// The living domain was selected but supplied no `[rules.living]` block. A missing
+    /// rule is a validation error, never an engine default (Vol. IV Ch. 2).
+    LivingRulesMissing,
     /// A selected domain has no implementation wired into the loader yet.
     UnsupportedDomain(String),
 }
@@ -45,6 +55,9 @@ impl fmt::Display for LoadError {
             ),
             LoadError::PhysicalNotSelected => {
                 write!(f, "package does not select the mandatory `physical` domain")
+            }
+            LoadError::LivingRulesMissing => {
+                write!(f, "`living` domain selected but no [rules.living] provided")
             }
             LoadError::UnsupportedDomain(d) => {
                 write!(f, "selected domain `{d}` is not implemented yet")
@@ -122,9 +135,11 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     // 2. Domain selection: Physical Reality is mandatory; unknown domains are refused rather
     //    than silently ignored (Vol. IV Ch. 2, invariants 2 & 3).
     let mut has_physical = false;
+    let mut has_living = false;
     for d in &package.manifest.domains {
         match d.as_str() {
             "physical" => has_physical = true,
+            "living" => has_living = true,
             other => return Err(LoadError::UnsupportedDomain(other.to_string())),
         }
     }
@@ -132,8 +147,11 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         return Err(LoadError::PhysicalNotSelected);
     }
 
-    // 3. Configure each enabled domain from its package rules (invariant 5): no climate
-    //    number is hardcoded in the engine; all arrive here as data.
+    let mut domains: Vec<Box<dyn Domain>> = Vec::new();
+    let mut systems: Vec<Box<dyn System>> = Vec::new();
+    let mut store = MemoryStore::new();
+
+    // 3a. Physical Reality: configured from package rules (invariant 5), regions seeded.
     let region_ids: Vec<EntityId> = package
         .regions
         .iter()
@@ -145,20 +163,41 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         package.physical_rules.diurnal_amplitude_centi_c,
         package.physical_rules.weather_max_swing_centi_c,
     );
-    let systems = physical.systems();
-    let domains: Vec<Box<dyn Domain>> = vec![Box::new(physical)];
-
-    // 4. Seed initial reality: the world's starting facts, committed as generation (not a
-    //    system write) — the store begins where a tick would have left it (Vol. IV Ch. 4).
-    let mut store = MemoryStore::new();
+    systems.extend(physical.systems());
+    domains.push(Box::new(physical));
     for region in &package.regions {
         store.seed(
             FactKey::new(EntityId::from_raw(region.id), TEMPERATURE),
-            Fact::new(
-                Value::Int(region.temperature_centi_c),
-                Provenance::new(SystemId::new("worldgen"), 0, Cause::new("package_seed")),
-            ),
+            seeded(Value::Int(region.temperature_centi_c)),
         );
+    }
+
+    // 3b. Living Systems (optional): configured from package rules, organisms seeded. Living
+    //     consumes Physical's temperature by id — no wiring between the domains is needed.
+    if has_living {
+        let rules = package.living_rules.ok_or(LoadError::LivingRulesMissing)?;
+        let placements: Vec<OrganismPlacement> = package
+            .organisms
+            .iter()
+            .map(|o| OrganismPlacement {
+                organism: EntityId::from_raw(o.id),
+                region: EntityId::from_raw(o.region_id),
+            })
+            .collect();
+        let living = LivingDomain::new(
+            placements,
+            rules.set_point_centi_c,
+            rules.warm_response,
+            rules.cold_response,
+        );
+        systems.extend(living.systems());
+        domains.push(Box::new(living));
+        for o in &package.organisms {
+            store.seed(
+                FactKey::new(EntityId::from_raw(o.id), BODY_HEAT),
+                seeded(Value::Int(o.body_heat_centi_c)),
+            );
+        }
     }
 
     Ok(LoadedWorld {
@@ -166,4 +205,12 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         domains,
         systems,
     })
+}
+
+/// A fact seeded at world construction (generation), attributed to worldgen at tick 0.
+fn seeded(value: Value) -> Fact {
+    Fact::new(
+        value,
+        Provenance::new(SystemId::new("worldgen"), 0, Cause::new("package_seed")),
+    )
 }
