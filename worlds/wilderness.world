@@ -1,0 +1,20 @@
+# Cardinal world package -- a small wilderness.
+# Format: sectioned "key = value" text (Vol. IV Ch. 1). Data only; no executable content.
+
+[manifest]
+id = world.wilderness
+version = 0.1.0
+engine = >=0.0, <1.0
+domains = physical
+
+# Every tunable number lives in the package, never in engine code (Vol. IV Ch. 2, inv. 5).
+[rules.physical]
+ticks_per_day = 24
+diurnal_amplitude_centi_c = 500      # +5.00 C peak day/night swing
+weather_max_swing_centi_c = 50       # +/- 0.50 C per-tick weather jitter
+
+# Initial reality: three regions, each with a starting temperature (centidegrees Celsius).
+[regions]
+1 = 1500
+2 = 1800
+3 = 2100

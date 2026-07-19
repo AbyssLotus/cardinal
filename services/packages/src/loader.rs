@@ -1,0 +1,169 @@
+//! Turning a validated [`WorldPackage`] into a running world (Vol. IV Ch. 1 §1.3).
+//!
+//! The loader is the boundary the whole volume defends: data in, world out, no engine
+//! defaults. It enforces the engine-version range (invariant 10), requires Physical Reality
+//! (Vol. IV Ch. 2, invariant 2), configures each enabled domain from its package rules
+//! (invariant 5), and seeds initial reality through the store — the world begins as a set of
+//! committed facts, exactly where a later tick would leave it.
+
+use crate::model::WorldPackage;
+use crate::version::Version;
+use kernel::domain::Domain;
+use kernel::events::ChronicleEntry;
+use kernel::fact::{Cause, Fact, FactKey, Provenance, SystemId};
+use kernel::identity::EntityId;
+use kernel::store::MemoryStore;
+use kernel::system::System;
+use kernel::tick::{run_tick, TickError};
+use kernel::value::Value;
+use physical::schema::TEMPERATURE;
+use physical::PhysicalDomain;
+use std::fmt;
+
+/// Why a world package could not be loaded.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum LoadError {
+    /// The engine version is outside the package's declared range (invariant 10).
+    EngineMismatch {
+        /// The range the package requires, rendered.
+        required: String,
+        /// The actual engine version.
+        engine: Version,
+    },
+    /// Physical Reality was not selected, but every world requires it (Vol. IV Ch. 2).
+    PhysicalNotSelected,
+    /// A selected domain has no implementation wired into the loader yet.
+    UnsupportedDomain(String),
+}
+
+impl fmt::Display for LoadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LoadError::EngineMismatch { required, engine } => write!(
+                f,
+                "engine {engine} does not satisfy required range {required}"
+            ),
+            LoadError::PhysicalNotSelected => {
+                write!(f, "package does not select the mandatory `physical` domain")
+            }
+            LoadError::UnsupportedDomain(d) => {
+                write!(f, "selected domain `{d}` is not implemented yet")
+            }
+        }
+    }
+}
+
+/// A world assembled from a package: seeded committed state plus its enabled domains and
+/// their systems, ready to tick.
+pub struct LoadedWorld {
+    store: MemoryStore,
+    domains: Vec<Box<dyn Domain>>,
+    systems: Vec<Box<dyn System>>,
+}
+
+impl fmt::Debug for LoadedWorld {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // The domains/systems are trait objects; summarise counts rather than contents.
+        f.debug_struct("LoadedWorld")
+            .field("facts", &self.store.len())
+            .field("domains", &self.domains.len())
+            .field("systems", &self.systems.len())
+            .finish()
+    }
+}
+
+impl LoadedWorld {
+    /// The committed reality store, for read-only inspection.
+    pub fn store(&self) -> &MemoryStore {
+        &self.store
+    }
+
+    /// Advance the loaded world by one tick under `seed`, appending to `chronicle`
+    /// (Vol. V Ch. 3 §3.1).
+    pub fn tick(
+        &mut self,
+        tick: u64,
+        seed: u64,
+        chronicle: &mut Vec<ChronicleEntry>,
+    ) -> Result<(), TickError> {
+        let domain_refs: Vec<&dyn Domain> = self.domains.iter().map(|d| d.as_ref()).collect();
+        run_tick(
+            &mut self.store,
+            &domain_refs,
+            &self.systems,
+            tick,
+            seed,
+            chronicle,
+        )
+    }
+}
+
+/// The engine version this build presents to packages (from the crate version).
+pub fn engine_version() -> Version {
+    Version::parse(env!("CARGO_PKG_VERSION")).expect("crate version is valid semver")
+}
+
+/// Load a package into a runnable world, enforcing the package contract (Vol. IV Ch. 1 §1.3).
+///
+/// `engine` is the version checked against the package's declared range; most callers pass
+/// [`engine_version`].
+pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, LoadError> {
+    // 1. Enforce the engine-version range — not advisory (Vol. IV Ch. 1, invariant 10).
+    if !package.manifest.engine.accepts(engine) {
+        return Err(LoadError::EngineMismatch {
+            required: format!(
+                ">={}, <{}",
+                package.manifest.engine.min, package.manifest.engine.max
+            ),
+            engine,
+        });
+    }
+
+    // 2. Domain selection: Physical Reality is mandatory; unknown domains are refused rather
+    //    than silently ignored (Vol. IV Ch. 2, invariants 2 & 3).
+    let mut has_physical = false;
+    for d in &package.manifest.domains {
+        match d.as_str() {
+            "physical" => has_physical = true,
+            other => return Err(LoadError::UnsupportedDomain(other.to_string())),
+        }
+    }
+    if !has_physical {
+        return Err(LoadError::PhysicalNotSelected);
+    }
+
+    // 3. Configure each enabled domain from its package rules (invariant 5): no climate
+    //    number is hardcoded in the engine; all arrive here as data.
+    let region_ids: Vec<EntityId> = package
+        .regions
+        .iter()
+        .map(|r| EntityId::from_raw(r.id))
+        .collect();
+    let physical = PhysicalDomain::with_regions(
+        region_ids,
+        package.physical_rules.ticks_per_day,
+        package.physical_rules.diurnal_amplitude_centi_c,
+        package.physical_rules.weather_max_swing_centi_c,
+    );
+    let systems = physical.systems();
+    let domains: Vec<Box<dyn Domain>> = vec![Box::new(physical)];
+
+    // 4. Seed initial reality: the world's starting facts, committed as generation (not a
+    //    system write) — the store begins where a tick would have left it (Vol. IV Ch. 4).
+    let mut store = MemoryStore::new();
+    for region in &package.regions {
+        store.seed(
+            FactKey::new(EntityId::from_raw(region.id), TEMPERATURE),
+            Fact::new(
+                Value::Int(region.temperature_centi_c),
+                Provenance::new(SystemId::new("worldgen"), 0, Cause::new("package_seed")),
+            ),
+        );
+    }
+
+    Ok(LoadedWorld {
+        store,
+        domains,
+        systems,
+    })
+}
