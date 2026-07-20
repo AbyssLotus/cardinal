@@ -25,6 +25,9 @@ pub struct WorldPackage {
     /// Undirected adjacency edges between regions -- the world's topology (Vol. III Ch. 1
     /// §1.5), seeded as a cardinality-many physical fact in both directions.
     pub adjacency: Vec<AdjacencySpec>,
+    /// Per-region exposure to the open sky (Vol. III Ch. 1 §1.6). A region absent here is
+    /// fully exposed.
+    pub exposure: Vec<ExposureSpec>,
 }
 
 /// A package's identity card (Vol. IV Ch. 1 §1.2, The Manifest).
@@ -122,4 +125,14 @@ pub struct AdjacencySpec {
     pub a: u64,
     /// The neighbouring region's raw id.
     pub b: u64,
+}
+
+/// A region's seeded exposure to the open sky (Vol. III Ch. 1 §1.6), in hundredths of a
+/// percent (0..=10000): sealed chamber 0, cave mouth or canopy partial, open ground full.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ExposureSpec {
+    /// The region entity's raw id.
+    pub region_id: u64,
+    /// Its exposure, 0..=10000.
+    pub exposure: i64,
 }

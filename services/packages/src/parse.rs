@@ -6,8 +6,8 @@
 //! pure data — this reads declarations, it never executes them (Vol. IV Ch. 1, invariant 6).
 
 use crate::model::{
-    AdjacencySpec, ContainmentSpec, LivingRules, Manifest, OrganismSpec, PhysicalRules, RegionSpec,
-    WorldPackage,
+    AdjacencySpec, ContainmentSpec, ExposureSpec, LivingRules, Manifest, OrganismSpec,
+    PhysicalRules, RegionSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -73,6 +73,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut organisms: Vec<OrganismSpec> = Vec::new();
     let mut containment: Vec<ContainmentSpec> = Vec::new();
     let mut adjacency: Vec<AdjacencySpec> = Vec::new();
+    let mut exposure: Vec<ExposureSpec> = Vec::new();
 
     for (i, raw) in text.lines().enumerate() {
         let line_no = i + 1;
@@ -186,6 +187,14 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 let b: u64 = parse_num(value, line_no)?;
                 adjacency.push(AdjacencySpec { a, b });
             }
+            "exposure" => {
+                let region_id: u64 = parse_num(key, line_no)?;
+                let exp: i64 = parse_num(value, line_no)?;
+                exposure.push(ExposureSpec {
+                    region_id,
+                    exposure: exp,
+                });
+            }
             "" => {
                 return Err(ParseError::at(
                     line_no,
@@ -253,6 +262,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         organisms,
         containment,
         adjacency,
+        exposure,
     })
 }
 

@@ -24,7 +24,7 @@ use kernel::tick::{run_tick, TickError};
 use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use living::LivingDomain;
-use physical::schema::{ADJACENT_TO, CONTAINED_IN, ELEVATION, TEMPERATURE};
+use physical::schema::{ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, TEMPERATURE};
 use physical::{PhysicalConfig, PhysicalDomain};
 use std::fmt;
 
@@ -201,6 +201,15 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         store.seed(
             FactKey::new(EntityId::from_raw(c.child_id), CONTAINED_IN),
             seeded(Value::Entity(EntityId::from_raw(c.parent_id))),
+        );
+    }
+
+    // Seed per-region exposure to the sky (a Physical fact). Regions absent here are fully
+    // exposed; the weather systems attenuate their effect by this (Vol. III Ch. 1 §1.6).
+    for x in &package.exposure {
+        store.seed(
+            FactKey::new(EntityId::from_raw(x.region_id), EXPOSURE),
+            seeded(Value::Int(x.exposure)),
         );
     }
 

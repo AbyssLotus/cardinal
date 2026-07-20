@@ -33,6 +33,13 @@ pub const ELEVATION: FactType = FactType::new("physical.space.elevation");
 /// (Vol. III Ch. 1 §1.5, No Single Topology).
 pub const ADJACENT_TO: FactType = FactType::new("physical.space.adjacent_to");
 
+/// How open a location is to the outside sky, in hundredths of a percent (0..=10000)
+/// (Vol. III Ch. 1 §1.6, Enclosed / Exposed; §1.11, sheltered). Full is open ground under
+/// open sky; a forest floor or cave mouth is partial; a sealed chamber is 0. Surface-weather
+/// systems scale their effect by this, so enclosed places get muted swings, no rain, and
+/// darkness. A location with no exposure fact is treated as fully exposed.
+pub const EXPOSURE: FactType = FactType::new("physical.space.exposure");
+
 // ---- Environmental state (facets of one shared environment, Vol. III Ch. 1 §1.10) ------
 
 /// Ambient temperature of a location, as fixed-point centidegrees Celsius. Owned by Physical

@@ -7,7 +7,8 @@
 //! position), and humidity (weather). Implement causes, never outcomes (Vol. III Ch. 11).
 
 use crate::schema::{
-    ADJACENT_TO, ELEVATION, HUMIDITY, ILLUMINATION, PRESSURE, TEMPERATURE, WIND_SPEED, WIND_TOWARD,
+    ADJACENT_TO, ELEVATION, EXPOSURE, HUMIDITY, ILLUMINATION, PERCENT_FULL, PRESSURE, TEMPERATURE,
+    WIND_SPEED, WIND_TOWARD,
 };
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::identity::EntityId;
@@ -17,12 +18,13 @@ use kernel::value::Value;
 
 const TEMPERATURE_RW: &[FactType] = &[TEMPERATURE];
 const ILLUMINATION_W: &[FactType] = &[ILLUMINATION];
-const HUMIDITY_RW: &[FactType] = &[HUMIDITY];
-const PRESSURE_READS: &[FactType] = &[PRESSURE, ELEVATION];
+const HUMIDITY_READS: &[FactType] = &[HUMIDITY, EXPOSURE];
+const HUMIDITY_WRITES: &[FactType] = &[HUMIDITY];
+const PRESSURE_READS: &[FactType] = &[PRESSURE, ELEVATION, EXPOSURE];
 const PRESSURE_WRITES: &[FactType] = &[PRESSURE];
 const WIND_READS: &[FactType] = &[ADJACENT_TO, PRESSURE];
 const WIND_WRITES: &[FactType] = &[WIND_SPEED, WIND_TOWARD];
-const NOTHING: &[FactType] = &[];
+const EXPOSURE_READS: &[FactType] = &[EXPOSURE];
 
 /// An integer triangle wave in `0..=amp` over `period`, peaking at mid-period.
 ///
@@ -39,6 +41,24 @@ fn wave(phase: u64, period: u64, amp: i64) -> i64 {
     } else {
         (amp * up) / half
     }
+}
+
+/// A region's exposure to the open sky, in hundredths of a percent (0..=10000). A region with
+/// no committed exposure fact is treated as fully exposed -- open ground under open sky -- so
+/// exposure only ever *attenuates* surface weather (Vol. III Ch. 1 §1.6, Enclosed / Exposed).
+/// A sealed chamber reads 0; a cave mouth or forest floor is partial; a field is full.
+fn exposure_of(view: &dyn CommittedView, region: EntityId) -> i64 {
+    view.read(FactKey::new(region, EXPOSURE))
+        .and_then(|f| f.value.as_int())
+        .map(|e| e.clamp(0, PERCENT_FULL))
+        .unwrap_or(PERCENT_FULL)
+}
+
+/// Scale a surface-weather magnitude by exposure: `value * exposure / 10000`. Full exposure
+/// passes it through unchanged; zero exposure (a sealed space) removes it entirely; a partial
+/// value dampens it in proportion.
+fn attenuate(value: i64, exposure: i64) -> i64 {
+    value.saturating_mul(exposure) / PERCENT_FULL
 }
 
 /// A deterministic day/night temperature swing (Vol. III Ch. 1 §1.10). Proposes the per-tick
@@ -65,7 +85,7 @@ impl System for DiurnalCycle {
         SystemId::new("physical.diurnal_cycle")
     }
     fn reads(&self) -> &'static [FactType] {
-        NOTHING
+        EXPOSURE_READS
     }
     fn writes(&self) -> &'static [FactType] {
         TEMPERATURE_RW
@@ -73,15 +93,16 @@ impl System for DiurnalCycle {
     fn cadence(&self) -> Cadence {
         Cadence::EveryTick
     }
-    fn evaluate(&self, _view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let period = self.ticks_per_day.max(1);
         let level = wave(ctx.tick(), period, self.amplitude_centi_c);
         let prev = wave(ctx.tick().wrapping_sub(1), period, self.amplitude_centi_c);
+        let exposure = exposure_of(view, self.region);
         vec![Proposal::new(
             self.id(),
             FactKey::new(self.region, TEMPERATURE),
             ctx.tick(),
-            Change::Delta(level - prev),
+            Change::Delta(attenuate(level - prev, exposure)),
             Cause::new("diurnal_shift"),
         )]
     }
@@ -109,7 +130,7 @@ impl System for WeatherNoise {
         SystemId::new("physical.weather_noise")
     }
     fn reads(&self) -> &'static [FactType] {
-        NOTHING
+        EXPOSURE_READS
     }
     fn writes(&self) -> &'static [FactType] {
         TEMPERATURE_RW
@@ -117,16 +138,17 @@ impl System for WeatherNoise {
     fn cadence(&self) -> Cadence {
         Cadence::EveryTick
     }
-    fn evaluate(&self, _view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let swing = self.max_swing_centi_c.max(0);
         let span = (swing as u64) * 2 + 1;
         let mut rng = ctx.rng(self.region.raw());
-        let delta = rng.below(span) as i64 - swing;
+        let raw = rng.below(span) as i64 - swing;
+        let exposure = exposure_of(view, self.region);
         vec![Proposal::new(
             self.id(),
             FactKey::new(self.region, TEMPERATURE),
             ctx.tick(),
-            Change::Delta(delta),
+            Change::Delta(attenuate(raw, exposure)),
             Cause::new("weather_perturbation"),
         )]
     }
@@ -157,7 +179,7 @@ impl System for DayNightCycle {
         SystemId::new("physical.day_night_cycle")
     }
     fn reads(&self) -> &'static [FactType] {
-        NOTHING
+        EXPOSURE_READS
     }
     fn writes(&self) -> &'static [FactType] {
         ILLUMINATION_W
@@ -165,18 +187,20 @@ impl System for DayNightCycle {
     fn cadence(&self) -> Cadence {
         Cadence::EveryTick
     }
-    fn evaluate(&self, _view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let sun = wave(
             ctx.tick(),
             self.ticks_per_day.max(2),
             self.peak_illumination,
         );
+        let exposure = exposure_of(view, self.region);
         vec![Proposal::new(
             self.id(),
             FactKey::new(self.region, ILLUMINATION),
             ctx.tick(),
-            // Absolute level: the sun's position doesn't accumulate, it *is* wherever it is.
-            Change::Set(kernel::value::Value::Int(sun)),
+            // Absolute level scaled by how open the location is to the sky: a sealed cave
+            // stays dark even at noon.
+            Change::Set(Value::Int(attenuate(sun, exposure))),
             Cause::new("solar_position"),
         )]
     }
@@ -210,10 +234,10 @@ impl System for Precipitation {
         SystemId::new("physical.precipitation")
     }
     fn reads(&self) -> &'static [FactType] {
-        HUMIDITY_RW
+        HUMIDITY_READS
     }
     fn writes(&self) -> &'static [FactType] {
-        HUMIDITY_RW
+        HUMIDITY_WRITES
     }
     fn cadence(&self) -> Cadence {
         Cadence::EveryTick
@@ -240,11 +264,12 @@ impl System for Precipitation {
         let swing = self.swing.max(0);
         let mut rng = ctx.rng(self.region.raw());
         let noise = rng.below((swing as u64) * 2 + 1) as i64 - swing;
+        let exposure = exposure_of(view, self.region);
         vec![Proposal::new(
             self.id(),
             key,
             ctx.tick(),
-            Change::Delta(drift + noise),
+            Change::Delta(drift + attenuate(noise, exposure)),
             Cause::new("precipitation"),
         )]
     }
@@ -323,11 +348,12 @@ impl System for PressureSystem {
                     let swing = self.weather_swing.max(0);
                     let mut rng = ctx.rng(self.region.raw());
                     let noise = rng.below((swing as u64) * 2 + 1) as i64 - swing;
+                    let exposure = exposure_of(view, self.region);
                     vec![Proposal::new(
                         self.id(),
                         key,
                         ctx.tick(),
-                        Change::Delta(drift + noise),
+                        Change::Delta(drift + attenuate(noise, exposure)),
                         Cause::new("pressure_weather"),
                     )]
                 }

@@ -94,6 +94,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::WIND_SPEED
             || fact_type == schema::WIND_TOWARD
             || fact_type == schema::ELEVATION
+            || fact_type == schema::EXPOSURE
             || fact_type == schema::CONTAINED_IN
             || fact_type == schema::ADJACENT_TO
     }
@@ -154,7 +155,10 @@ impl Domain for PhysicalDomain {
     ) -> Result<Resolved, ResolveError> {
         if fact_type == schema::TEMPERATURE || fact_type == schema::ELEVATION {
             composition::compose_additive(current, changes)
-        } else if fact_type == schema::ILLUMINATION || fact_type == schema::HUMIDITY {
+        } else if fact_type == schema::ILLUMINATION
+            || fact_type == schema::HUMIDITY
+            || fact_type == schema::EXPOSURE
+        {
             composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
         } else if fact_type == schema::PRESSURE {
             composition::compose_bounded(current, changes, 0, schema::MAX_PRESSURE)
