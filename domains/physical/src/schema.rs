@@ -45,6 +45,22 @@ pub const POSITION_Z: FactType = FactType::new("physical.space.position_z");
 /// (Vol. III Ch. 1 §1.5, No Single Topology).
 pub const ADJACENT_TO: FactType = FactType::new("physical.space.adjacent_to");
 
+/// The destination a portal leads to -- the region on its far side (Vol. III Ch. 1 §1.5,
+/// spatial connectivity; "Connected", §1.6). A portal is any located connection between
+/// regions: a door, window, hatch, staircase, or a magical gate into a pocket region. The
+/// portal is an entity, located in its host region (contained_in + position); this fact is
+/// its far side. Single-valued and changeable -- a gangplank or a re-targetable gate just
+/// Sets a new destination. This is CONNECTIVITY, distinct from adjacency: two rooms may
+/// border yet be disconnected if no portal joins them (§1.5, "adjacent yet effectively
+/// disconnected").
+pub const LEADS_TO: FactType = FactType::new("physical.space.leads_to");
+
+/// The set of portals a region hosts -- its exits (Vol. III Ch. 1 §1.5). A **cardinality-many**
+/// relationship: a region may have several portals (a room with two doors and a window). Each
+/// value is a portal entity, itself located within the region and carrying a [`LEADS_TO`]
+/// destination.
+pub const HAS_PORTAL: FactType = FactType::new("physical.space.has_portal");
+
 /// How open a location is to the outside sky, in hundredths of a percent (0..=10000)
 /// (Vol. III Ch. 1 §1.6, Enclosed / Exposed; §1.11, sheltered). Full is open ground under
 /// open sky; a forest floor or cave mouth is partial; a sealed chamber is 0. Surface-weather

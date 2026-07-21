@@ -1,0 +1,41 @@
+# Cardinal world -- a manor: a yard, a ground floor, a basement, a second floor, and a sealed
+# vault, joined by portals (doors and stairs). Demonstrates navigational connectivity as
+# distinct from adjacency (Vol. III Ch. 1 §1.5): the basement reaches the yard only THROUGH
+# the ground floor, and the vault -- with no portals -- can be neither left nor entered.
+
+[manifest]
+id = world.manor
+version = 0.1.0
+engine = >=0.0, <1.0
+domains = physical
+
+[rules.physical]
+ticks_per_day = 24
+diurnal_amplitude_centi_c = 400
+weather_max_swing_centi_c = 40
+illumination_peak = 10000
+humidity_baseline = 5500
+humidity_swing = 80
+humidity_drying_divisor = 8
+pressure_sea_level = 10130
+pressure_elevation_factor = 1
+pressure_weather_swing = 20
+pressure_settle_divisor = 8
+wind_gradient_divisor = 10
+
+[regions]
+1 = 1500     # yard
+2 = 2000     # ground floor
+3 = 1600     # basement
+4 = 2100     # second floor
+5 = 1800     # sealed vault
+
+[portals]
+# portal_id = host_region, dest_region, x, y[, z]  (a spot in host that leads to dest)
+1000 = 2, 1, 300, 0     # front door (inside)  -> yard
+1001 = 1, 2, 0, 0       # front door (outside) -> ground floor
+1002 = 3, 2, 100, 0     # basement stairs      -> ground floor
+1003 = 2, 3, 100, 0     # stairs down          -> basement
+1004 = 4, 2, 200, 0     # second-floor stairs  -> ground floor
+1005 = 2, 4, 200, 0     # stairs up            -> second floor
+# region 5 (the vault) hosts no portals -- it is sealed.

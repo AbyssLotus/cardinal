@@ -30,6 +30,9 @@ pub struct WorldPackage {
     pub exposure: Vec<ExposureSpec>,
     /// Local positions of entities within their immediate containers (Vol. III Ch. 1 §1.3).
     pub positions: Vec<PositionSpec>,
+    /// Portals -- located connections from a spot in one region to another (Vol. III Ch. 1
+    /// §1.5).
+    pub portals: Vec<PortalSpec>,
 }
 
 /// A package's identity card (Vol. IV Ch. 1 §1.2, The Manifest).
@@ -150,5 +153,24 @@ pub struct PositionSpec {
     /// Local Y in centimetres.
     pub y: i64,
     /// Local Z (height) in centimetres, if specified.
+    pub z: Option<i64>,
+}
+
+/// A seeded portal (Vol. III Ch. 1 §1.5): a located connection from a spot in `host_region`
+/// to `dest_region`. The portal is an entity placed in its host at (x, y[, z]); it leads to
+/// its destination. Z optional.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct PortalSpec {
+    /// The portal entity's raw id.
+    pub portal_id: u64,
+    /// The region the portal is located in.
+    pub host_region: u64,
+    /// The region the portal leads to.
+    pub dest_region: u64,
+    /// Local X of the portal within its host, in centimetres.
+    pub x: i64,
+    /// Local Y of the portal within its host, in centimetres.
+    pub y: i64,
+    /// Local Z of the portal within its host, if specified.
     pub z: Option<i64>,
 }

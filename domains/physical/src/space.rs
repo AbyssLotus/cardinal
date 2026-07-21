@@ -9,12 +9,13 @@
 //!
 //! Frames are assumed axis-aligned; rotation/orientation between frames is a later refinement.
 
-use crate::schema::{CONTAINED_IN, POSITION_X, POSITION_Y, POSITION_Z};
+use crate::schema::{CONTAINED_IN, HAS_PORTAL, LEADS_TO, POSITION_X, POSITION_Y, POSITION_Z};
 use kernel::fact::{FactKey, FactType};
 use kernel::hierarchy::lowest_common_ancestor;
 use kernel::identity::EntityId;
 use kernel::system::CommittedView;
 use kernel::value::Value;
+use std::collections::{BTreeSet, VecDeque};
 
 const AXES: [FactType; 3] = [POSITION_X, POSITION_Y, POSITION_Z];
 
@@ -101,4 +102,69 @@ fn isqrt(n: i128) -> i128 {
         }
     }
     lo
+}
+
+// ---- Connectivity: portals ---------------------------------------------------------------
+//
+// A portal is a located connection from a spot in one region to another region (Vol. III
+// Ch. 1 §1.5). Connectivity is NOT adjacency: two regions may border yet be joined by no
+// portal ("adjacent yet effectively disconnected", §1.5). These queries answer "can I get
+// from here to there, and by what steps" -- the navigational question, distinct from
+// straight-line distance.
+
+/// The portals a region hosts -- its exits.
+pub fn portals_in(view: &dyn CommittedView, region: EntityId) -> Vec<EntityId> {
+    view.read_all(FactKey::new(region, HAS_PORTAL))
+        .into_iter()
+        .filter_map(|f| match f.value {
+            Value::Entity(portal) => Some(portal),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The region a portal leads to (its far side), or `None` if it currently leads nowhere.
+pub fn portal_destination(view: &dyn CommittedView, portal: EntityId) -> Option<EntityId> {
+    match view.read(FactKey::new(portal, LEADS_TO)).map(|f| f.value) {
+        Some(Value::Entity(dest)) => Some(dest),
+        _ => None,
+    }
+}
+
+/// The regions directly reachable from `region` by stepping through one of its portals
+/// (deduplicated, sorted). One hop only.
+pub fn destinations(view: &dyn CommittedView, region: EntityId) -> Vec<EntityId> {
+    let mut set = BTreeSet::new();
+    for portal in portals_in(view, region) {
+        if let Some(dest) = portal_destination(view, portal) {
+            set.insert(dest);
+        }
+    }
+    set.into_iter().collect()
+}
+
+/// Every region reachable from `origin` by traversing portals, including `origin` itself
+/// (Vol. III Ch. 1 §1.6, "Reachable"). A breadth-first walk of the portal graph; cycles are
+/// handled by the visited set. This is what a sealed room fails and a room with a staircase
+/// passes -- and it routes a basement to the yard only *through* the ground floor, because
+/// that is the only portal path.
+pub fn reachable_regions(view: &dyn CommittedView, origin: EntityId) -> BTreeSet<EntityId> {
+    let mut seen = BTreeSet::new();
+    let mut queue = VecDeque::new();
+    seen.insert(origin);
+    queue.push_back(origin);
+    while let Some(region) = queue.pop_front() {
+        for dest in destinations(view, region) {
+            if seen.insert(dest) {
+                queue.push_back(dest);
+            }
+        }
+    }
+    seen
+}
+
+/// Whether `to` can be reached from `from` by traversing portals (Vol. III Ch. 1 §1.6,
+/// "Reachable"). `true` for a region and itself.
+pub fn can_reach(view: &dyn CommittedView, from: EntityId, to: EntityId) -> bool {
+    reachable_regions(view, from).contains(&to)
 }

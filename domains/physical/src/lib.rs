@@ -101,11 +101,13 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::POSITION_Z
             || fact_type == schema::CONTAINED_IN
             || fact_type == schema::ADJACENT_TO
+            || fact_type == schema::LEADS_TO
+            || fact_type == schema::HAS_PORTAL
     }
 
     fn cardinality(&self, fact_type: FactType) -> Cardinality {
         // Adjacency is set-valued: a region has several neighbours (Vol. III Ch. 1 §1.5).
-        if fact_type == schema::ADJACENT_TO {
+        if fact_type == schema::ADJACENT_TO || fact_type == schema::HAS_PORTAL {
             Cardinality::Many
         } else {
             Cardinality::One
@@ -173,7 +175,10 @@ impl Domain for PhysicalDomain {
             composition::compose_bounded(current, changes, 0, schema::MAX_PRESSURE)
         } else if fact_type == schema::WIND_SPEED {
             composition::compose_bounded(current, changes, 0, schema::MAX_WIND)
-        } else if fact_type == schema::CONTAINED_IN || fact_type == schema::WIND_TOWARD {
+        } else if fact_type == schema::CONTAINED_IN
+            || fact_type == schema::WIND_TOWARD
+            || fact_type == schema::LEADS_TO
+        {
             composition::compose_entity_ref(current, changes)
         } else {
             Err(ResolveError::new(
@@ -191,7 +196,10 @@ impl Domain for PhysicalDomain {
                     ));
                 }
             }
-        } else if fact_type == schema::CONTAINED_IN || fact_type == schema::WIND_TOWARD {
+        } else if fact_type == schema::CONTAINED_IN
+            || fact_type == schema::WIND_TOWARD
+            || fact_type == schema::LEADS_TO
+        {
             if let Resolved::Write(v) = value {
                 if !matches!(v, Value::Entity(_)) {
                     return Err(ValidationError::new(

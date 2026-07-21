@@ -7,7 +7,7 @@
 
 use crate::model::{
     AdjacencySpec, ContainmentSpec, ExposureSpec, LivingRules, Manifest, OrganismSpec,
-    PhysicalRules, PositionSpec, RegionSpec, WorldPackage,
+    PhysicalRules, PortalSpec, PositionSpec, RegionSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -75,6 +75,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut adjacency: Vec<AdjacencySpec> = Vec::new();
     let mut exposure: Vec<ExposureSpec> = Vec::new();
     let mut positions: Vec<PositionSpec> = Vec::new();
+    let mut portals: Vec<PortalSpec> = Vec::new();
 
     for (i, raw) in text.lines().enumerate() {
         let line_no = i + 1;
@@ -201,6 +202,18 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 let (x, y, z) = parse_position_values(value, line_no)?;
                 positions.push(PositionSpec { entity_id, x, y, z });
             }
+            "portals" => {
+                let portal_id: u64 = parse_num(key, line_no)?;
+                let (host_region, dest_region, x, y, z) = parse_portal_values(value, line_no)?;
+                portals.push(PortalSpec {
+                    portal_id,
+                    host_region,
+                    dest_region,
+                    x,
+                    y,
+                    z,
+                });
+            }
             "" => {
                 return Err(ParseError::at(
                     line_no,
@@ -270,6 +283,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         adjacency,
         exposure,
         positions,
+        portals,
     })
 }
 
@@ -340,6 +354,37 @@ fn parse_position_values(
         return Err(ParseError::at(line_no, "expected `x, y` or `x, y, z`"));
     }
     Ok((x, y, z))
+}
+
+/// Parse `host, dest, x, y` or `host, dest, x, y, z` for a portal line (z optional).
+fn parse_portal_values(
+    value: &str,
+    line_no: usize,
+) -> Result<(u64, u64, i64, i64, Option<i64>), ParseError> {
+    let mut parts = value.split(',');
+    let mut next = |what: &str| -> Result<&str, ParseError> {
+        parts.next().ok_or_else(|| {
+            ParseError::at(
+                line_no,
+                format!("expected `host, dest, x, y[, z]` ({what})"),
+            )
+        })
+    };
+    let host: u64 = parse_num(next("host")?, line_no)?;
+    let dest: u64 = parse_num(next("dest")?, line_no)?;
+    let x: i64 = parse_num(next("x")?, line_no)?;
+    let y: i64 = parse_num(next("y")?, line_no)?;
+    let z = match parts.next() {
+        Some(zs) => Some(parse_num(zs, line_no)?),
+        None => None,
+    };
+    if parts.next().is_some() {
+        return Err(ParseError::at(
+            line_no,
+            "expected `host, dest, x, y` or `host, dest, x, y, z`",
+        ));
+    }
+    Ok((host, dest, x, y, z))
 }
 
 /// Parse a `"a, b"` pair of numbers (used for `organism_id = region_id, body_heat`).

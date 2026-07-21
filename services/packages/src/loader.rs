@@ -25,7 +25,8 @@ use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use living::LivingDomain;
 use physical::schema::{
-    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, POSITION_X, POSITION_Y, POSITION_Z, TEMPERATURE,
+    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, LEADS_TO, POSITION_X, POSITION_Y,
+    POSITION_Z, TEMPERATURE,
 };
 use physical::{PhysicalConfig, PhysicalDomain};
 use std::fmt;
@@ -214,6 +215,25 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         if let Some(z) = p.z {
             store.seed(FactKey::new(e, POSITION_Z), seeded(Value::Int(z)));
         }
+    }
+
+    // Seed portals (Physical facts): each portal is an entity located in its host region
+    // (contained_in + position) that leads to its destination; the host region hosts it
+    // (has_portal, cardinality-many). Connectivity, distinct from adjacency (§1.5).
+    for portal in &package.portals {
+        let pid = EntityId::from_raw(portal.portal_id);
+        let host = EntityId::from_raw(portal.host_region);
+        store.seed(FactKey::new(pid, CONTAINED_IN), seeded(Value::Entity(host)));
+        store.seed(FactKey::new(pid, POSITION_X), seeded(Value::Int(portal.x)));
+        store.seed(FactKey::new(pid, POSITION_Y), seeded(Value::Int(portal.y)));
+        if let Some(z) = portal.z {
+            store.seed(FactKey::new(pid, POSITION_Z), seeded(Value::Int(z)));
+        }
+        store.seed(
+            FactKey::new(pid, LEADS_TO),
+            seeded(Value::Entity(EntityId::from_raw(portal.dest_region))),
+        );
+        store.seed(FactKey::new(host, HAS_PORTAL), seeded(Value::Entity(pid)));
     }
 
     // Seed per-region exposure to the sky (a Physical fact). Regions absent here are fully
