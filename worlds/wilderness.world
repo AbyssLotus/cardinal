@@ -21,6 +21,7 @@ pressure_elevation_factor = 1        # decapascals lost per metre of elevation
 pressure_weather_swing = 20          # +/- per-tick pressure jitter
 pressure_settle_divisor = 8          # how fast pressure returns to baseline
 wind_gradient_divisor = 10           # larger = gentler wind per unit pressure gap
+fall_danger_per_meter = 1500        # danger points per metre of fall height
 
 # Initial reality: three regions -- temperature (centidegrees C) and elevation (centimetres).
 [regions]

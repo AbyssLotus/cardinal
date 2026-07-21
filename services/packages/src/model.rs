@@ -33,6 +33,9 @@ pub struct WorldPackage {
     /// Portals -- located connections from a spot in one region to another (Vol. III Ch. 1
     /// §1.5).
     pub portals: Vec<PortalSpec>,
+    /// World-pinned danger for specific portals (Vol. III Ch. 1 §1.11). A portal absent here
+    /// has its danger derived from height (and, later, weather).
+    pub portal_danger: Vec<PortalDangerSpec>,
 }
 
 /// A package's identity card (Vol. IV Ch. 1 §1.2, The Manifest).
@@ -76,6 +79,8 @@ pub struct PhysicalRules {
     pub pressure_settle_divisor: i64,
     /// Divisor scaling wind speed per unit pressure gradient (larger = gentler wind).
     pub wind_gradient_divisor: i64,
+    /// Danger points added per metre of a portal's height above the ground (fall danger).
+    pub fall_danger_per_meter: i64,
 }
 
 /// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2).
@@ -173,4 +178,14 @@ pub struct PortalSpec {
     pub y: i64,
     /// Local Z of the portal within its host, if specified.
     pub z: Option<i64>,
+}
+
+/// A world-pinned danger value for a portal (Vol. III Ch. 1 §1.11), 0..=10000 -- overrides
+/// the height-derived default.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct PortalDangerSpec {
+    /// The portal entity's raw id.
+    pub portal_id: u64,
+    /// Its fixed danger, 0..=10000.
+    pub danger: i64,
 }

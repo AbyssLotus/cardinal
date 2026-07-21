@@ -7,7 +7,8 @@
 //! position), and humidity (weather). Implement causes, never outcomes (Vol. III Ch. 11).
 
 use crate::schema::{
-    ADJACENT_TO, ELEVATION, EXPOSURE, HUMIDITY, ILLUMINATION, PERCENT_FULL, PRESSURE, TEMPERATURE,
+    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, HUMIDITY, ILLUMINATION, MAX_DANGER,
+    PERCENT_FULL, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE, POSITION_Z, PRESSURE, TEMPERATURE,
     WIND_SPEED, WIND_TOWARD,
 };
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
@@ -25,6 +26,8 @@ const PRESSURE_WRITES: &[FactType] = &[PRESSURE];
 const WIND_READS: &[FactType] = &[ADJACENT_TO, PRESSURE];
 const WIND_WRITES: &[FactType] = &[WIND_SPEED, WIND_TOWARD];
 const EXPOSURE_READS: &[FactType] = &[EXPOSURE];
+const DANGER_READS: &[FactType] = &[HAS_PORTAL, PORTAL_DANGER_OVERRIDE, CONTAINED_IN, POSITION_Z];
+const DANGER_WRITES: &[FactType] = &[PORTAL_DANGER];
 
 /// An integer triangle wave in `0..=amp` over `period`, peaking at mid-period.
 ///
@@ -468,5 +471,100 @@ impl System for WindSystem {
                 ),
             ],
         }
+    }
+}
+
+/// The height of `entity` above the ground, in centimetres: the sum of local Z from the
+/// entity up through its containers (excluding the root frame, whose origin is the ground
+/// datum). A window on a stacked upper floor is high; a ground-floor door is at zero.
+fn absolute_height(view: &dyn CommittedView, entity: EntityId) -> i64 {
+    let mut total = 0i64;
+    let mut here = entity;
+    let mut guard = 0u32;
+    loop {
+        match view.read(FactKey::new(here, CONTAINED_IN)).map(|f| f.value) {
+            Some(Value::Entity(parent)) => {
+                total = total.saturating_add(
+                    view.read(FactKey::new(here, POSITION_Z))
+                        .and_then(|f| f.value.as_int())
+                        .unwrap_or(0),
+                );
+                here = parent;
+            }
+            _ => break,
+        }
+        guard += 1;
+        if guard > 1024 {
+            break;
+        }
+    }
+    total
+}
+
+/// Writes each portal's effective danger (Vol. III Ch. 1 §1.11). If the world pinned a fixed
+/// danger the system echoes it; otherwise it derives danger from the portal's height above
+/// the ground -- a fall -- leaving a slot for weather to raise it later. Enumerates portals
+/// through each region's `has_portal` set, so it needs no separate portal list.
+pub struct PortalDanger {
+    regions: Vec<EntityId>,
+    fall_danger_per_meter: i64,
+}
+
+impl PortalDanger {
+    /// Configure over the regions whose portals to score, with the world's fall-danger rate
+    /// (danger points per metre of height; world-package rule, Vol. IV Ch. 2).
+    pub fn new(regions: Vec<EntityId>, fall_danger_per_meter: i64) -> Self {
+        Self {
+            regions,
+            fall_danger_per_meter,
+        }
+    }
+}
+
+impl System for PortalDanger {
+    fn id(&self) -> SystemId {
+        SystemId::new("physical.portal_danger")
+    }
+    fn reads(&self) -> &'static [FactType] {
+        DANGER_READS
+    }
+    fn writes(&self) -> &'static [FactType] {
+        DANGER_WRITES
+    }
+    fn cadence(&self) -> Cadence {
+        Cadence::EveryTick
+    }
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+        let mut out = Vec::new();
+        for region in &self.regions {
+            for f in view.read_all(FactKey::new(*region, HAS_PORTAL)) {
+                let portal = match f.value {
+                    Value::Entity(p) => p,
+                    _ => continue,
+                };
+                let danger = match view
+                    .read(FactKey::new(portal, PORTAL_DANGER_OVERRIDE))
+                    .and_then(|f| f.value.as_int())
+                {
+                    // World-defined: pinned regardless of height or weather.
+                    Some(pinned) => pinned.clamp(0, MAX_DANGER),
+                    // Derived: danger of the fall from this portal's height.
+                    None => {
+                        let height = absolute_height(view, portal).max(0);
+                        let fall = height.saturating_mul(self.fall_danger_per_meter) / 100;
+                        // TODO(weather): add a term from the host region's wind/precipitation.
+                        fall.clamp(0, MAX_DANGER)
+                    }
+                };
+                out.push(Proposal::new(
+                    self.id(),
+                    FactKey::new(portal, PORTAL_DANGER),
+                    ctx.tick(),
+                    Change::Set(Value::Int(danger)),
+                    Cause::new("portal_danger"),
+                ));
+            }
+        }
+        out
     }
 }

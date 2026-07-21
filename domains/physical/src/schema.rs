@@ -61,6 +61,19 @@ pub const LEADS_TO: FactType = FactType::new("physical.space.leads_to");
 /// destination.
 pub const HAS_PORTAL: FactType = FactType::new("physical.space.has_portal");
 
+/// How dangerous it is to traverse a portal, 0..=10000 (Vol. III Ch. 1 §1.11, physical
+/// constraints). The *effective* danger, written every tick by the danger system: if a world
+/// pins [`PORTAL_DANGER_OVERRIDE`] the system echoes it; otherwise it derives danger from the
+/// portal's height above the ground (a 3rd-storey window is perilous, a ground-floor door is
+/// not) -- with room for weather to raise it later (a storm-lashed ledge). Consumers read
+/// this fact.
+pub const PORTAL_DANGER: FactType = FactType::new("physical.space.portal_danger");
+
+/// A world-authored fixed danger for a portal, 0..=10000 (optional). When present it pins
+/// [`PORTAL_DANGER`] to this value regardless of height or weather -- a magically warded gate
+/// that is always deadly, or a padded chute that never is.
+pub const PORTAL_DANGER_OVERRIDE: FactType = FactType::new("physical.space.portal_danger_override");
+
 /// How open a location is to the outside sky, in hundredths of a percent (0..=10000)
 /// (Vol. III Ch. 1 §1.6, Enclosed / Exposed; §1.11, sheltered). Full is open ground under
 /// open sky; a forest floor or cave mouth is partial; a sealed chamber is 0. Surface-weather
@@ -113,3 +126,6 @@ pub const MAX_PRESSURE: i64 = 20000;
 
 /// Ceiling for wind speed (centimetres/second) — clamps the field well above any real wind.
 pub const MAX_WIND: i64 = 100000;
+
+/// Ceiling for a portal's danger value (0 = harmless, 10000 = as dangerous as the model goes).
+pub const MAX_DANGER: i64 = 10000;

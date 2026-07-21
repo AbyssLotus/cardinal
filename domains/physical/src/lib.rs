@@ -62,6 +62,8 @@ pub struct PhysicalConfig {
     pub pressure_settle_divisor: i64,
     /// Divisor scaling wind speed per unit pressure gradient (larger = gentler wind).
     pub wind_gradient_divisor: i64,
+    /// Danger points added per metre of a portal's height above the ground (fall danger).
+    pub fall_danger_per_meter: i64,
 }
 
 /// The Physical Reality domain, plugged into the kernel (Appendix A owner of the stage).
@@ -103,6 +105,8 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ADJACENT_TO
             || fact_type == schema::LEADS_TO
             || fact_type == schema::HAS_PORTAL
+            || fact_type == schema::PORTAL_DANGER
+            || fact_type == schema::PORTAL_DANGER_OVERRIDE
     }
 
     fn cardinality(&self, fact_type: FactType) -> Cardinality {
@@ -150,6 +154,11 @@ impl Domain for PhysicalDomain {
                 schema::MAX_WIND,
             )));
         }
+        // One system scores every portal's danger, enumerated via each region's portal set.
+        out.push(Box::new(systems::PortalDanger::new(
+            self.regions.clone(),
+            self.config.fall_danger_per_meter,
+        )));
         out
     }
 
@@ -171,6 +180,9 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::EXPOSURE
         {
             composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
+        } else if fact_type == schema::PORTAL_DANGER || fact_type == schema::PORTAL_DANGER_OVERRIDE
+        {
+            composition::compose_bounded(current, changes, 0, schema::MAX_DANGER)
         } else if fact_type == schema::PRESSURE {
             composition::compose_bounded(current, changes, 0, schema::MAX_PRESSURE)
         } else if fact_type == schema::WIND_SPEED {

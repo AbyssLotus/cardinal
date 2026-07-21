@@ -7,7 +7,7 @@
 
 use crate::model::{
     AdjacencySpec, ContainmentSpec, ExposureSpec, LivingRules, Manifest, OrganismSpec,
-    PhysicalRules, PortalSpec, PositionSpec, RegionSpec, WorldPackage,
+    PhysicalRules, PortalDangerSpec, PortalSpec, PositionSpec, RegionSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -66,6 +66,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut pressure_weather_swing: Option<i64> = None;
     let mut pressure_settle_divisor: Option<i64> = None;
     let mut wind_gradient_divisor: Option<i64> = None;
+    let mut fall_danger_per_meter: Option<i64> = None;
     let mut set_point: Option<i64> = None;
     let mut warm_response: Option<i64> = None;
     let mut cold_response: Option<i64> = None;
@@ -76,6 +77,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut exposure: Vec<ExposureSpec> = Vec::new();
     let mut positions: Vec<PositionSpec> = Vec::new();
     let mut portals: Vec<PortalSpec> = Vec::new();
+    let mut portal_danger: Vec<PortalDangerSpec> = Vec::new();
 
     for (i, raw) in text.lines().enumerate() {
         let line_no = i + 1;
@@ -140,6 +142,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     pressure_settle_divisor = Some(parse_num(value, line_no)?)
                 }
                 "wind_gradient_divisor" => wind_gradient_divisor = Some(parse_num(value, line_no)?),
+                "fall_danger_per_meter" => fall_danger_per_meter = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -214,6 +217,11 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     z,
                 });
             }
+            "portal_danger" => {
+                let portal_id: u64 = parse_num(key, line_no)?;
+                let danger: i64 = parse_num(value, line_no)?;
+                portal_danger.push(PortalDangerSpec { portal_id, danger });
+            }
             "" => {
                 return Err(ParseError::at(
                     line_no,
@@ -263,6 +271,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             wind_gradient_divisor,
             "rules.physical.wind_gradient_divisor",
         )?,
+        fall_danger_per_meter: require(
+            fall_danger_per_meter,
+            "rules.physical.fall_danger_per_meter",
+        )?,
     };
     let living_rules = match (set_point, warm_response, cold_response) {
         (None, None, None) => None,
@@ -284,6 +296,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         exposure,
         positions,
         portals,
+        portal_danger,
     })
 }
 

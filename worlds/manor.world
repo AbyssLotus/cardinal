@@ -22,6 +22,7 @@ pressure_elevation_factor = 1
 pressure_weather_swing = 20
 pressure_settle_divisor = 8
 wind_gradient_divisor = 10
+fall_danger_per_meter = 1500        # danger points per metre of fall height
 
 [regions]
 1 = 1500     # yard
@@ -38,4 +39,9 @@ wind_gradient_divisor = 10
 1003 = 2, 3, 100, 0     # stairs down          -> basement
 1004 = 4, 2, 200, 0     # second-floor stairs  -> ground floor
 1005 = 2, 4, 200, 0     # stairs up            -> second floor
+1006 = 4, 1, 50, 0, 600 # a second-floor window (6 m up) -> yard: a way out, but a real drop
 # region 5 (the vault) hosts no portals -- it is sealed.
+
+[portal_danger]
+# portal_id = danger (0..10000). Unlisted portals derive danger from height.
+1000 = 0                # the front door is at ground level and pinned harmless

@@ -25,8 +25,8 @@ use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use living::LivingDomain;
 use physical::schema::{
-    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, LEADS_TO, POSITION_X, POSITION_Y,
-    POSITION_Z, TEMPERATURE,
+    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, LEADS_TO, PORTAL_DANGER_OVERRIDE,
+    POSITION_X, POSITION_Y, POSITION_Z, TEMPERATURE,
 };
 use physical::{PhysicalConfig, PhysicalDomain};
 use std::fmt;
@@ -173,6 +173,7 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         pressure_weather_swing: package.physical_rules.pressure_weather_swing,
         pressure_settle_divisor: package.physical_rules.pressure_settle_divisor,
         wind_gradient_divisor: package.physical_rules.wind_gradient_divisor,
+        fall_danger_per_meter: package.physical_rules.fall_danger_per_meter,
     };
     let physical = PhysicalDomain::new(region_ids, config);
     systems.extend(physical.systems());
@@ -234,6 +235,15 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             seeded(Value::Entity(EntityId::from_raw(portal.dest_region))),
         );
         store.seed(FactKey::new(host, HAS_PORTAL), seeded(Value::Entity(pid)));
+    }
+
+    // Seed world-pinned portal danger (Physical facts). Portals not listed have their danger
+    // derived from height (and later weather) by the danger system (§1.11).
+    for d in &package.portal_danger {
+        store.seed(
+            FactKey::new(EntityId::from_raw(d.portal_id), PORTAL_DANGER_OVERRIDE),
+            seeded(Value::Int(d.danger)),
+        );
     }
 
     // Seed per-region exposure to the sky (a Physical fact). Regions absent here are fully

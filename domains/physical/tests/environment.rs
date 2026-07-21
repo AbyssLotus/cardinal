@@ -27,6 +27,7 @@ fn config() -> PhysicalConfig {
         pressure_weather_swing: 20,
         pressure_settle_divisor: 8,
         wind_gradient_divisor: 10,
+        fall_danger_per_meter: 1500,
     }
 }
 
