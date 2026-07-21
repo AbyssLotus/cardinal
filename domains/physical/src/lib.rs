@@ -28,7 +28,6 @@ pub mod systems;
 
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
 use kernel::fact::{Cardinality, FactType};
-use kernel::identity::EntityId;
 use kernel::proposal::Change;
 use kernel::system::System;
 use kernel::value::Value;
@@ -68,19 +67,20 @@ pub struct PhysicalConfig {
 
 /// The Physical Reality domain, plugged into the kernel (Appendix A owner of the stage).
 ///
-/// Configured over a set of regions sharing one set of environmental rules; each region
-/// carries its own temperature, illumination, humidity, pressure, and wind, evolving under
-/// its own weather substreams. Elevation, containment, and adjacency are seeded facts (state,
-/// not system-driven here).
+/// Configured with one set of environmental rules shared by every region. It carries no
+/// region list: its systems discover the regions to simulate from committed reality each
+/// tick (Vol. V Ch. 2 §2.1, clause 5), so a region seeded at load and a region created
+/// mid-simulation are treated alike. Each region carries its own temperature, illumination,
+/// humidity, pressure, and wind, evolving under its own weather substreams; elevation,
+/// containment, and adjacency are seeded facts (state, not system-driven here).
 pub struct PhysicalDomain {
-    regions: Vec<EntityId>,
     config: PhysicalConfig,
 }
 
 impl PhysicalDomain {
-    /// Configure the domain over `regions` with the given environmental rules.
-    pub fn new(regions: Vec<EntityId>, config: PhysicalConfig) -> Self {
-        Self { regions, config }
+    /// Configure the domain with the given environmental rules.
+    pub fn new(config: PhysicalConfig) -> Self {
+        Self { config }
     }
 }
 
@@ -119,47 +119,39 @@ impl Domain for PhysicalDomain {
     }
 
     fn systems(&self) -> Vec<Box<dyn System>> {
-        let mut out: Vec<Box<dyn System>> = Vec::with_capacity(self.regions.len() * 6);
-        for &region in &self.regions {
-            out.push(Box::new(systems::DiurnalCycle::new(
-                region,
+        // One instance of each system kind; each discovers its regions from committed reality
+        // and iterates them, so the count is fixed regardless of world size.
+        vec![
+            Box::new(systems::DiurnalCycle::new(
                 self.config.ticks_per_day,
                 self.config.diurnal_amplitude_centi_c,
-            )));
-            out.push(Box::new(systems::WeatherNoise::new(
-                region,
+            )),
+            Box::new(systems::WeatherNoise::new(
                 self.config.weather_max_swing_centi_c,
-            )));
-            out.push(Box::new(systems::DayNightCycle::new(
-                region,
+            )),
+            Box::new(systems::DayNightCycle::new(
                 self.config.ticks_per_day,
                 self.config.illumination_peak,
-            )));
-            out.push(Box::new(systems::Precipitation::new(
-                region,
+            )),
+            Box::new(systems::Precipitation::new(
                 self.config.humidity_baseline,
                 self.config.humidity_swing,
                 self.config.humidity_drying_divisor,
-            )));
-            out.push(Box::new(systems::PressureSystem::new(
-                region,
+            )),
+            Box::new(systems::PressureSystem::new(
                 self.config.pressure_sea_level,
                 self.config.pressure_elevation_factor,
                 self.config.pressure_weather_swing,
                 self.config.pressure_settle_divisor,
-            )));
-            out.push(Box::new(systems::WindSystem::new(
-                region,
+            )),
+            Box::new(systems::WindSystem::new(
                 self.config.wind_gradient_divisor,
                 schema::MAX_WIND,
-            )));
-        }
-        // One system scores every portal's danger, enumerated via each region's portal set.
-        out.push(Box::new(systems::PortalDanger::new(
-            self.regions.clone(),
-            self.config.fall_danger_per_meter,
-        )));
-        out
+            )),
+            Box::new(systems::PortalDanger::new(
+                self.config.fall_danger_per_meter,
+            )),
+        ]
     }
 
     fn compose(
@@ -216,6 +208,23 @@ impl Domain for PhysicalDomain {
                 if !matches!(v, Value::Entity(_)) {
                     return Err(ValidationError::new(
                         "this spatial fact must reference an entity",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_many(&self, fact_type: FactType, values: &[Value]) -> Result<(), ValidationError> {
+        // The set-valued spatial relations are graphs over entities: every member of an
+        // adjacency or portal-host set must be an entity reference, never a scalar
+        // (Vol. III Ch. 1 §1.5). This is the coherence check the cardinality-one path gets
+        // from `compose`/`validate`, applied to the whole resolved set.
+        if fact_type == schema::ADJACENT_TO || fact_type == schema::HAS_PORTAL {
+            for v in values {
+                if !matches!(v, Value::Entity(_)) {
+                    return Err(ValidationError::new(
+                        "a spatial relation set may hold only entity references",
                     ));
                 }
             }

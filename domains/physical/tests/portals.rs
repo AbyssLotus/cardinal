@@ -123,7 +123,7 @@ impl System for RerouteGate {
         vec![Proposal::new(
             self.id(),
             FactKey::new(self.portal, LEADS_TO),
-            ctx.tick(),
+            ctx.basis_tick(),
             Change::Set(Value::Entity(self.new_dest)),
             Cause::new("reroute"),
         )]
@@ -156,12 +156,9 @@ fn changing_a_portals_destination_reroutes_connectivity() {
     assert!(!can_reach(&s, e(BASEMENT), e(VAULT)));
 
     // Re-target the basement stairs (portal 1002) to open onto the vault instead, through the
-    // real tick loop (owner composition Sets the single-valued destination).
-    let region_ids: Vec<EntityId> = [YARD, GROUND, BASEMENT, SECOND, VAULT]
-        .iter()
-        .map(|r| e(*r))
-        .collect();
-    let domain = PhysicalDomain::new(region_ids, config());
+    // real tick loop (owner composition Sets the single-valued destination). The domain
+    // discovers portals and regions from committed reality, so it needs no region list.
+    let domain = PhysicalDomain::new(config());
     let domains: [&dyn Domain; 1] = [&domain];
     let mut systems = domain.systems();
     systems.push(Box::new(RerouteGate {

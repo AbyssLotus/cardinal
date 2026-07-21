@@ -41,7 +41,18 @@ fn prov() -> Provenance {
 }
 
 fn run(store: &mut MemoryStore, regions: &[EntityId], ticks: u64) {
-    let domain = PhysicalDomain::new(regions.to_vec(), config());
+    // Every region is marked by a temperature fact so the domain's systems discover it (the
+    // loader seeds this for every region). Tests that pin a specific temperature keep it;
+    // the rest get a neutral default, which does not affect the illumination they assert on.
+    for r in regions {
+        if store.read(FactKey::new(*r, TEMPERATURE)).is_none() {
+            store.seed(
+                FactKey::new(*r, TEMPERATURE),
+                Fact::new(Value::Int(1000), prov()),
+            );
+        }
+    }
+    let domain = PhysicalDomain::new(config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle: Vec<ChronicleEntry> = Vec::new();

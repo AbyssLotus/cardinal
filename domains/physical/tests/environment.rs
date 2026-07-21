@@ -8,10 +8,22 @@ use kernel::store::MemoryStore;
 use kernel::system::CommittedView;
 use kernel::tick::run_tick;
 use kernel::value::Value;
-use physical::schema::{CONTAINED_IN, HUMIDITY, ILLUMINATION, PERCENT_FULL};
+use physical::schema::{CONTAINED_IN, HUMIDITY, ILLUMINATION, PERCENT_FULL, TEMPERATURE};
 use physical::{PhysicalConfig, PhysicalDomain};
 
 const REGION: EntityId = EntityId::from_raw(1);
+
+/// Mark `region` as a region by seeding its temperature — the fact the loader gives every
+/// region and the systems use to discover the world (Vol. V Ch. 2 §2.1, clause 5).
+fn seed_region(store: &mut MemoryStore, region: EntityId) {
+    store.seed(
+        FactKey::new(region, TEMPERATURE),
+        Fact::new(
+            Value::Int(1500),
+            Provenance::new(SystemId::new("worldgen"), 0, Cause::new("seed")),
+        ),
+    );
+}
 
 fn config() -> PhysicalConfig {
     PhysicalConfig {
@@ -33,7 +45,8 @@ fn config() -> PhysicalConfig {
 
 fn illumination_after(ticks: u64) -> i64 {
     let mut store = MemoryStore::new();
-    let domain = PhysicalDomain::new(vec![REGION], config());
+    seed_region(&mut store, REGION);
+    let domain = PhysicalDomain::new(config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle: Vec<ChronicleEntry> = Vec::new();
@@ -61,7 +74,8 @@ fn illumination_follows_the_sun() {
 #[test]
 fn humidity_is_created_at_baseline_and_stays_bounded() {
     let mut store = MemoryStore::new();
-    let domain = PhysicalDomain::new(vec![REGION], config());
+    seed_region(&mut store, REGION);
+    let domain = PhysicalDomain::new(config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle = Vec::new();

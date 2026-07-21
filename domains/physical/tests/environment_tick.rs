@@ -49,7 +49,7 @@ fn seeded_world() -> MemoryStore {
 
 fn run(seed: u64, ticks: u64) -> Vec<[u8; 32]> {
     let mut store = seeded_world();
-    let domain = PhysicalDomain::new(vec![REGION], config());
+    let domain = PhysicalDomain::new(config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle: Vec<ChronicleEntry> = Vec::new();
@@ -64,7 +64,7 @@ fn run(seed: u64, ticks: u64) -> Vec<[u8; 32]> {
 #[test]
 fn tick_loop_commits_and_chronicles_the_environment() {
     let mut store = seeded_world();
-    let domain = PhysicalDomain::new(vec![REGION], config());
+    let domain = PhysicalDomain::new(config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle = Vec::new();
@@ -78,10 +78,12 @@ fn tick_loop_commits_and_chronicles_the_environment() {
         .as_int()
         .expect("temperature is integer");
     assert!(temp >= ABSOLUTE_ZERO_CENTI_C);
-    // On tick 1, four environmental facts are committed: temperature, illumination,
-    // humidity, and pressure. Wind reads committed pressure, which does not exist until
+    // On tick 1, five environmental proposals commit: temperature is moved by two systems
+    // (diurnal_shift and weather_perturbation), plus illumination, humidity, and pressure.
+    // The chronicle records one entry per committed proposal, so both temperature causes are
+    // kept (Vol. V Ch. 6 §6.1). Wind reads committed pressure, which does not exist until
     // pressure is first written, so wind begins on tick 2 (effects chain across ticks).
-    assert_eq!(chronicle.len(), 4);
+    assert_eq!(chronicle.len(), 5);
     assert!(chronicle.iter().any(|e| e.fact_type() == TEMPERATURE));
 }
 
@@ -119,7 +121,7 @@ impl System for FreezeRay {
         vec![Proposal::new(
             self.id(),
             FactKey::new(REGION, TEMPERATURE),
-            ctx.tick(),
+            ctx.basis_tick(),
             Change::Delta(-1_000_000_000),
             Cause::new("test_freeze"),
         )]
@@ -129,7 +131,7 @@ impl System for FreezeRay {
 #[test]
 fn validation_failure_aborts_the_tick() {
     let mut store = seeded_world();
-    let domain = PhysicalDomain::new(vec![REGION], config());
+    let domain = PhysicalDomain::new(config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems: Vec<Box<dyn System>> = vec![Box::new(FreezeRay)];
     let mut chronicle = Vec::new();

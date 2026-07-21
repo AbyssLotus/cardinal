@@ -5,6 +5,13 @@
 //! environmental fields that vary across space and time (Vol. III Ch. 1 §1.10): temperature
 //! (a deterministic day/night swing plus stochastic weather), illumination (the sun's
 //! position), and humidity (weather). Implement causes, never outcomes (Vol. III Ch. 11).
+//!
+//! Every system here is **scope-generic**: one instance discovers its subjects from
+//! committed reality each tick — regions by the [`TEMPERATURE`] fact every region carries,
+//! portal hosts by [`HAS_PORTAL`] — rather than being pinned to an entity list at
+//! construction (Vol. V Ch. 2 §2.1, clause 5, queries are the product). A region that comes
+//! into being mid-simulation is simulated the moment its facts commit; systems hold no
+//! state between ticks (Vol. II Ch. 3).
 
 use crate::schema::{
     ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, HUMIDITY, ILLUMINATION, MAX_DANGER,
@@ -17,15 +24,19 @@ use kernel::proposal::{Change, Proposal};
 use kernel::system::{Cadence, CommittedView, System, TickContext};
 use kernel::value::Value;
 
-const TEMPERATURE_RW: &[FactType] = &[TEMPERATURE];
+// Read sets. Every weather system also reads TEMPERATURE — not for its value, but to
+// enumerate the regions to simulate: the loader guarantees each region carries a temperature
+// fact, so `entities_with(TEMPERATURE)` is the region roster (Vol. V Ch. 2 §2.1, clause 5).
+const DIURNAL_READS: &[FactType] = &[TEMPERATURE, EXPOSURE];
+const TEMPERATURE_W: &[FactType] = &[TEMPERATURE];
+const ILLUMINATION_READS: &[FactType] = &[TEMPERATURE, EXPOSURE];
 const ILLUMINATION_W: &[FactType] = &[ILLUMINATION];
-const HUMIDITY_READS: &[FactType] = &[HUMIDITY, EXPOSURE];
+const HUMIDITY_READS: &[FactType] = &[TEMPERATURE, HUMIDITY, EXPOSURE];
 const HUMIDITY_WRITES: &[FactType] = &[HUMIDITY];
-const PRESSURE_READS: &[FactType] = &[PRESSURE, ELEVATION, EXPOSURE];
+const PRESSURE_READS: &[FactType] = &[TEMPERATURE, PRESSURE, ELEVATION, EXPOSURE];
 const PRESSURE_WRITES: &[FactType] = &[PRESSURE];
-const WIND_READS: &[FactType] = &[ADJACENT_TO, PRESSURE];
+const WIND_READS: &[FactType] = &[TEMPERATURE, ADJACENT_TO, PRESSURE];
 const WIND_WRITES: &[FactType] = &[WIND_SPEED, WIND_TOWARD];
-const EXPOSURE_READS: &[FactType] = &[EXPOSURE];
 const DANGER_READS: &[FactType] = &[HAS_PORTAL, PORTAL_DANGER_OVERRIDE, CONTAINED_IN, POSITION_Z];
 const DANGER_WRITES: &[FactType] = &[PORTAL_DANGER];
 
@@ -64,19 +75,27 @@ fn attenuate(value: i64, exposure: i64) -> i64 {
     value.saturating_mul(exposure) / PERCENT_FULL
 }
 
+/// The regions to simulate this tick: every entity carrying a committed temperature fact.
+///
+/// Temperature is the one environmental fact the loader seeds for every region, so it is the
+/// region roster (Vol. V Ch. 2 §2.1, clause 5). Reading it through the scoped view both
+/// discovers the regions and declares the dependency the tick loop checks.
+fn regions(view: &dyn CommittedView) -> Vec<EntityId> {
+    view.entities_with(TEMPERATURE)
+}
+
 /// A deterministic day/night temperature swing (Vol. III Ch. 1 §1.10). Proposes the per-tick
-/// delta of a triangle wave over the day, so the swing is bounded and reproducible.
+/// delta of a triangle wave over the day, so the swing is bounded and reproducible, for
+/// every region.
 pub struct DiurnalCycle {
-    region: EntityId,
     ticks_per_day: u64,
     amplitude_centi_c: i64,
 }
 
 impl DiurnalCycle {
-    /// Drive `region` with a swing of `amplitude_centi_c` over `ticks_per_day` ticks.
-    pub const fn new(region: EntityId, ticks_per_day: u64, amplitude_centi_c: i64) -> Self {
+    /// Drive every region with a swing of `amplitude_centi_c` over `ticks_per_day` ticks.
+    pub const fn new(ticks_per_day: u64, amplitude_centi_c: i64) -> Self {
         Self {
-            region,
             ticks_per_day,
             amplitude_centi_c,
         }
@@ -88,10 +107,10 @@ impl System for DiurnalCycle {
         SystemId::new("physical.diurnal_cycle")
     }
     fn reads(&self) -> &'static [FactType] {
-        EXPOSURE_READS
+        DIURNAL_READS
     }
     fn writes(&self) -> &'static [FactType] {
-        TEMPERATURE_RW
+        TEMPERATURE_W
     }
     fn cadence(&self) -> Cadence {
         Cadence::EveryTick
@@ -100,31 +119,32 @@ impl System for DiurnalCycle {
         let period = self.ticks_per_day.max(1);
         let level = wave(ctx.tick(), period, self.amplitude_centi_c);
         let prev = wave(ctx.tick().wrapping_sub(1), period, self.amplitude_centi_c);
-        let exposure = exposure_of(view, self.region);
-        vec![Proposal::new(
-            self.id(),
-            FactKey::new(self.region, TEMPERATURE),
-            ctx.tick(),
-            Change::Delta(attenuate(level - prev, exposure)),
-            Cause::new("diurnal_shift"),
-        )]
+        regions(view)
+            .into_iter()
+            .map(|region| {
+                let exposure = exposure_of(view, region);
+                Proposal::new(
+                    self.id(),
+                    FactKey::new(region, TEMPERATURE),
+                    ctx.basis_tick(),
+                    Change::Delta(attenuate(level - prev, exposure)),
+                    Cause::new("diurnal_shift"),
+                )
+            })
+            .collect()
     }
 }
 
 /// A small stochastic weather perturbation of temperature, drawn from the kernel-issued
-/// substream (Vol. V Ch. 4 §4.1).
+/// substream (Vol. V Ch. 4 §4.1), for every region.
 pub struct WeatherNoise {
-    region: EntityId,
     max_swing_centi_c: i64,
 }
 
 impl WeatherNoise {
-    /// Perturb `region`'s temperature by up to +/- `max_swing_centi_c` each tick.
-    pub const fn new(region: EntityId, max_swing_centi_c: i64) -> Self {
-        Self {
-            region,
-            max_swing_centi_c,
-        }
+    /// Perturb each region's temperature by up to +/- `max_swing_centi_c` each tick.
+    pub const fn new(max_swing_centi_c: i64) -> Self {
+        Self { max_swing_centi_c }
     }
 }
 
@@ -133,10 +153,10 @@ impl System for WeatherNoise {
         SystemId::new("physical.weather_noise")
     }
     fn reads(&self) -> &'static [FactType] {
-        EXPOSURE_READS
+        DIURNAL_READS
     }
     fn writes(&self) -> &'static [FactType] {
-        TEMPERATURE_RW
+        TEMPERATURE_W
     }
     fn cadence(&self) -> Cadence {
         Cadence::EveryTick
@@ -144,33 +164,39 @@ impl System for WeatherNoise {
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let swing = self.max_swing_centi_c.max(0);
         let span = (swing as u64) * 2 + 1;
-        let mut rng = ctx.rng(self.region.raw());
-        let raw = rng.below(span) as i64 - swing;
-        let exposure = exposure_of(view, self.region);
-        vec![Proposal::new(
-            self.id(),
-            FactKey::new(self.region, TEMPERATURE),
-            ctx.tick(),
-            Change::Delta(attenuate(raw, exposure)),
-            Cause::new("weather_perturbation"),
-        )]
+        regions(view)
+            .into_iter()
+            .map(|region| {
+                // Scope the substream by region id: content-keyed, so each region's weather is
+                // independent and replays identically (Vol. V Ch. 4 §4.1).
+                let mut rng = ctx.rng(region.raw());
+                let raw = rng.below(span) as i64 - swing;
+                let exposure = exposure_of(view, region);
+                Proposal::new(
+                    self.id(),
+                    FactKey::new(region, TEMPERATURE),
+                    ctx.basis_tick(),
+                    Change::Delta(attenuate(raw, exposure)),
+                    Cause::new("weather_perturbation"),
+                )
+            })
+            .collect()
     }
 }
 
 /// The sun crossing the sky: illumination set to its absolute level for the tick, peaking at
-/// midday and dark at midnight (Vol. III Ch. 1 §1.10, Time and Change). Reads nothing — the
-/// sun's position is a pure function of the clock — and creates the fact on first tick.
+/// midday and dark at midnight (Vol. III Ch. 1 §1.10, Time and Change), for every region.
+/// The sun's position is a pure function of the clock; exposure scales it so a sealed cave
+/// stays dark even at noon.
 pub struct DayNightCycle {
-    region: EntityId,
     ticks_per_day: u64,
     peak_illumination: i64,
 }
 
 impl DayNightCycle {
-    /// Light `region` up to `peak_illumination` at midday over `ticks_per_day` ticks.
-    pub const fn new(region: EntityId, ticks_per_day: u64, peak_illumination: i64) -> Self {
+    /// Light each region up to `peak_illumination` at midday over `ticks_per_day` ticks.
+    pub const fn new(ticks_per_day: u64, peak_illumination: i64) -> Self {
         Self {
-            region,
             ticks_per_day,
             peak_illumination,
         }
@@ -182,7 +208,7 @@ impl System for DayNightCycle {
         SystemId::new("physical.day_night_cycle")
     }
     fn reads(&self) -> &'static [FactType] {
-        EXPOSURE_READS
+        ILLUMINATION_READS
     }
     fn writes(&self) -> &'static [FactType] {
         ILLUMINATION_W
@@ -196,35 +222,37 @@ impl System for DayNightCycle {
             self.ticks_per_day.max(2),
             self.peak_illumination,
         );
-        let exposure = exposure_of(view, self.region);
-        vec![Proposal::new(
-            self.id(),
-            FactKey::new(self.region, ILLUMINATION),
-            ctx.tick(),
-            // Absolute level scaled by how open the location is to the sky: a sealed cave
-            // stays dark even at noon.
-            Change::Set(Value::Int(attenuate(sun, exposure))),
-            Cause::new("solar_position"),
-        )]
+        regions(view)
+            .into_iter()
+            .map(|region| {
+                let exposure = exposure_of(view, region);
+                Proposal::new(
+                    self.id(),
+                    FactKey::new(region, ILLUMINATION),
+                    ctx.basis_tick(),
+                    Change::Set(Value::Int(attenuate(sun, exposure))),
+                    Cause::new("solar_position"),
+                )
+            })
+            .collect()
     }
 }
 
 /// Weather driving humidity: it drifts toward a baseline while stochastic weather perturbs
-/// it, drawn from the kernel-issued substream (Vol. V Ch. 4 §4.1). Reads its own committed
-/// value to compute the drift, and creates the fact at the baseline on first tick.
+/// it, drawn from the kernel-issued substream (Vol. V Ch. 4 §4.1), for every region. Reads
+/// each region's own committed value to compute the drift, and creates the fact at the
+/// baseline on first exposure.
 pub struct Precipitation {
-    region: EntityId,
     baseline: i64,
     swing: i64,
     drying_divisor: i64,
 }
 
 impl Precipitation {
-    /// Pull `region`'s humidity toward `baseline` (over `drying_divisor` ticks) with a
+    /// Pull each region's humidity toward `baseline` (over `drying_divisor` ticks) with a
     /// per-tick weather perturbation of up to +/- `swing`.
-    pub const fn new(region: EntityId, baseline: i64, swing: i64, drying_divisor: i64) -> Self {
+    pub const fn new(baseline: i64, swing: i64, drying_divisor: i64) -> Self {
         Self {
-            region,
             baseline,
             swing,
             drying_divisor,
@@ -246,43 +274,48 @@ impl System for Precipitation {
         Cadence::EveryTick
     }
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
-        let key = FactKey::new(self.region, HUMIDITY);
-        let current = match view.read(key) {
-            None => {
-                // Establish humidity at its baseline the first time this runs.
-                return vec![Proposal::new(
-                    self.id(),
-                    key,
-                    ctx.tick(),
-                    Change::Create(kernel::value::Value::Int(self.baseline)),
-                    Cause::new("precipitation"),
-                )];
-            }
-            Some(fact) => match fact.value.as_int() {
-                Some(h) => h,
-                None => return Vec::new(),
-            },
-        };
-        let drift = (self.baseline - current) / self.drying_divisor.max(1);
-        let swing = self.swing.max(0);
-        let mut rng = ctx.rng(self.region.raw());
-        let noise = rng.below((swing as u64) * 2 + 1) as i64 - swing;
-        let exposure = exposure_of(view, self.region);
-        vec![Proposal::new(
-            self.id(),
-            key,
-            ctx.tick(),
-            Change::Delta(drift + attenuate(noise, exposure)),
-            Cause::new("precipitation"),
-        )]
+        let mut out = Vec::new();
+        for region in regions(view) {
+            let key = FactKey::new(region, HUMIDITY);
+            let current = match view.read(key) {
+                None => {
+                    // Establish humidity at its baseline the first time this runs.
+                    out.push(Proposal::new(
+                        self.id(),
+                        key,
+                        ctx.basis_tick(),
+                        Change::Create(Value::Int(self.baseline)),
+                        Cause::new("precipitation"),
+                    ));
+                    continue;
+                }
+                Some(fact) => match fact.value.as_int() {
+                    Some(h) => h,
+                    None => continue,
+                },
+            };
+            let drift = (self.baseline - current) / self.drying_divisor.max(1);
+            let swing = self.swing.max(0);
+            let mut rng = ctx.rng(region.raw());
+            let noise = rng.below((swing as u64) * 2 + 1) as i64 - swing;
+            let exposure = exposure_of(view, region);
+            out.push(Proposal::new(
+                self.id(),
+                key,
+                ctx.basis_tick(),
+                Change::Delta(drift + attenuate(noise, exposure)),
+                Cause::new("precipitation"),
+            ));
+        }
+        out
     }
 }
 
 /// Atmospheric pressure dynamics (Vol. III Ch. 1 §1.10): pressure settles toward a baseline
-/// that falls with elevation, perturbed by stochastic weather. Reads the region's elevation
-/// and its own pressure; creates the fact at the elevation baseline on the first tick.
+/// that falls with elevation, perturbed by stochastic weather, for every region. Reads each
+/// region's elevation and its own pressure; creates the fact at the elevation baseline on
+/// the first tick.
 pub struct PressureSystem {
-    region: EntityId,
     sea_level: i64,
     elevation_factor: i64,
     weather_swing: i64,
@@ -290,19 +323,17 @@ pub struct PressureSystem {
 }
 
 impl PressureSystem {
-    /// Configure pressure for `region`. `sea_level` is baseline pressure at the datum;
-    /// `elevation_factor` is decapascals dropped per metre of elevation; `weather_swing` and
-    /// `settle_divisor` govern the stochastic perturbation and the drift back to baseline
-    /// (world-package rules, Vol. IV Ch. 2).
+    /// Configure pressure. `sea_level` is baseline pressure at the datum; `elevation_factor`
+    /// is decapascals dropped per metre of elevation; `weather_swing` and `settle_divisor`
+    /// govern the stochastic perturbation and the drift back to baseline (world-package
+    /// rules, Vol. IV Ch. 2).
     pub const fn new(
-        region: EntityId,
         sea_level: i64,
         elevation_factor: i64,
         weather_swing: i64,
         settle_divisor: i64,
     ) -> Self {
         Self {
-            region,
             sea_level,
             elevation_factor,
             weather_swing,
@@ -330,59 +361,61 @@ impl System for PressureSystem {
         Cadence::EveryTick
     }
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
-        let elevation = view
-            .read(FactKey::new(self.region, ELEVATION))
-            .and_then(|f| f.value.as_int())
-            .unwrap_or(0);
-        let baseline = self.baseline(elevation);
-        let key = FactKey::new(self.region, PRESSURE);
-        match view.read(key) {
-            None => vec![Proposal::new(
-                self.id(),
-                key,
-                ctx.tick(),
-                Change::Create(Value::Int(baseline)),
-                Cause::new("pressure_baseline"),
-            )],
-            Some(fact) => match fact.value.as_int() {
-                None => Vec::new(),
-                Some(current) => {
-                    let drift = (baseline - current) / self.settle_divisor.max(1);
-                    let swing = self.weather_swing.max(0);
-                    let mut rng = ctx.rng(self.region.raw());
-                    let noise = rng.below((swing as u64) * 2 + 1) as i64 - swing;
-                    let exposure = exposure_of(view, self.region);
-                    vec![Proposal::new(
-                        self.id(),
-                        key,
-                        ctx.tick(),
-                        Change::Delta(drift + attenuate(noise, exposure)),
-                        Cause::new("pressure_weather"),
-                    )]
+        let mut out = Vec::new();
+        for region in regions(view) {
+            let elevation = view
+                .read(FactKey::new(region, ELEVATION))
+                .and_then(|f| f.value.as_int())
+                .unwrap_or(0);
+            let baseline = self.baseline(elevation);
+            let key = FactKey::new(region, PRESSURE);
+            match view.read(key) {
+                None => out.push(Proposal::new(
+                    self.id(),
+                    key,
+                    ctx.basis_tick(),
+                    Change::Create(Value::Int(baseline)),
+                    Cause::new("pressure_baseline"),
+                )),
+                Some(fact) => {
+                    if let Some(current) = fact.value.as_int() {
+                        let drift = (baseline - current) / self.settle_divisor.max(1);
+                        let swing = self.weather_swing.max(0);
+                        let mut rng = ctx.rng(region.raw());
+                        let noise = rng.below((swing as u64) * 2 + 1) as i64 - swing;
+                        let exposure = exposure_of(view, region);
+                        out.push(Proposal::new(
+                            self.id(),
+                            key,
+                            ctx.basis_tick(),
+                            Change::Delta(drift + attenuate(noise, exposure)),
+                            Cause::new("pressure_weather"),
+                        ));
+                    }
                 }
-            },
+            }
         }
+        out
     }
 }
 
 /// Wind as the consequence of pressure gradients across the topology (Vol. III Ch. 1 §1.10,
-/// "Wind flows"). Reads the region's pressure and every neighbour's pressure (via adjacency),
-/// then blows toward the lowest-pressure neighbour with a speed proportional to the gradient
-/// — a genuinely multi-fact, topology-aware system that writes both wind facts. Calm (speed
-/// zero, no direction) when no neighbour is lower. Wind therefore lags pressure by one tick,
-/// as effects chain across commits (Vol. III Ch. 12 §12.2).
+/// "Wind flows"), for every region. Reads each region's pressure and every neighbour's
+/// pressure (via adjacency), then blows toward the lowest-pressure neighbour with a speed
+/// proportional to the gradient — a genuinely multi-fact, topology-aware system that writes
+/// both wind facts. Calm (speed zero, no direction) when no neighbour is lower. Wind
+/// therefore lags pressure by one tick, as effects chain across commits (Vol. III Ch. 12
+/// §12.2).
 pub struct WindSystem {
-    region: EntityId,
     gradient_divisor: i64,
     max_wind: i64,
 }
 
 impl WindSystem {
-    /// Configure wind for `region`. `gradient_divisor` scales speed per unit pressure
-    /// difference (larger = gentler); `max_wind` clamps the speed (world-package rules).
-    pub const fn new(region: EntityId, gradient_divisor: i64, max_wind: i64) -> Self {
+    /// Configure wind. `gradient_divisor` scales speed per unit pressure difference (larger =
+    /// gentler); `max_wind` clamps the speed (world-package rules).
+    pub const fn new(gradient_divisor: i64, max_wind: i64) -> Self {
         Self {
-            region,
             gradient_divisor,
             max_wind,
         }
@@ -403,74 +436,77 @@ impl System for WindSystem {
         Cadence::EveryTick
     }
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
-        let my_pressure = match view
-            .read(FactKey::new(self.region, PRESSURE))
-            .and_then(|f| f.value.as_int())
-        {
-            Some(p) => p,
-            None => return Vec::new(),
-        };
+        let mut out = Vec::new();
+        for region in regions(view) {
+            let my_pressure = match view
+                .read(FactKey::new(region, PRESSURE))
+                .and_then(|f| f.value.as_int())
+            {
+                Some(p) => p,
+                // No committed pressure yet (e.g. the first tick): calm, and nothing to write.
+                None => continue,
+            };
 
-        // Scan neighbours (a cardinality-many read) for the lowest pressure; deterministic
-        // tie-break by smallest entity id.
-        let mut best: Option<(EntityId, i64)> = None;
-        for f in view.read_all(FactKey::new(self.region, ADJACENT_TO)) {
-            if let Value::Entity(neighbour) = f.value {
-                if let Some(np) = view
-                    .read(FactKey::new(neighbour, PRESSURE))
-                    .and_then(|nf| nf.value.as_int())
-                {
-                    let better = match best {
-                        None => true,
-                        Some((bn, bp)) => np < bp || (np == bp && neighbour.raw() < bn.raw()),
-                    };
-                    if better {
-                        best = Some((neighbour, np));
+            // Scan neighbours (a cardinality-many read) for the lowest pressure; deterministic
+            // tie-break by smallest entity id.
+            let mut best: Option<(EntityId, i64)> = None;
+            for f in view.read_all(FactKey::new(region, ADJACENT_TO)) {
+                if let Value::Entity(neighbour) = f.value {
+                    if let Some(np) = view
+                        .read(FactKey::new(neighbour, PRESSURE))
+                        .and_then(|nf| nf.value.as_int())
+                    {
+                        let better = match best {
+                            None => true,
+                            Some((bn, bp)) => np < bp || (np == bp && neighbour.raw() < bn.raw()),
+                        };
+                        if better {
+                            best = Some((neighbour, np));
+                        }
                     }
                 }
             }
-        }
 
-        let speed_key = FactKey::new(self.region, WIND_SPEED);
-        let toward_key = FactKey::new(self.region, WIND_TOWARD);
-        match best {
-            Some((neighbour, np)) if np < my_pressure => {
-                let speed =
-                    ((my_pressure - np) / self.gradient_divisor.max(1)).clamp(0, self.max_wind);
-                vec![
-                    Proposal::new(
+            let speed_key = FactKey::new(region, WIND_SPEED);
+            let toward_key = FactKey::new(region, WIND_TOWARD);
+            match best {
+                Some((neighbour, np)) if np < my_pressure => {
+                    let speed =
+                        ((my_pressure - np) / self.gradient_divisor.max(1)).clamp(0, self.max_wind);
+                    out.push(Proposal::new(
                         self.id(),
                         speed_key,
-                        ctx.tick(),
+                        ctx.basis_tick(),
                         Change::Set(Value::Int(speed)),
                         Cause::new("pressure_gradient"),
-                    ),
-                    Proposal::new(
+                    ));
+                    out.push(Proposal::new(
                         self.id(),
                         toward_key,
-                        ctx.tick(),
+                        ctx.basis_tick(),
                         Change::Set(Value::Entity(neighbour)),
                         Cause::new("pressure_gradient"),
-                    ),
-                ]
+                    ));
+                }
+                _ => {
+                    out.push(Proposal::new(
+                        self.id(),
+                        speed_key,
+                        ctx.basis_tick(),
+                        Change::Set(Value::Int(0)),
+                        Cause::new("calm"),
+                    ));
+                    out.push(Proposal::new(
+                        self.id(),
+                        toward_key,
+                        ctx.basis_tick(),
+                        Change::Tombstone,
+                        Cause::new("calm"),
+                    ));
+                }
             }
-            _ => vec![
-                Proposal::new(
-                    self.id(),
-                    speed_key,
-                    ctx.tick(),
-                    Change::Set(Value::Int(0)),
-                    Cause::new("calm"),
-                ),
-                Proposal::new(
-                    self.id(),
-                    toward_key,
-                    ctx.tick(),
-                    Change::Tombstone,
-                    Cause::new("calm"),
-                ),
-            ],
         }
+        out
     }
 }
 
@@ -503,19 +539,17 @@ fn absolute_height(view: &dyn CommittedView, entity: EntityId) -> i64 {
 
 /// Writes each portal's effective danger (Vol. III Ch. 1 §1.11). If the world pinned a fixed
 /// danger the system echoes it; otherwise it derives danger from the portal's height above
-/// the ground -- a fall -- leaving a slot for weather to raise it later. Enumerates portals
-/// through each region's `has_portal` set, so it needs no separate portal list.
+/// the ground -- a fall -- leaving a slot for weather to raise it later. Enumerates every
+/// region that hosts portals through `has_portal`, so it needs no separate portal list.
 pub struct PortalDanger {
-    regions: Vec<EntityId>,
     fall_danger_per_meter: i64,
 }
 
 impl PortalDanger {
-    /// Configure over the regions whose portals to score, with the world's fall-danger rate
-    /// (danger points per metre of height; world-package rule, Vol. IV Ch. 2).
-    pub fn new(regions: Vec<EntityId>, fall_danger_per_meter: i64) -> Self {
+    /// Configure with the world's fall-danger rate (danger points per metre of height;
+    /// world-package rule, Vol. IV Ch. 2).
+    pub const fn new(fall_danger_per_meter: i64) -> Self {
         Self {
-            regions,
             fall_danger_per_meter,
         }
     }
@@ -536,8 +570,9 @@ impl System for PortalDanger {
     }
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let mut out = Vec::new();
-        for region in &self.regions {
-            for f in view.read_all(FactKey::new(*region, HAS_PORTAL)) {
+        // Every region that hosts at least one portal, discovered from committed reality.
+        for region in view.entities_with(HAS_PORTAL) {
+            for f in view.read_all(FactKey::new(region, HAS_PORTAL)) {
                 let portal = match f.value {
                     Value::Entity(p) => p,
                     _ => continue,
@@ -559,7 +594,7 @@ impl System for PortalDanger {
                 out.push(Proposal::new(
                     self.id(),
                     FactKey::new(portal, PORTAL_DANGER),
-                    ctx.tick(),
+                    ctx.basis_tick(),
                     Change::Set(Value::Int(danger)),
                     Cause::new("portal_danger"),
                 ));

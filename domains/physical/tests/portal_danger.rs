@@ -64,7 +64,7 @@ fn danger(store: &MemoryStore, portal: u64) -> i64 {
 }
 
 fn run(store: &mut MemoryStore) {
-    let domain = PhysicalDomain::new(vec![e(GROUND), e(SECOND)], config());
+    let domain = PhysicalDomain::new(config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle: Vec<ChronicleEntry> = Vec::new();

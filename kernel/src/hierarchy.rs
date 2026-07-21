@@ -19,9 +19,12 @@ use std::collections::BTreeSet;
 /// the result is always finite.
 pub fn ancestry(view: &dyn CommittedView, entity: EntityId, link: FactType) -> Vec<EntityId> {
     let mut path = vec![entity];
+    // A membership set alongside the ordered path: the cycle guard is then O(log n) per step
+    // instead of a linear scan of everything walked so far (O(n^2) over a deep hierarchy).
+    let mut seen = BTreeSet::from([entity]);
     let mut here = entity;
     while let Some(Value::Entity(parent)) = view.read(FactKey::new(here, link)).map(|f| f.value) {
-        if path.contains(&parent) {
+        if !seen.insert(parent) {
             break;
         }
         path.push(parent);

@@ -52,7 +52,7 @@ fn seeded_world(rs: &[EntityId]) -> MemoryStore {
 
 fn run(seed: u64, ticks: u64, rs: &[EntityId]) -> Vec<[u8; 32]> {
     let mut store = seeded_world(rs);
-    let domain = PhysicalDomain::new(rs.to_vec(), config());
+    let domain = PhysicalDomain::new(config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle: Vec<ChronicleEntry> = Vec::new();
@@ -68,7 +68,7 @@ fn run(seed: u64, ticks: u64, rs: &[EntityId]) -> Vec<[u8; 32]> {
 fn regions_evolve_independently_and_validly() {
     let rs = regions(4);
     let mut store = seeded_world(&rs);
-    let domain = PhysicalDomain::new(rs.clone(), config());
+    let domain = PhysicalDomain::new(config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle = Vec::new();

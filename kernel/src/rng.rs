@@ -67,10 +67,27 @@ impl Rng {
         mix(self.state)
     }
 
-    /// A value in `0..bound`. Panics if `bound` is zero.
+    /// A value in `0..bound`, uniformly. Panics if `bound` is zero.
+    ///
+    /// Uses Lemire's multiply-shift with rejection: a plain `% bound` would bias toward the
+    /// low end of the range whenever `bound` does not divide `2^64`, and an engine whose
+    /// whole premise is bit-exact fairness cannot ship a skewed die (Vol. V Ch. 4 §4.1). The
+    /// rejection zone is entered only for the fraction of draws that would bias the result,
+    /// so the expected number of `next_u64` calls is barely above one, and the sequence
+    /// stays fully deterministic.
     pub fn below(&mut self, bound: u64) -> u64 {
         assert!(bound > 0, "bound must be positive");
-        self.next_u64() % bound
+        let mut product = u128::from(self.next_u64()) * u128::from(bound);
+        let mut low = product as u64;
+        if low < bound {
+            // Reject the low zone that would otherwise be over-represented.
+            let threshold = bound.wrapping_neg() % bound;
+            while low < threshold {
+                product = u128::from(self.next_u64()) * u128::from(bound);
+                low = product as u64;
+            }
+        }
+        (product >> 64) as u64
     }
 }
 

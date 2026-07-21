@@ -28,7 +28,6 @@ pub mod hierarchy;
 pub mod identity;
 pub mod proposal;
 pub mod rng;
-pub mod scheduler;
 pub mod store;
 pub mod system;
 pub mod tick;

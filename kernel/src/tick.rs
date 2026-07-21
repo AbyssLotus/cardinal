@@ -56,6 +56,17 @@ impl Stage {
 /// (Vol. V Ch. 3 §3.5.5), and the error names the stage that stopped it.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TickError {
+    /// A system read a fact type outside its declared read set (Vol. V Ch. 3 §3.5,
+    /// invariant 2) — a hermeticity violation caught in Evaluate. An undeclared read is a
+    /// failure, never a silent default: a system that saw an empty world because of a
+    /// mis-declared read set would propose confidently wrong facts (Vol. IV Ch. 2,
+    /// missing-is-failure).
+    UndeclaredRead {
+        /// The offending system.
+        system: SystemId,
+        /// The fact type it read without declaring.
+        fact_type: FactType,
+    },
     /// A system proposed a change to a fact type outside its declared write set
     /// (Vol. V Ch. 3 §3.5, invariant 2) — a hermeticity violation caught in Evaluate.
     UndeclaredWrite {
@@ -63,6 +74,18 @@ pub enum TickError {
         system: SystemId,
         /// The fact type it tried to write without declaring.
         fact_type: FactType,
+    },
+    /// A proposal declared a basis tick other than the committed tick it must have read
+    /// (Vol. V Ch. 3 §3.1, Proposals — conflict detection). A well-formed proposal for
+    /// tick N reads reality at N-1 and declares N-1 as its basis; any other basis means the
+    /// proposal was computed against state it could not have seen.
+    StaleBasis {
+        /// The offending system.
+        system: SystemId,
+        /// The basis every proposal this tick must declare (the committed tick).
+        expected: u64,
+        /// The basis the proposal actually declared.
+        found: u64,
     },
     /// A proposal targeted a fact type no enabled domain owns (Appendix A).
     Unowned(FactType),
@@ -100,7 +123,9 @@ pub fn run_tick<S: RealityStore>(
     due.sort_by_key(|s| s.id().name());
 
     // 2. EVALUATE — hermetic: each system reads a view scoped to its declared read set, and
-    //    may only propose to facts in its declared write set (Vol. V Ch. 3 §3.1, §3.5).
+    //    may only propose to facts in its declared write set (Vol. V Ch. 3 §3.1, §3.5). The
+    //    basis every proposal must declare is the committed tick it read: N-1 for tick N.
+    let expected_basis = tick.saturating_sub(1);
     let mut proposals: Vec<Proposal> = Vec::new();
     {
         let view: &dyn CommittedView = &*store;
@@ -108,11 +133,26 @@ pub fn run_tick<S: RealityStore>(
             let scoped = ScopedView::new(view, sys.reads());
             let ctx = TickContext::new(tick, seed, sys.id().code());
             let emitted = sys.evaluate(&scoped, &ctx);
+            // An undeclared read taints the whole evaluation: the system may have acted on a
+            // silently-empty view, so its proposals cannot be trusted (Vol. V Ch. 3 §3.5).
+            if let Some(fact_type) = scoped.violation() {
+                return Err(TickError::UndeclaredRead {
+                    system: sys.id(),
+                    fact_type,
+                });
+            }
             for p in &emitted {
                 if !sys.writes().contains(&p.target.fact_type) {
                     return Err(TickError::UndeclaredWrite {
                         system: sys.id(),
                         fact_type: p.target.fact_type,
+                    });
+                }
+                if p.basis_tick != expected_basis {
+                    return Err(TickError::StaleBasis {
+                        system: sys.id(),
+                        expected: expected_basis,
+                        found: p.basis_tick,
                     });
                 }
             }
@@ -176,7 +216,14 @@ pub fn run_tick<S: RealityStore>(
                         }
                     }
                 }
-                let facts = set
+                // The owner validates the whole resolved set, so it can enforce set-level
+                // coherence the generic Add/Remove machinery cannot (Vol. V Ch. 3 §3.1,
+                // Validate; the cardinality-one path already validates through `compose`).
+                let values: Vec<crate::value::Value> = set.into_iter().collect();
+                owner
+                    .validate_many(key.fact_type, &values)
+                    .map_err(TickError::Validate)?;
+                let facts = values
                     .into_iter()
                     .map(|v| Fact::new(v, provenance))
                     .collect::<Vec<_>>();
@@ -188,30 +235,22 @@ pub fn run_tick<S: RealityStore>(
     }
 
     // 5. COMMIT — the single mutation path; reality becomes N (Vol. V Ch. 2 §2.1). Nothing
-    //    above mutated the store, so any error before here left it at N-1.
-    store.apply(batch.clone());
+    //    above mutated the store, so any error before here left it at N-1. `apply` is
+    //    infallible, so once we reach it the tick is committed; the batch moves in, no clone.
+    store.apply(batch);
 
-    // 6. CHRONICLE — one entry per committed write, from its proposals' cause
-    //    (Vol. V Ch. 6 §6.1). Removals are not chronicled in this build.
-    for resolution in &batch.resolutions {
-        match resolution {
-            Resolution::One { key, fact } => chronicle.push(ChronicleEntry::new(
+    // 6. CHRONICLE — one entry per committed proposal, carrying that proposal's own cause
+    //    (Vol. V Ch. 6 §6.1). One entry per proposal, not per resolved fact, so every cause
+    //    behind a composed value is recorded and a removal leaves a trace: a Tombstone or
+    //    Remove change is chronicled exactly like a write (Vol. I, Law 17, traces on death).
+    for group in grouped.values() {
+        for p in group {
+            chronicle.push(ChronicleEntry::new(
                 tick,
-                key.entity,
-                key.fact_type,
-                fact.provenance.cause,
-            )),
-            Resolution::Many { key, facts } => {
-                if let Some(first) = facts.first() {
-                    chronicle.push(ChronicleEntry::new(
-                        tick,
-                        key.entity,
-                        key.fact_type,
-                        first.provenance.cause,
-                    ));
-                }
-            }
-            Resolution::Clear { .. } => {}
+                p.target.entity,
+                p.target.fact_type,
+                p.cause,
+            ));
         }
     }
 
