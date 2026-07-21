@@ -26,6 +26,18 @@ pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
 /// §1.3, elevation). May be negative (below the datum). A spatial property of place.
 pub const ELEVATION: FactType = FactType::new("physical.space.elevation");
 
+/// An entity's local position within its immediate container, as fixed-point centimetres
+/// along each axis (Vol. III Ch. 1 §1.3, position). Space is representation-independent
+/// (§1.4) -- coordinates are one representation a world may choose; consumers ask spatial
+/// questions rather than depending on this storage (see `crate::space`). Positions compose up
+/// the containment hierarchy to give the relative position of any two loaded entities.
+/// Frames are assumed axis-aligned (no inter-frame rotation); orientation is a later fact.
+pub const POSITION_X: FactType = FactType::new("physical.space.position_x");
+/// Local position along the Y axis; see [`POSITION_X`].
+pub const POSITION_Y: FactType = FactType::new("physical.space.position_y");
+/// Local position along the Z axis (height); see [`POSITION_X`].
+pub const POSITION_Z: FactType = FactType::new("physical.space.position_z");
+
 /// The regions directly connected to this one in a topology (Vol. III Ch. 1 §1.5). A
 /// **cardinality-many** relationship: a region has several neighbours. Value is an entity
 /// ref; seed both directions for an undirected edge. Distinct topologies (roads, rivers)

@@ -7,7 +7,7 @@
 
 use crate::model::{
     AdjacencySpec, ContainmentSpec, ExposureSpec, LivingRules, Manifest, OrganismSpec,
-    PhysicalRules, RegionSpec, WorldPackage,
+    PhysicalRules, PositionSpec, RegionSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -74,6 +74,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut containment: Vec<ContainmentSpec> = Vec::new();
     let mut adjacency: Vec<AdjacencySpec> = Vec::new();
     let mut exposure: Vec<ExposureSpec> = Vec::new();
+    let mut positions: Vec<PositionSpec> = Vec::new();
 
     for (i, raw) in text.lines().enumerate() {
         let line_no = i + 1;
@@ -195,6 +196,11 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     exposure: exp,
                 });
             }
+            "positions" => {
+                let entity_id: u64 = parse_num(key, line_no)?;
+                let (x, y, z) = parse_position_values(value, line_no)?;
+                positions.push(PositionSpec { entity_id, x, y, z });
+            }
             "" => {
                 return Err(ParseError::at(
                     line_no,
@@ -263,6 +269,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         containment,
         adjacency,
         exposure,
+        positions,
     })
 }
 
@@ -305,6 +312,34 @@ fn parse_region_values(value: &str, line_no: usize) -> Result<(i64, Option<i64>)
         ));
     }
     Ok((temp, elevation))
+}
+
+/// Parse `x, y` or `x, y, z` for a position line (z optional).
+fn parse_position_values(
+    value: &str,
+    line_no: usize,
+) -> Result<(i64, i64, Option<i64>), ParseError> {
+    let mut parts = value.split(',');
+    let x = parse_num(
+        parts
+            .next()
+            .ok_or_else(|| ParseError::at(line_no, "expected `x, y[, z]`"))?,
+        line_no,
+    )?;
+    let y = parse_num(
+        parts
+            .next()
+            .ok_or_else(|| ParseError::at(line_no, "expected `x, y[, z]`"))?,
+        line_no,
+    )?;
+    let z = match parts.next() {
+        Some(zs) => Some(parse_num(zs, line_no)?),
+        None => None,
+    };
+    if parts.next().is_some() {
+        return Err(ParseError::at(line_no, "expected `x, y` or `x, y, z`"));
+    }
+    Ok((x, y, z))
 }
 
 /// Parse a `"a, b"` pair of numbers (used for `organism_id = region_id, body_heat`).

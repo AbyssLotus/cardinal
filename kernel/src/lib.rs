@@ -24,6 +24,7 @@ pub mod domain;
 pub mod events;
 pub mod fact;
 pub mod hash;
+pub mod hierarchy;
 pub mod identity;
 pub mod proposal;
 pub mod rng;

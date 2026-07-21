@@ -23,6 +23,7 @@
 
 pub mod composition;
 pub mod schema;
+pub mod space;
 pub mod systems;
 
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
@@ -95,6 +96,9 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::WIND_TOWARD
             || fact_type == schema::ELEVATION
             || fact_type == schema::EXPOSURE
+            || fact_type == schema::POSITION_X
+            || fact_type == schema::POSITION_Y
+            || fact_type == schema::POSITION_Z
             || fact_type == schema::CONTAINED_IN
             || fact_type == schema::ADJACENT_TO
     }
@@ -153,7 +157,12 @@ impl Domain for PhysicalDomain {
         current: Option<Value>,
         changes: &[Change],
     ) -> Result<Resolved, ResolveError> {
-        if fact_type == schema::TEMPERATURE || fact_type == schema::ELEVATION {
+        if fact_type == schema::TEMPERATURE
+            || fact_type == schema::ELEVATION
+            || fact_type == schema::POSITION_X
+            || fact_type == schema::POSITION_Y
+            || fact_type == schema::POSITION_Z
+        {
             composition::compose_additive(current, changes)
         } else if fact_type == schema::ILLUMINATION
             || fact_type == schema::HUMIDITY

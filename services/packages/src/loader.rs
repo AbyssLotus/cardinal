@@ -24,7 +24,9 @@ use kernel::tick::{run_tick, TickError};
 use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use living::LivingDomain;
-use physical::schema::{ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, TEMPERATURE};
+use physical::schema::{
+    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, POSITION_X, POSITION_Y, POSITION_Z, TEMPERATURE,
+};
 use physical::{PhysicalConfig, PhysicalDomain};
 use std::fmt;
 
@@ -202,6 +204,16 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             FactKey::new(EntityId::from_raw(c.child_id), CONTAINED_IN),
             seeded(Value::Entity(EntityId::from_raw(c.parent_id))),
         );
+    }
+
+    // Seed local positions (Physical facts): where each entity sits within its container.
+    for p in &package.positions {
+        let e = EntityId::from_raw(p.entity_id);
+        store.seed(FactKey::new(e, POSITION_X), seeded(Value::Int(p.x)));
+        store.seed(FactKey::new(e, POSITION_Y), seeded(Value::Int(p.y)));
+        if let Some(z) = p.z {
+            store.seed(FactKey::new(e, POSITION_Z), seeded(Value::Int(z)));
+        }
     }
 
     // Seed per-region exposure to the sky (a Physical fact). Regions absent here are fully

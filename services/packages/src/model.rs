@@ -28,6 +28,8 @@ pub struct WorldPackage {
     /// Per-region exposure to the open sky (Vol. III Ch. 1 §1.6). A region absent here is
     /// fully exposed.
     pub exposure: Vec<ExposureSpec>,
+    /// Local positions of entities within their immediate containers (Vol. III Ch. 1 §1.3).
+    pub positions: Vec<PositionSpec>,
 }
 
 /// A package's identity card (Vol. IV Ch. 1 §1.2, The Manifest).
@@ -135,4 +137,18 @@ pub struct ExposureSpec {
     pub region_id: u64,
     /// Its exposure, 0..=10000.
     pub exposure: i64,
+}
+
+/// A seeded local position of an entity within its immediate container (Vol. III Ch. 1 §1.3),
+/// in centimetres. Z is optional (absent = 0, ground level).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct PositionSpec {
+    /// The entity's raw id.
+    pub entity_id: u64,
+    /// Local X in centimetres.
+    pub x: i64,
+    /// Local Y in centimetres.
+    pub y: i64,
+    /// Local Z (height) in centimetres, if specified.
+    pub z: Option<i64>,
 }
