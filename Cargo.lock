@@ -82,6 +82,8 @@ name = "packages"
 version = "0.0.0"
 dependencies = [
  "kernel",
+ "living",
+ "physical",
 ]
 
 [[package]]

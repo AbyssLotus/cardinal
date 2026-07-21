@@ -1,0 +1,55 @@
+# Cardinal world -- a house: nested regions (city > house/shed, house > bedroom/kitchen) with
+# people located within rooms. Demonstrates relative position across a containment hierarchy
+# (Vol. III Ch. 1 §1.8, §1.12): any two loaded entities have a relative position in the frame
+# of whichever region contains both. Distances in centimetres.
+
+[manifest]
+id = world.house
+version = 0.1.0
+engine = >=0.0, <1.0
+domains = physical
+
+[rules.physical]
+ticks_per_day = 24
+diurnal_amplitude_centi_c = 400
+weather_max_swing_centi_c = 40
+illumination_peak = 10000
+humidity_baseline = 5500
+humidity_swing = 80
+humidity_drying_divisor = 8
+pressure_sea_level = 10130
+pressure_elevation_factor = 1
+pressure_weather_swing = 20
+pressure_settle_divisor = 8
+wind_gradient_divisor = 10
+fall_danger_per_meter = 1500        # danger points per metre of fall height
+
+# The places (regions carry a temperature). People are plain entities, located below.
+[regions]
+100 = 1500     # city
+1 = 1900       # house
+4 = 1000       # shed
+2 = 2000       # bedroom
+3 = 2100       # kitchen
+
+[containment]
+# child = parent  (nesting; people live inside rooms, rooms inside the house, etc.)
+1 = 100        # house within city
+4 = 100        # shed within city
+2 = 1          # bedroom within house
+3 = 1          # kitchen within house
+10 = 2         # alice in the bedroom
+40 = 2         # dave in the bedroom
+20 = 3         # bob in the kitchen
+30 = 4         # carol in the shed
+
+[positions]
+# entity_id = x, y[, z]  (centimetres within immediate container)
+1 = 0, 0       # house at the city origin
+4 = 2000, 0    # shed 20 m east in the city
+2 = 0, 0       # bedroom at the house origin
+3 = 500, 0     # kitchen 5 m east in the house
+10 = 100, 100  # alice
+40 = 100, 300  # dave (2 m north of alice, same room)
+20 = 50, 50    # bob
+30 = 10, 10    # carol

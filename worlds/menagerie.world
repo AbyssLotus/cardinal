@@ -1,0 +1,48 @@
+# Cardinal world -- a menagerie: two regions of very different climate, each home to an
+# organism whose body heat responds to the temperature around it. Two domains (physical and
+# living) meeting only through committed facts (Vol. III Ch. 12).
+
+[manifest]
+id = world.menagerie
+version = 0.1.0
+engine = >=0.0, <1.0
+domains = physical, living
+
+[rules.physical]
+ticks_per_day = 24
+diurnal_amplitude_centi_c = 400
+weather_max_swing_centi_c = 40
+illumination_peak = 10000
+humidity_baseline = 5500
+humidity_swing = 80
+humidity_drying_divisor = 8
+pressure_sea_level = 10130           # ~1013 hPa baseline at the datum
+pressure_elevation_factor = 1        # decapascals lost per metre of elevation
+pressure_weather_swing = 20          # +/- per-tick pressure jitter
+pressure_settle_divisor = 8          # how fast pressure returns to baseline
+wind_gradient_divisor = 10           # larger = gentler wind per unit pressure gap
+fall_danger_per_meter = 1500        # danger points per metre of fall height
+
+[rules.living]
+set_point_centi_c = 3700     # 37.00 C metabolic set point
+warm_response = 6            # pull toward the set point (larger = slower)
+cold_response = 3            # pull toward ambient temperature (larger = slower)
+
+[regions]
+# region_id = temperature[, elevation]
+1 = -800, 240000             # a frigid alpine region, -8.00 C at 2400 m
+2 = 2600, 10000              # a warm lowland region, 26.00 C at 100 m
+
+[organisms]
+# organism_id = region_id, starting body heat (centidegrees Celsius)
+10 = 1, 3700
+20 = 2, 3700
+
+[containment]
+# child_id = parent_id -- each region sits within continent 1000 (hierarchical containment)
+1 = 1000
+2 = 1000
+
+[adjacency]
+# region_a = region_b -- an undirected border between the alpine and lowland regions
+1 = 2

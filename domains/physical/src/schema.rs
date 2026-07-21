@@ -1,0 +1,131 @@
+//! Fact-type declarations owned by the Physical Reality domain (Appendix A; Vol. III Ch. 1).
+//!
+//! Physical Reality owns the stage: space (position, containment, elevation), connectivity,
+//! and environmental state (Vol. III Ch. 1 §1.3). Every fact type appears exactly once, in
+//! its owner's schema — one fact, one owner (Appendix A). Values are fixed-point integers,
+//! never floats, so committed state carries no floating-point nondeterminism (Vol. V Ch. 4);
+//! scales are this domain's convention. Consumers read these facts freely, by id
+//! (Vol. III Ch. 12 §12.1).
+//!
+//! Many-valued spatial relationships — a location's several overlapping regions
+//! (Vol. III Ch. 1 §1.7) and a region's several neighbours in a topology (§1.5) — await a
+//! cardinality-many fact model; the single-valued facts below (immediate containment,
+//! scalar fields) are what the current store represents.
+
+use kernel::fact::FactType;
+
+// ---- Space -----------------------------------------------------------------------------
+
+/// An entity's immediate container — the region or container it exists *within*
+/// (Vol. III Ch. 1 §1.8). Single-valued: the innermost enclosing entity. Hierarchical
+/// containment (planet ⊃ continent ⊃ region ⊃ …) is walked by following this link upward;
+/// it is state, not immutable structure (§1.8, Dynamic Containment). Value is an entity ref.
+pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
+
+/// A location's elevation, as fixed-point centimetres above a world datum (Vol. III Ch. 1
+/// §1.3, elevation). May be negative (below the datum). A spatial property of place.
+pub const ELEVATION: FactType = FactType::new("physical.space.elevation");
+
+/// An entity's local position within its immediate container, as fixed-point centimetres
+/// along each axis (Vol. III Ch. 1 §1.3, position). Space is representation-independent
+/// (§1.4) -- coordinates are one representation a world may choose; consumers ask spatial
+/// questions rather than depending on this storage (see `crate::space`). Positions compose up
+/// the containment hierarchy to give the relative position of any two loaded entities.
+/// Frames are assumed axis-aligned (no inter-frame rotation); orientation is a later fact.
+pub const POSITION_X: FactType = FactType::new("physical.space.position_x");
+/// Local position along the Y axis; see [`POSITION_X`].
+pub const POSITION_Y: FactType = FactType::new("physical.space.position_y");
+/// Local position along the Z axis (height); see [`POSITION_X`].
+pub const POSITION_Z: FactType = FactType::new("physical.space.position_z");
+
+/// The regions directly connected to this one in a topology (Vol. III Ch. 1 §1.5). A
+/// **cardinality-many** relationship: a region has several neighbours. Value is an entity
+/// ref; seed both directions for an undirected edge. Distinct topologies (roads, rivers)
+/// would be distinct fact types layered over the same regions, not a single graph
+/// (Vol. III Ch. 1 §1.5, No Single Topology).
+pub const ADJACENT_TO: FactType = FactType::new("physical.space.adjacent_to");
+
+/// The destination a portal leads to -- the region on its far side (Vol. III Ch. 1 §1.5,
+/// spatial connectivity; "Connected", §1.6). A portal is any located connection between
+/// regions: a door, window, hatch, staircase, or a magical gate into a pocket region. The
+/// portal is an entity, located in its host region (contained_in + position); this fact is
+/// its far side. Single-valued and changeable -- a gangplank or a re-targetable gate just
+/// Sets a new destination. This is CONNECTIVITY, distinct from adjacency: two rooms may
+/// border yet be disconnected if no portal joins them (§1.5, "adjacent yet effectively
+/// disconnected").
+pub const LEADS_TO: FactType = FactType::new("physical.space.leads_to");
+
+/// The set of portals a region hosts -- its exits (Vol. III Ch. 1 §1.5). A **cardinality-many**
+/// relationship: a region may have several portals (a room with two doors and a window). Each
+/// value is a portal entity, itself located within the region and carrying a [`LEADS_TO`]
+/// destination.
+pub const HAS_PORTAL: FactType = FactType::new("physical.space.has_portal");
+
+/// How dangerous it is to traverse a portal, 0..=10000 (Vol. III Ch. 1 §1.11, physical
+/// constraints). The *effective* danger, written every tick by the danger system: if a world
+/// pins [`PORTAL_DANGER_OVERRIDE`] the system echoes it; otherwise it derives danger from the
+/// portal's height above the ground (a 3rd-storey window is perilous, a ground-floor door is
+/// not) -- with room for weather to raise it later (a storm-lashed ledge). Consumers read
+/// this fact.
+pub const PORTAL_DANGER: FactType = FactType::new("physical.space.portal_danger");
+
+/// A world-authored fixed danger for a portal, 0..=10000 (optional). When present it pins
+/// [`PORTAL_DANGER`] to this value regardless of height or weather -- a magically warded gate
+/// that is always deadly, or a padded chute that never is.
+pub const PORTAL_DANGER_OVERRIDE: FactType = FactType::new("physical.space.portal_danger_override");
+
+/// How open a location is to the outside sky, in hundredths of a percent (0..=10000)
+/// (Vol. III Ch. 1 §1.6, Enclosed / Exposed; §1.11, sheltered). Full is open ground under
+/// open sky; a forest floor or cave mouth is partial; a sealed chamber is 0. Surface-weather
+/// systems scale their effect by this, so enclosed places get muted swings, no rain, and
+/// darkness. A location with no exposure fact is treated as fully exposed.
+pub const EXPOSURE: FactType = FactType::new("physical.space.exposure");
+
+// ---- Environmental state (facets of one shared environment, Vol. III Ch. 1 §1.10) ------
+
+/// Ambient temperature of a location, as fixed-point centidegrees Celsius. Owned by Physical
+/// Reality; consumed by Living Systems, Ecology, Economy (Appendix A). "A deer experiences
+/// cold; the forest owns the temperature" (Vol. III Ch. 1 §1.10).
+pub const TEMPERATURE: FactType = FactType::new("physical.environment.temperature");
+
+/// Illumination at a location, as fixed-point hundredths of a percent (0..=10000). A field
+/// that moves across the landscape with the sun (Vol. III Ch. 1 §1.10, Time and Change).
+pub const ILLUMINATION: FactType = FactType::new("physical.environment.illumination");
+
+/// Relative humidity at a location, as fixed-point hundredths of a percent (0..=10000)
+/// (Vol. III Ch. 1 §1.10, environmental state).
+pub const HUMIDITY: FactType = FactType::new("physical.environment.humidity");
+
+/// Atmospheric pressure at a location, in decapascals (hPa x 10) as fixed-point
+/// (Vol. III Ch. 1 §1.10). Falls with elevation and drifts with weather; the pressure
+/// gradient between adjacent regions is what drives wind.
+pub const PRESSURE: FactType = FactType::new("physical.environment.pressure");
+
+/// Wind speed at a location, in centimetres per second (Vol. III Ch. 1 §1.10, "Wind flows").
+/// Magnitude only; direction is [`WIND_TOWARD`].
+pub const WIND_SPEED: FactType = FactType::new("physical.environment.wind_speed");
+
+/// The neighbouring region the wind blows toward — wind's direction expressed *in the
+/// graph* rather than as a compass bearing, since space is representation-independent
+/// (Vol. III Ch. 1 §1.4; "downwind" is a spatial relation, §1.6). An entity ref to the
+/// downwind region; absent when the air is calm.
+pub const WIND_TOWARD: FactType = FactType::new("physical.environment.wind_toward");
+
+// ---- Physical constants (laws of the mechanism, not tunable world rules) ----------------
+
+/// Absolute zero in centidegrees Celsius (−273.15 °C) — the floor below which temperature is
+/// physically meaningless. The Validate stage rejects any resolved temperature beneath it.
+pub const ABSOLUTE_ZERO_CENTI_C: i64 = -27315;
+
+/// The maximum value of a percentage field (illumination, humidity): 100.00%.
+pub const PERCENT_FULL: i64 = 10000;
+
+/// Ceiling for atmospheric pressure (decapascals) — clamps the field to a sane range, well
+/// above any real surface pressure (~1013 hPa = 10130 decapascals).
+pub const MAX_PRESSURE: i64 = 20000;
+
+/// Ceiling for wind speed (centimetres/second) — clamps the field well above any real wind.
+pub const MAX_WIND: i64 = 100000;
+
+/// Ceiling for a portal's danger value (0 = harmless, 10000 = as dangerous as the model goes).
+pub const MAX_DANGER: i64 = 10000;

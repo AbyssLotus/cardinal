@@ -1,0 +1,42 @@
+# Cardinal world -- a cavern: an open meadow, a cave mouth, a sealed deep chamber, and a
+# cabin interior. Demonstrates exposure (Vol. III Ch. 1 §1.6): surface weather -- sunlight,
+# temperature swing, rain, wind -- is attenuated by how open each place is to the sky.
+
+[manifest]
+id = world.cavern
+version = 0.1.0
+engine = >=0.0, <1.0
+domains = physical
+
+[rules.physical]
+ticks_per_day = 24
+diurnal_amplitude_centi_c = 600
+weather_max_swing_centi_c = 50
+illumination_peak = 10000
+humidity_baseline = 6000
+humidity_swing = 100
+humidity_drying_divisor = 8
+pressure_sea_level = 10130
+pressure_elevation_factor = 1
+pressure_weather_swing = 20
+pressure_settle_divisor = 8
+wind_gradient_divisor = 10
+fall_danger_per_meter = 1500        # danger points per metre of fall height
+
+[regions]
+# region_id = temperature[, elevation]
+1 = 1500, 20000     # open meadow
+2 = 1200, 15000     # cave mouth
+3 = 1000, 12000     # deep sealed chamber (seeded at its stable local mean)
+4 = 2000, 20000     # cabin interior
+
+[exposure]
+# region_id = exposure (0..10000). A region absent here is fully exposed (open sky).
+2 = 4000            # cave mouth: partly sheltered, some daylight reaches in
+3 = 0               # deep chamber: sealed -- no light, no weather
+4 = 800             # cabin: mostly enclosed, a little window light
+
+[adjacency]
+1 = 2               # meadow borders the cave mouth
+2 = 3               # the cave mouth leads to the deep chamber
+1 = 4               # meadow borders the cabin
