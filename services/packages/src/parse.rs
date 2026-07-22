@@ -6,8 +6,9 @@
 //! pure data — this reads declarations, it never executes them (Vol. IV Ch. 1, invariant 6).
 
 use crate::model::{
-    AdjacencySpec, ContainmentSpec, ExposureSpec, LivingRules, Manifest, OrganismSpec,
-    PhysicalRules, PortalDangerSpec, PortalSpec, PositionSpec, RegionSpec, WorldPackage,
+    AdjacencySpec, ContainmentSpec, ExposureSpec, LivingRules, MadeOfSpec, Manifest,
+    MaterialProperty, MaterialSpec, OrganismSpec, PhysicalRules, PortalDangerSpec, PortalSpec,
+    PositionSpec, RegionSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -45,7 +46,9 @@ impl fmt::Display for ParseError {
 ///
 /// Recognised sections: `[manifest]`, `[rules.physical]`, `[rules.living]`, `[regions]`
 /// (`region_id = temperature[, elevation]`), `[organisms]`
-/// (`organism_id = region_id, body_heat`), and `[containment]` (`child_id = parent_id`).
+/// (`organism_id = region_id, body_heat`), `[containment]` (`child_id = parent_id`),
+/// `[adjacency]`, `[exposure]`, `[positions]`, `[portals]`, `[portal_danger]`, `[materials]`
+/// (`material_id = property:value, …`), and `[made_of]` (`object_id = material_id[, …]`).
 /// Blank lines and `#` comments are ignored. A missing required field is an error — the
 /// loader never fabricates defaults (Vol. IV Ch. 2).
 pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
@@ -78,6 +81,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut positions: Vec<PositionSpec> = Vec::new();
     let mut portals: Vec<PortalSpec> = Vec::new();
     let mut portal_danger: Vec<PortalDangerSpec> = Vec::new();
+    let mut materials: Vec<MaterialSpec> = Vec::new();
+    let mut made_of: Vec<MadeOfSpec> = Vec::new();
 
     for (i, raw) in text.lines().enumerate() {
         let line_no = i + 1;
@@ -222,6 +227,21 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 let danger: i64 = parse_num(value, line_no)?;
                 portal_danger.push(PortalDangerSpec { portal_id, danger });
             }
+            "materials" => {
+                let id: u64 = parse_num(key, line_no)?;
+                let properties = parse_material_properties(value, line_no)?;
+                materials.push(MaterialSpec { id, properties });
+            }
+            "made_of" => {
+                let object_id: u64 = parse_num(key, line_no)?;
+                for material in value.split(',') {
+                    let material_id: u64 = parse_num(material, line_no)?;
+                    made_of.push(MadeOfSpec {
+                        object_id,
+                        material_id,
+                    });
+                }
+            }
             "" => {
                 return Err(ParseError::at(
                     line_no,
@@ -297,7 +317,46 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         positions,
         portals,
         portal_danger,
+        materials,
+        made_of,
     })
+}
+
+/// Parse a material line's value: a comma-separated list of `property:value` pairs, e.g.
+/// `density:700, hardness:3000, flammability:7000`. A material declares only the properties it
+/// exposes (Vol. III Ch. 1 §1.9); an unknown property name is an error, never ignored.
+fn parse_material_properties(
+    value: &str,
+    line_no: usize,
+) -> Result<Vec<(MaterialProperty, i64)>, ParseError> {
+    let mut out = Vec::new();
+    for pair in value.split(',') {
+        let pair = pair.trim();
+        if pair.is_empty() {
+            continue;
+        }
+        let colon = pair
+            .find(':')
+            .ok_or_else(|| ParseError::at(line_no, "expected `property:value`"))?;
+        let name = pair[..colon].trim();
+        let raw = pair[colon + 1..].trim();
+        let property = match name {
+            "density" => MaterialProperty::Density,
+            "hardness" => MaterialProperty::Hardness,
+            "thermal_capacity" => MaterialProperty::ThermalCapacity,
+            "flammability" => MaterialProperty::Flammability,
+            "conductivity" => MaterialProperty::Conductivity,
+            "toxicity" => MaterialProperty::Toxicity,
+            other => {
+                return Err(ParseError::at(
+                    line_no,
+                    format!("unknown material property {other:?}"),
+                ))
+            }
+        };
+        out.push((property, parse_num(raw, line_no)?));
+    }
+    Ok(out)
 }
 
 fn strip_comment(line: &str) -> &str {
@@ -427,4 +486,78 @@ fn parse_num<T: FromStr>(value: &str, line_no: usize) -> Result<T, ParseError> {
 
 fn require<T>(opt: Option<T>, what: &str) -> Result<T, ParseError> {
     opt.ok_or_else(|| ParseError::at(0, format!("missing required field {what}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_world;
+    use crate::model::MaterialProperty;
+
+    const HEADER: &str = "\
+[manifest]
+id = world.test
+version = 0.1.0
+engine = >=0.0, <1.0
+domains = physical
+[rules.physical]
+ticks_per_day = 24
+diurnal_amplitude_centi_c = 400
+weather_max_swing_centi_c = 40
+illumination_peak = 10000
+humidity_baseline = 5500
+humidity_swing = 80
+humidity_drying_divisor = 8
+pressure_sea_level = 10130
+pressure_elevation_factor = 1
+pressure_weather_swing = 20
+pressure_settle_divisor = 8
+wind_gradient_divisor = 10
+fall_danger_per_meter = 1500
+[regions]
+1 = 1500
+";
+
+    #[test]
+    fn materials_and_composition_parse() {
+        let text = format!(
+            "{HEADER}\
+[materials]
+700 = density:700, hardness:3000, flammability:7000
+[made_of]
+1 = 700
+"
+        );
+        let pkg = parse_world(&text).expect("parses");
+        assert_eq!(pkg.materials.len(), 1);
+        assert_eq!(pkg.materials[0].id, 700);
+        assert_eq!(
+            pkg.materials[0].properties,
+            vec![
+                (MaterialProperty::Density, 700),
+                (MaterialProperty::Hardness, 3000),
+                (MaterialProperty::Flammability, 7000),
+            ]
+        );
+        assert_eq!(pkg.made_of.len(), 1);
+        assert_eq!(pkg.made_of[0].object_id, 1);
+        assert_eq!(pkg.made_of[0].material_id, 700);
+    }
+
+    #[test]
+    fn an_unknown_material_property_is_rejected() {
+        // No silent defaults: a property the engine does not model is an error, not ignored
+        // (Vol. IV Ch. 2, missing/unknown is failure).
+        let text = format!(
+            "{HEADER}\
+[materials]
+700 = density:700, sparkliness:9000
+"
+        );
+        let err = parse_world(&text).expect_err("must reject unknown property");
+        assert!(
+            err.reason.contains("sparkliness"),
+            "error should name the offending property, got: {}",
+            err.reason
+        );
+    }
 }

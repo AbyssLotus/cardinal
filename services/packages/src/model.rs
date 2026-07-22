@@ -36,6 +36,51 @@ pub struct WorldPackage {
     /// World-pinned danger for specific portals (Vol. III Ch. 1 §1.11). A portal absent here
     /// has its danger derived from height (and, later, weather).
     pub portal_danger: Vec<PortalDangerSpec>,
+    /// The materials the world defines, each an entity exposing property facts (Vol. III Ch. 1
+    /// §1.9). Referenced by [`WorldPackage::made_of`].
+    pub materials: Vec<MaterialSpec>,
+    /// Which materials each physical object is composed of (Vol. III Ch. 1 §1.9), seeded as a
+    /// cardinality-many `made_of` fact — one entry per object/material link.
+    pub made_of: Vec<MadeOfSpec>,
+}
+
+/// A property a material may expose (Vol. III Ch. 1 §1.9). Materials expose *characteristics*,
+/// never identities; this enum is the closed set of characteristics the loader can seed today.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MaterialProperty {
+    /// Density, in kg/m³.
+    Density,
+    /// Hardness / structural strength, 0..=10000.
+    Hardness,
+    /// Specific heat capacity, in J/(kg·K).
+    ThermalCapacity,
+    /// Flammability, 0..=10000.
+    Flammability,
+    /// Conductivity, 0..=10000.
+    Conductivity,
+    /// Toxicity, 0..=10000.
+    Toxicity,
+}
+
+/// One material the world defines (Vol. III Ch. 1 §1.9): a material entity and the properties
+/// it exposes. A material exposes only the characteristics it has, so `properties` may be a
+/// partial set — the loader seeds exactly what is declared, never a default.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct MaterialSpec {
+    /// The material entity's raw id.
+    pub id: u64,
+    /// The properties this material exposes, each with its fixed-point value.
+    pub properties: Vec<(MaterialProperty, i64)>,
+}
+
+/// A seeded composition link (Vol. III Ch. 1 §1.9): physical object `object_id` is made, in
+/// part, of material `material_id`. One object may have several such links (a composite).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MadeOfSpec {
+    /// The composed object's raw id.
+    pub object_id: u64,
+    /// A material it is made of (a material entity's raw id).
+    pub material_id: u64,
 }
 
 /// A package's identity card (Vol. IV Ch. 1 §1.2, The Manifest).

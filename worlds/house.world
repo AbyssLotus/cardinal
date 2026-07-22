@@ -42,6 +42,8 @@ fall_danger_per_meter = 1500        # danger points per metre of fall height
 40 = 2         # dave in the bedroom
 20 = 3         # bob in the kitchen
 30 = 4         # carol in the shed
+50 = 2         # the bedroom door
+51 = 2         # the bedroom window
 
 [positions]
 # entity_id = x, y[, z]  (centimetres within immediate container)
@@ -53,3 +55,19 @@ fall_danger_per_meter = 1500        # danger points per metre of fall height
 40 = 100, 300  # dave (2 m north of alice, same room)
 20 = 50, 50    # bob
 30 = 10, 10    # carol
+50 = 0, 150    # door in the bedroom wall
+51 = 300, 0    # window in the bedroom wall
+
+# Materials (Vol. III Ch. 1 §1.9): each material is an entity exposing properties, referenced
+# by [made_of]. A material declares only the characteristics it has -- properties, never names.
+# density = kg/m3; thermal_capacity = J/(kg-K); hardness/flammability/conductivity = 0..10000.
+[materials]
+700 = density:700, hardness:3000, flammability:7000, thermal_capacity:1700    # timber
+701 = density:2500, hardness:5500, flammability:0, thermal_capacity:840        # glass
+702 = density:7870, hardness:9000, flammability:0, conductivity:8000           # iron
+
+[made_of]
+# object = material[, material...]   (composites are the rule, not the exception)
+1 = 700              # the house structure: timber
+50 = 700, 702        # the door: a timber panel with an iron lock band
+51 = 701             # the window: glass

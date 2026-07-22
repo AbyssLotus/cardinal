@@ -12,11 +12,11 @@
 //! store by their published ids, and the loader simply enables both and seeds their facts,
 //! including the physical containment links that place organisms in regions.
 
-use crate::model::WorldPackage;
+use crate::model::{MaterialProperty, WorldPackage};
 use crate::version::Version;
 use kernel::domain::Domain;
 use kernel::events::ChronicleEntry;
-use kernel::fact::{Cause, Fact, FactKey, Provenance, SystemId};
+use kernel::fact::{Cause, Fact, FactKey, FactType, Provenance, SystemId};
 use kernel::identity::EntityId;
 use kernel::store::MemoryStore;
 use kernel::system::System;
@@ -25,8 +25,10 @@ use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use living::LivingDomain;
 use physical::schema::{
-    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, LEADS_TO, PORTAL_DANGER_OVERRIDE,
-    POSITION_X, POSITION_Y, POSITION_Z, TEMPERATURE,
+    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, LEADS_TO, MADE_OF,
+    MATERIAL_CONDUCTIVITY, MATERIAL_DENSITY, MATERIAL_FLAMMABILITY, MATERIAL_HARDNESS,
+    MATERIAL_THERMAL_CAPACITY, MATERIAL_TOXICITY, PORTAL_DANGER_OVERRIDE, POSITION_X, POSITION_Y,
+    POSITION_Z, TEMPERATURE,
 };
 use physical::{PhysicalConfig, PhysicalDomain};
 use std::fmt;
@@ -265,6 +267,27 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         );
     }
 
+    // Seed materials (Physical facts, Vol. III Ch. 1 §1.9): each material entity carries only
+    // the property facts the package declares — properties over names, no engine default.
+    for m in &package.materials {
+        let material = EntityId::from_raw(m.id);
+        for (property, value) in &m.properties {
+            store.seed(
+                FactKey::new(material, material_fact(*property)),
+                seeded(Value::Int(*value)),
+            );
+        }
+    }
+
+    // Seed composition (a cardinality-many Physical fact): each object is linked to every
+    // material it is made of (§1.9, composites are the rule).
+    for link in &package.made_of {
+        store.seed(
+            FactKey::new(EntityId::from_raw(link.object_id), MADE_OF),
+            seeded(Value::Entity(EntityId::from_raw(link.material_id))),
+        );
+    }
+
     // 3b. Living Systems (optional): configured from package rules. Living reads organism
     //     containment and region temperature by id — no wiring between domains is needed.
     if has_living {
@@ -297,4 +320,17 @@ fn seeded(value: Value) -> Fact {
         value,
         Provenance::new(SystemId::new("worldgen"), 0, Cause::new("package_seed")),
     )
+}
+
+/// The Physical Reality fact type a material property is stored as (Vol. III Ch. 1 §1.9). The
+/// package's closed property set maps one-to-one onto the domain's material schema.
+fn material_fact(property: MaterialProperty) -> FactType {
+    match property {
+        MaterialProperty::Density => MATERIAL_DENSITY,
+        MaterialProperty::Hardness => MATERIAL_HARDNESS,
+        MaterialProperty::ThermalCapacity => MATERIAL_THERMAL_CAPACITY,
+        MaterialProperty::Flammability => MATERIAL_FLAMMABILITY,
+        MaterialProperty::Conductivity => MATERIAL_CONDUCTIVITY,
+        MaterialProperty::Toxicity => MATERIAL_TOXICITY,
+    }
 }

@@ -18,10 +18,14 @@
 //! [`schema::TEMPERATURE`], [`schema::ILLUMINATION`] (a day/night cycle), [`schema::HUMIDITY`]
 //! (weather), [`schema::PRESSURE`] (falls with elevation, drifts with weather), and wind --
 //! [`schema::WIND_SPEED`] and [`schema::WIND_TOWARD`] -- which flows down the pressure
-//! gradient across adjacent regions. Overlapping regions (§1.7) and materials (§1.9) remain
-//! to build on the multi-value foundation.
+//! gradient across adjacent regions. Materials (§1.9): what objects are *made of*
+//! ([`schema::MADE_OF`], a cardinality-many composition) and the properties their materials
+//! expose ([`schema::MATERIAL_HARDNESS`], flammability, density, …), queried through
+//! [`materials`] by property, never by name. Overlapping regions (§1.7) remain to build on
+//! the multi-value foundation.
 
 pub mod composition;
+pub mod materials;
 pub mod schema;
 pub mod space;
 pub mod systems;
@@ -107,11 +111,22 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::HAS_PORTAL
             || fact_type == schema::PORTAL_DANGER
             || fact_type == schema::PORTAL_DANGER_OVERRIDE
+            || fact_type == schema::MADE_OF
+            || fact_type == schema::MATERIAL_DENSITY
+            || fact_type == schema::MATERIAL_HARDNESS
+            || fact_type == schema::MATERIAL_THERMAL_CAPACITY
+            || fact_type == schema::MATERIAL_FLAMMABILITY
+            || fact_type == schema::MATERIAL_CONDUCTIVITY
+            || fact_type == schema::MATERIAL_TOXICITY
     }
 
     fn cardinality(&self, fact_type: FactType) -> Cardinality {
-        // Adjacency is set-valued: a region has several neighbours (Vol. III Ch. 1 §1.5).
-        if fact_type == schema::ADJACENT_TO || fact_type == schema::HAS_PORTAL {
+        // Set-valued relations: a region has several neighbours and may host several portals
+        // (Vol. III Ch. 1 §1.5); an object may be a composite of several materials (§1.9).
+        if fact_type == schema::ADJACENT_TO
+            || fact_type == schema::HAS_PORTAL
+            || fact_type == schema::MADE_OF
+        {
             Cardinality::Many
         } else {
             Cardinality::One
@@ -179,6 +194,19 @@ impl Domain for PhysicalDomain {
             composition::compose_bounded(current, changes, 0, schema::MAX_PRESSURE)
         } else if fact_type == schema::WIND_SPEED {
             composition::compose_bounded(current, changes, 0, schema::MAX_WIND)
+        } else if fact_type == schema::MATERIAL_HARDNESS
+            || fact_type == schema::MATERIAL_FLAMMABILITY
+            || fact_type == schema::MATERIAL_CONDUCTIVITY
+            || fact_type == schema::MATERIAL_TOXICITY
+        {
+            // Normalized material properties (Vol. III Ch. 1 §1.9), bounded like the other
+            // 0..=100% fields. Seeded state today; the rule keeps them coherent should a
+            // system (weathering, damage) ever drive them.
+            composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
+        } else if fact_type == schema::MATERIAL_DENSITY {
+            composition::compose_bounded(current, changes, 0, schema::MAX_DENSITY)
+        } else if fact_type == schema::MATERIAL_THERMAL_CAPACITY {
+            composition::compose_bounded(current, changes, 0, schema::MAX_THERMAL_CAPACITY)
         } else if fact_type == schema::CONTAINED_IN
             || fact_type == schema::WIND_TOWARD
             || fact_type == schema::LEADS_TO
@@ -216,15 +244,18 @@ impl Domain for PhysicalDomain {
     }
 
     fn validate_many(&self, fact_type: FactType, values: &[Value]) -> Result<(), ValidationError> {
-        // The set-valued spatial relations are graphs over entities: every member of an
-        // adjacency or portal-host set must be an entity reference, never a scalar
-        // (Vol. III Ch. 1 §1.5). This is the coherence check the cardinality-one path gets
-        // from `compose`/`validate`, applied to the whole resolved set.
-        if fact_type == schema::ADJACENT_TO || fact_type == schema::HAS_PORTAL {
+        // The set-valued relations are graphs over entities: every member of an adjacency or
+        // portal-host set (Vol. III Ch. 1 §1.5), or a material-composition set (§1.9), must be
+        // an entity reference, never a scalar. This is the coherence check the cardinality-one
+        // path gets from `compose`/`validate`, applied to the whole resolved set.
+        if fact_type == schema::ADJACENT_TO
+            || fact_type == schema::HAS_PORTAL
+            || fact_type == schema::MADE_OF
+        {
             for v in values {
                 if !matches!(v, Value::Entity(_)) {
                     return Err(ValidationError::new(
-                        "a spatial relation set may hold only entity references",
+                        "a relation set may hold only entity references",
                     ));
                 }
             }

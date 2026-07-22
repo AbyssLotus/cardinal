@@ -113,6 +113,50 @@ pub const WIND_SPEED: FactType = FactType::new("physical.environment.wind_speed"
 /// downwind region; absent when the air is calm.
 pub const WIND_TOWARD: FactType = FactType::new("physical.environment.wind_toward");
 
+// ---- Materials (Vol. III Ch. 1 §1.9) ---------------------------------------------------
+//
+// Materials describe what reality is *composed of*. Cardinal never prescribes a material
+// catalogue: a material is an entity that exposes *properties*, not a name (§1.9, Designer
+// Note "Properties Over Names"). A physical object references the materials it is made of
+// through [`MADE_OF`]; higher domains (Resources, Conflict, Knowledge — Appendix A) reason
+// about the properties, never about "wood" or "steel". Composites are expected, not
+// exceptional, so [`MADE_OF`] is cardinality-many. Each property below is optional: a
+// material exposes only the characteristics it has, and a consumer asks through
+// [`crate::materials`] rather than depending on which facts are present.
+
+/// The materials a physical object is composed of (Vol. III Ch. 1 §1.9). A **cardinality-many**
+/// relationship: an object may be a composite of several materials (a house of timber, glass,
+/// and steel). Each value is a material entity — itself carrying the property facts below.
+pub const MADE_OF: FactType = FactType::new("physical.material.made_of");
+
+/// A material's density, in kilograms per cubic metre (Vol. III Ch. 1 §1.9). A property of the
+/// material entity, read by consumers that reason about mass and buoyancy.
+pub const MATERIAL_DENSITY: FactType = FactType::new("physical.material.density");
+
+/// A material's hardness / structural strength, 0..=10000 (a normalized property, hundredths
+/// of a percent). Governs whether it survives applied stress: a structure fails at its
+/// weakest material, not because of what it is named (§1.9, the bridge that "fails because the
+/// material cannot support the required stress").
+pub const MATERIAL_HARDNESS: FactType = FactType::new("physical.material.hardness");
+
+/// A material's specific heat capacity, in joules per kilogram-kelvin (Vol. III Ch. 1 §1.9).
+/// How much energy it takes to change the material's temperature — its thermal inertia. Read
+/// by environmental simulation; a high-capacity mass resists the diurnal swing.
+pub const MATERIAL_THERMAL_CAPACITY: FactType = FactType::new("physical.material.thermal_capacity");
+
+/// A material's flammability, 0..=10000 (normalized). Zero is inert; higher ignites more
+/// readily. Fire spreads where nearby materials satisfy ignition conditions (§1.9), so a
+/// composite's fire behaviour follows its most flammable constituent.
+pub const MATERIAL_FLAMMABILITY: FactType = FactType::new("physical.material.flammability");
+
+/// A material's conductivity, 0..=10000 (normalized) — thermal/electrical transport
+/// (Vol. III Ch. 1 §1.9). Read by consumers reasoning about heat flow or current.
+pub const MATERIAL_CONDUCTIVITY: FactType = FactType::new("physical.material.conductivity");
+
+/// A material's toxicity, 0..=10000 (normalized). Zero is inert; higher is more hazardous to
+/// living systems (Vol. III Ch. 1 §1.9). A composite is as hazardous as its most toxic part.
+pub const MATERIAL_TOXICITY: FactType = FactType::new("physical.material.toxicity");
+
 // ---- Physical constants (laws of the mechanism, not tunable world rules) ----------------
 
 /// Absolute zero in centidegrees Celsius (−273.15 °C) — the floor below which temperature is
@@ -131,3 +175,11 @@ pub const MAX_WIND: i64 = 100000;
 
 /// Ceiling for a portal's danger value (0 = harmless, 10000 = as dangerous as the model goes).
 pub const MAX_DANGER: i64 = 10000;
+
+/// Ceiling for material density (kg/m³) — clamps the field well above any real or exotic
+/// material (osmium ≈ 22 600; room left for programmable matter, Vol. III Ch. 1 §1.9).
+pub const MAX_DENSITY: i64 = 1_000_000;
+
+/// Ceiling for material specific heat capacity (J/(kg·K)) — clamps well above any real value
+/// (water ≈ 4184, hydrogen ≈ 14 300).
+pub const MAX_THERMAL_CAPACITY: i64 = 1_000_000;
