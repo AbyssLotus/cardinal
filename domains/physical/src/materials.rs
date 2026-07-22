@@ -114,10 +114,25 @@ pub fn toxicity_of(view: &dyn CommittedView, object: EntityId) -> Option<i64> {
         .max()
 }
 
+/// The thermal capacity of a composite `object`: the **maximum** specific heat across its
+/// materials, J/(kg·K) — a proportion-free estimate of the object's thermal inertia, its
+/// resistance to changing temperature (Vol. III Ch. 1 §1.9). Like the other composite
+/// aggregates here it uses the dominant constituent rather than a mass-weighted mean, which
+/// awaits a per-constituent proportion fact. `None` if no material exposes a thermal capacity;
+/// consumers (the environment's temperature systems) read this to damp a region's swing.
+pub fn thermal_capacity_of(view: &dyn CommittedView, object: EntityId) -> Option<i64> {
+    materials_of(view, object)
+        .into_iter()
+        .filter_map(|m| thermal_capacity(view, m))
+        .max()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::{MATERIAL_FLAMMABILITY, MATERIAL_HARDNESS, MATERIAL_TOXICITY};
+    use crate::schema::{
+        MATERIAL_FLAMMABILITY, MATERIAL_HARDNESS, MATERIAL_THERMAL_CAPACITY, MATERIAL_TOXICITY,
+    };
     use kernel::fact::{Cause, Fact, Provenance, SystemId};
     use kernel::store::MemoryStore;
 
@@ -183,6 +198,23 @@ mod tests {
         made_of(&mut store, slab, stone);
         assert!(!is_flammable(&store, slab));
         assert_eq!(structural_hardness(&store, slab), Some(8000));
+    }
+
+    #[test]
+    fn thermal_capacity_takes_the_most_massive_constituent() {
+        // A stone wall lined with a thin timber panel: the stone's high capacity dominates the
+        // wall's thermal inertia.
+        let wall = EntityId::from_raw(1);
+        let stone = EntityId::from_raw(300);
+        let timber = EntityId::from_raw(301);
+        let mut store = MemoryStore::new();
+        seed_int(&mut store, stone, MATERIAL_THERMAL_CAPACITY, 900);
+        seed_int(&mut store, timber, MATERIAL_THERMAL_CAPACITY, 1700);
+        made_of(&mut store, wall, stone);
+        made_of(&mut store, wall, timber);
+        assert_eq!(thermal_capacity_of(&store, wall), Some(1700));
+        // No materials -> no thermal inertia to report.
+        assert_eq!(thermal_capacity_of(&store, EntityId::from_raw(999)), None);
     }
 
     #[test]

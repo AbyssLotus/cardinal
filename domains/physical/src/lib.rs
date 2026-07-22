@@ -67,6 +67,10 @@ pub struct PhysicalConfig {
     pub wind_gradient_divisor: i64,
     /// Danger points added per metre of a portal's height above the ground (fall danger).
     pub fall_danger_per_meter: i64,
+    /// Material thermal capacity (J/(kg·K)) at which a region's temperature swing is halved
+    /// (Vol. III Ch. 1 §1.9). Larger means thermal mass matters less; a region built of no
+    /// thermal-mass material is undamped, exactly as before materials existed.
+    pub thermal_mass_reference: i64,
 }
 
 /// The Physical Reality domain, plugged into the kernel (Appendix A owner of the stage).
@@ -140,9 +144,11 @@ impl Domain for PhysicalDomain {
             Box::new(systems::DiurnalCycle::new(
                 self.config.ticks_per_day,
                 self.config.diurnal_amplitude_centi_c,
+                self.config.thermal_mass_reference,
             )),
             Box::new(systems::WeatherNoise::new(
                 self.config.weather_max_swing_centi_c,
+                self.config.thermal_mass_reference,
             )),
             Box::new(systems::DayNightCycle::new(
                 self.config.ticks_per_day,

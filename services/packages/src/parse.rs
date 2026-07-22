@@ -70,6 +70,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut pressure_settle_divisor: Option<i64> = None;
     let mut wind_gradient_divisor: Option<i64> = None;
     let mut fall_danger_per_meter: Option<i64> = None;
+    let mut thermal_mass_reference: Option<i64> = None;
     let mut set_point: Option<i64> = None;
     let mut warm_response: Option<i64> = None;
     let mut cold_response: Option<i64> = None;
@@ -148,6 +149,9 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 }
                 "wind_gradient_divisor" => wind_gradient_divisor = Some(parse_num(value, line_no)?),
                 "fall_danger_per_meter" => fall_danger_per_meter = Some(parse_num(value, line_no)?),
+                "thermal_mass_reference" => {
+                    thermal_mass_reference = Some(parse_num(value, line_no)?)
+                }
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -294,6 +298,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         fall_danger_per_meter: require(
             fall_danger_per_meter,
             "rules.physical.fall_danger_per_meter",
+        )?,
+        thermal_mass_reference: require(
+            thermal_mass_reference,
+            "rules.physical.thermal_mass_reference",
         )?,
     };
     let living_rules = match (set_point, warm_response, cold_response) {
@@ -513,6 +521,7 @@ pressure_weather_swing = 20
 pressure_settle_divisor = 8
 wind_gradient_divisor = 10
 fall_danger_per_meter = 1500
+thermal_mass_reference = 1000
 [regions]
 1 = 1500
 ";

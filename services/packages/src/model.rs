@@ -126,6 +126,9 @@ pub struct PhysicalRules {
     pub wind_gradient_divisor: i64,
     /// Danger points added per metre of a portal's height above the ground (fall danger).
     pub fall_danger_per_meter: i64,
+    /// Material thermal capacity (J/(kg·K)) at which a region's temperature swing is halved
+    /// (Vol. III Ch. 1 §1.9). Governs how strongly thermal mass resists the day/night swing.
+    pub thermal_mass_reference: i64,
 }
 
 /// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2).
