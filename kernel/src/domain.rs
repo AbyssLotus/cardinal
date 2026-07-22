@@ -87,4 +87,14 @@ pub trait Domain {
         let _ = (fact_type, value);
         Ok(())
     }
+
+    /// Validate the resolved value *set* of a cardinality-many owned fact before commit
+    /// (Vol. V Ch. 3 §3.1, Validate). The owner sees the whole set an entity would hold,
+    /// so it can enforce set-level coherence — member types, size bounds — that no
+    /// per-value check could. Returning `Err` aborts the tick; reality stays at N-1. The
+    /// default accepts everything; owners of set-valued facts override.
+    fn validate_many(&self, fact_type: FactType, values: &[Value]) -> Result<(), ValidationError> {
+        let _ = (fact_type, values);
+        Ok(())
+    }
 }

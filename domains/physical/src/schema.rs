@@ -7,10 +7,12 @@
 //! scales are this domain's convention. Consumers read these facts freely, by id
 //! (Vol. III Ch. 12 §12.1).
 //!
-//! Many-valued spatial relationships — a location's several overlapping regions
-//! (Vol. III Ch. 1 §1.7) and a region's several neighbours in a topology (§1.5) — await a
-//! cardinality-many fact model; the single-valued facts below (immediate containment,
-//! scalar fields) are what the current store represents.
+//! Both cardinalities are represented here. Cardinality-one facts (immediate containment,
+//! scalar fields) hold at most one value per entity; cardinality-many facts — a region's
+//! several neighbours in a topology ([`ADJACENT_TO`], §1.5) and the several portals a region
+//! hosts ([`HAS_PORTAL`], §1.5) — are set-valued, which the store and the owning
+//! [`crate::PhysicalDomain`]'s cardinality declaration support directly. A location's several
+//! overlapping regions (Vol. III Ch. 1 §1.7) will layer on the same set-valued foundation.
 
 use kernel::fact::FactType;
 

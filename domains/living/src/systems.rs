@@ -17,38 +17,57 @@ use kernel::value::Value;
 const THERMO_READS: &[FactType] = &[CONTAINED_IN, AMBIENT_TEMPERATURE, BODY_HEAT];
 const THERMO_WRITES: &[FactType] = &[BODY_HEAT];
 
-/// Homeostasis for one organism: body heat is defended toward a metabolic set point while
+/// Homeostasis for every organism: body heat is defended toward a metabolic set point while
 /// the ambient environment pulls it toward the temperature of whatever region the organism
 /// is in (Vol. III Ch. 2, the "warmth" need tracks the environment).
 ///
-/// The canonical cross-domain consumer: it reads two Physical Reality facts — where the
-/// organism is (containment) and how cold it is there (temperature) — and proposes a change
-/// only to its own Living Systems fact (body heat), touching nothing Physical owns
-/// (Vol. III Ch. 12 §12.1).
+/// The canonical cross-domain consumer: for each organism it reads two Physical Reality
+/// facts — where the organism is (containment) and how cold it is there (temperature) — and
+/// proposes a change only to that organism's Living Systems fact (body heat), touching
+/// nothing Physical owns (Vol. III Ch. 12 §12.1). One instance serves the whole world: it
+/// discovers the organisms from committed reality — every entity bearing [`BODY_HEAT`] — so
+/// an organism born mid-simulation is regulated the tick its body heat commits
+/// (Vol. V Ch. 2 §2.1, clause 5).
 pub struct Thermoregulation {
-    organism: EntityId,
     set_point_centi_c: i64,
     warm_response: i64,
     cold_response: i64,
 }
 
 impl Thermoregulation {
-    /// Configure homeostasis for `organism`. Its region is discovered by reading committed
-    /// containment, not passed in. `set_point_centi_c` is the metabolic target;
-    /// `warm_response`/`cold_response` are divisors — larger means slower pull toward the set
-    /// point / toward ambient (world-package rules, Vol. IV Ch. 2).
-    pub const fn new(
-        organism: EntityId,
-        set_point_centi_c: i64,
-        warm_response: i64,
-        cold_response: i64,
-    ) -> Self {
+    /// Configure homeostasis shared by every organism. `set_point_centi_c` is the metabolic
+    /// target; `warm_response`/`cold_response` are divisors — larger means slower pull toward
+    /// the set point / toward ambient (world-package rules, Vol. IV Ch. 2).
+    pub const fn new(set_point_centi_c: i64, warm_response: i64, cold_response: i64) -> Self {
         Self {
-            organism,
             set_point_centi_c,
             warm_response,
             cold_response,
         }
+    }
+
+    /// The body-heat delta for one organism, given its ambient region temperature and current
+    /// heat — or `None` if it is not placed in a region with a committed temperature.
+    fn delta_for(&self, view: &dyn CommittedView, organism: EntityId) -> Option<i64> {
+        // 1. Where am I? Read my containment (a Physical fact) to find my region.
+        let region = match view.read(FactKey::new(organism, CONTAINED_IN))?.value {
+            Value::Entity(r) => r,
+            _ => return None,
+        };
+        // 2. How cold is it here? Read that region's ambient temperature (a Physical fact).
+        let ambient = view
+            .read(FactKey::new(region, AMBIENT_TEMPERATURE))?
+            .value
+            .as_int()?;
+        // 3. My own current body heat (a Living fact).
+        let current = view
+            .read(FactKey::new(organism, BODY_HEAT))?
+            .value
+            .as_int()?;
+
+        let warm = self.warm_response.max(1);
+        let cold = self.cold_response.max(1);
+        Some((self.set_point_centi_c - current) / warm + (ambient - current) / cold)
     }
 }
 
@@ -70,41 +89,20 @@ impl System for Thermoregulation {
     }
 
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
-        // 1. Where am I? Read my containment (a Physical fact) to find my region.
-        let region = match view.read(FactKey::new(self.organism, CONTAINED_IN)) {
-            Some(fact) => match fact.value {
-                Value::Entity(r) => r,
-                _ => return Vec::new(),
-            },
-            None => return Vec::new(),
-        };
-        // 2. How cold is it here? Read that region's ambient temperature (a Physical fact).
-        let ambient = match view.read(FactKey::new(region, AMBIENT_TEMPERATURE)) {
-            Some(fact) => match fact.value.as_int() {
-                Some(t) => t,
-                None => return Vec::new(),
-            },
-            None => return Vec::new(),
-        };
-        // 3. My own current body heat (a Living fact).
-        let current = match view.read(FactKey::new(self.organism, BODY_HEAT)) {
-            Some(fact) => match fact.value.as_int() {
-                Some(h) => h,
-                None => return Vec::new(),
-            },
-            None => return Vec::new(),
-        };
-
-        let warm = self.warm_response.max(1);
-        let cold = self.cold_response.max(1);
-        let delta = (self.set_point_centi_c - current) / warm + (ambient - current) / cold;
-
-        vec![Proposal::new(
-            self.id(),
-            FactKey::new(self.organism, BODY_HEAT),
-            ctx.tick(),
-            Change::Delta(delta),
-            Cause::new("thermoregulation"),
-        )]
+        // The organism roster: every entity bearing body heat (Vol. V Ch. 2 §2.1, clause 5).
+        view.entities_with(BODY_HEAT)
+            .into_iter()
+            .filter_map(|organism| {
+                self.delta_for(view, organism).map(|delta| {
+                    Proposal::new(
+                        self.id(),
+                        FactKey::new(organism, BODY_HEAT),
+                        ctx.basis_tick(),
+                        Change::Delta(delta),
+                        Cause::new("thermoregulation"),
+                    )
+                })
+            })
+            .collect()
     }
 }

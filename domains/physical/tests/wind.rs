@@ -12,7 +12,7 @@ use kernel::store::MemoryStore;
 use kernel::system::CommittedView;
 use kernel::tick::run_tick;
 use kernel::value::Value;
-use physical::schema::{ADJACENT_TO, ELEVATION, WIND_SPEED, WIND_TOWARD};
+use physical::schema::{ADJACENT_TO, ELEVATION, TEMPERATURE, WIND_SPEED, WIND_TOWARD};
 use physical::{PhysicalConfig, PhysicalDomain};
 
 const ALPINE: EntityId = EntityId::from_raw(1); // high elevation -> low pressure
@@ -39,6 +39,16 @@ fn config() -> PhysicalConfig {
 fn seeded_world() -> MemoryStore {
     let mut store = MemoryStore::new();
     let prov = Provenance::new(SystemId::new("worldgen"), 0, Cause::new("seed"));
+    // Temperature marks each region so the domain's systems discover it (the loader seeds
+    // this for every region; the value is irrelevant to wind, which follows pressure).
+    store.seed(
+        FactKey::new(ALPINE, TEMPERATURE),
+        Fact::new(Value::Int(500), prov),
+    );
+    store.seed(
+        FactKey::new(LOWLAND, TEMPERATURE),
+        Fact::new(Value::Int(1500), prov),
+    );
     // Elevations (centimetres): alpine at 2400 m, lowland at 100 m.
     store.seed(
         FactKey::new(ALPINE, ELEVATION),
@@ -61,7 +71,7 @@ fn seeded_world() -> MemoryStore {
 }
 
 fn run(store: &mut MemoryStore, ticks: u64, seed: u64) {
-    let domain = PhysicalDomain::new(vec![ALPINE, LOWLAND], config());
+    let domain = PhysicalDomain::new(config());
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle: Vec<ChronicleEntry> = Vec::new();

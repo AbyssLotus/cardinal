@@ -1,14 +1,14 @@
 //! Cardinality-many facts through the real tick loop (Vol. V Ch. 2 §2.1): set-valued facts
 //! accumulate their members, resolved by set union of Add/Remove, deterministically.
 
-use kernel::domain::{Domain, ResolveError, Resolved};
+use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
 use kernel::events::ChronicleEntry;
 use kernel::fact::{Cardinality, Cause, Fact, FactKey, FactType, Provenance, SystemId};
 use kernel::identity::EntityId;
 use kernel::proposal::{Change, Proposal};
 use kernel::store::{MemoryStore, RealityStore};
 use kernel::system::{Cadence, CommittedView, System, TickContext};
-use kernel::tick::run_tick;
+use kernel::tick::{run_tick, TickError};
 use kernel::value::Value;
 
 const TAGS: FactType = FactType::new("test.tags");
@@ -64,7 +64,7 @@ impl System for AddTag {
         vec![Proposal::new(
             self.id(),
             FactKey::new(ENTITY, TAGS),
-            ctx.tick(),
+            ctx.basis_tick(),
             Change::Add(Value::Int(self.1)),
             Cause::new("add_tag"),
         )]
@@ -90,7 +90,7 @@ impl System for RemoveTag {
         vec![Proposal::new(
             self.id(),
             FactKey::new(ENTITY, TAGS),
-            ctx.tick(),
+            ctx.basis_tick(),
             Change::Remove(Value::Int(self.1)),
             Cause::new("remove_tag"),
         )]
@@ -151,6 +151,70 @@ fn add_is_idempotent_and_remove_deletes_one_member() {
     let remove: Vec<Box<dyn System>> = vec![Box::new(RemoveTag("test.rm", 10))];
     run_tick(&mut store, &domains, &remove, 2, 0, &mut chronicle).expect("tick");
     assert_eq!(tags(&store), vec![20]);
+}
+
+/// A domain owning `TAGS` as cardinality-many, but refusing any resolved set with more than
+/// two members — a set-level coherence rule only [`Domain::validate_many`] can express.
+struct BoundedTagDomain;
+impl Domain for BoundedTagDomain {
+    fn name(&self) -> &'static str {
+        "test"
+    }
+    fn owns(&self, ft: FactType) -> bool {
+        ft == TAGS
+    }
+    fn cardinality(&self, ft: FactType) -> Cardinality {
+        if ft == TAGS {
+            Cardinality::Many
+        } else {
+            Cardinality::One
+        }
+    }
+    fn systems(&self) -> Vec<Box<dyn System>> {
+        Vec::new()
+    }
+    fn compose(
+        &self,
+        _ft: FactType,
+        _current: Option<Value>,
+        _changes: &[Change],
+    ) -> Result<Resolved, ResolveError> {
+        Err(ResolveError::new(
+            "cardinality-many: composed by the kernel",
+        ))
+    }
+    fn validate_many(&self, _ft: FactType, values: &[Value]) -> Result<(), ValidationError> {
+        if values.len() > 2 {
+            return Err(ValidationError::new(
+                "a tag set may hold at most two members",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn owner_validate_many_can_abort_a_set_valued_commit() {
+    let mut store = MemoryStore::new();
+    let domain = BoundedTagDomain;
+    let domains: [&dyn Domain; 1] = [&domain];
+    // Three distinct adds would resolve to a three-member set, which the owner forbids.
+    let systems: Vec<Box<dyn System>> = vec![
+        Box::new(AddTag("test.add_a", 10)),
+        Box::new(AddTag("test.add_b", 20)),
+        Box::new(AddTag("test.add_c", 30)),
+    ];
+    let mut chronicle: Vec<ChronicleEntry> = Vec::new();
+
+    let before = store.state_hash();
+    let result = run_tick(&mut store, &domains, &systems, 1, 0, &mut chronicle);
+
+    // The kernel offered the whole resolved set to the owner, which rejected it; the tick
+    // aborts and reality stays at N-1 (Vol. V Ch. 3 §3.1, Validate; §3.5.5).
+    assert!(matches!(result, Err(TickError::Validate(_))));
+    assert_eq!(store.state_hash(), before);
+    assert!(chronicle.is_empty());
+    assert!(tags(&store).is_empty());
 }
 
 #[test]

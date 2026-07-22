@@ -154,12 +154,9 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     let mut systems: Vec<Box<dyn System>> = Vec::new();
     let mut store = MemoryStore::new();
 
-    // 3a. Physical Reality: configured from package rules (invariant 5).
-    let region_ids: Vec<EntityId> = package
-        .regions
-        .iter()
-        .map(|r| EntityId::from_raw(r.id))
-        .collect();
+    // 3a. Physical Reality: configured from package rules (invariant 5). The domain needs no
+    //     region list — its systems discover regions from the seeded temperature facts below
+    //     (Vol. V Ch. 2 §2.1, clause 5).
     let config = PhysicalConfig {
         ticks_per_day: package.physical_rules.ticks_per_day,
         diurnal_amplitude_centi_c: package.physical_rules.diurnal_amplitude_centi_c,
@@ -175,7 +172,7 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         wind_gradient_divisor: package.physical_rules.wind_gradient_divisor,
         fall_danger_per_meter: package.physical_rules.fall_danger_per_meter,
     };
-    let physical = PhysicalDomain::new(region_ids, config);
+    let physical = PhysicalDomain::new(config);
     systems.extend(physical.systems());
     domains.push(Box::new(physical));
 
@@ -272,13 +269,7 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     //     containment and region temperature by id — no wiring between domains is needed.
     if has_living {
         let rules = package.living_rules.ok_or(LoadError::LivingRulesMissing)?;
-        let organism_ids: Vec<EntityId> = package
-            .organisms
-            .iter()
-            .map(|o| EntityId::from_raw(o.id))
-            .collect();
         let living = LivingDomain::new(
-            organism_ids,
             rules.set_point_centi_c,
             rules.warm_response,
             rules.cold_response,

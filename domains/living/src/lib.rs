@@ -24,34 +24,28 @@ pub mod systems;
 
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
 use kernel::fact::FactType;
-use kernel::identity::EntityId;
 use kernel::proposal::Change;
 use kernel::system::System;
 use kernel::value::Value;
 
 /// The Living Systems domain, plugged into the kernel (Appendix A owner of vital state).
 ///
-/// Configured over a set of organism entities sharing one set of metabolic rules. Each
-/// organism's region is a Physical containment fact it reads at run time, not domain
-/// configuration. Per-species rules keyed on declared categories are a later refinement
-/// (Vol. IV Ch. 2 §2.2).
+/// Configured with one set of metabolic rules shared by every organism. It carries no
+/// organism list: its single system discovers the organisms from committed reality — every
+/// entity bearing body heat — each tick (Vol. V Ch. 2 §2.1, clause 5). Each organism's
+/// region is a Physical containment fact it reads at run time, not domain configuration.
+/// Per-species rules keyed on declared categories are a later refinement (Vol. IV Ch. 2
+/// §2.2).
 pub struct LivingDomain {
-    organisms: Vec<EntityId>,
     set_point_centi_c: i64,
     warm_response: i64,
     cold_response: i64,
 }
 
 impl LivingDomain {
-    /// Configure the domain for a set of organism entities and shared metabolic rules.
-    pub fn new(
-        organisms: Vec<EntityId>,
-        set_point_centi_c: i64,
-        warm_response: i64,
-        cold_response: i64,
-    ) -> Self {
+    /// Configure the domain with shared metabolic rules.
+    pub fn new(set_point_centi_c: i64, warm_response: i64, cold_response: i64) -> Self {
         Self {
-            organisms,
             set_point_centi_c,
             warm_response,
             cold_response,
@@ -69,17 +63,12 @@ impl Domain for LivingDomain {
     }
 
     fn systems(&self) -> Vec<Box<dyn System>> {
-        self.organisms
-            .iter()
-            .map(|&organism| {
-                Box::new(systems::Thermoregulation::new(
-                    organism,
-                    self.set_point_centi_c,
-                    self.warm_response,
-                    self.cold_response,
-                )) as Box<dyn System>
-            })
-            .collect()
+        // One instance for the whole world; it iterates every organism it finds in reality.
+        vec![Box::new(systems::Thermoregulation::new(
+            self.set_point_centi_c,
+            self.warm_response,
+            self.cold_response,
+        ))]
     }
 
     fn compose(

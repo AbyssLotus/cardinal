@@ -47,7 +47,7 @@ fn settled_body_heat(ambient: i64, ticks: u64) -> i64 {
     );
     seed_int(&mut store, FactKey::new(ORGANISM, BODY_HEAT), 3700);
 
-    let domain = LivingDomain::new(vec![ORGANISM], 3700, 6, 3);
+    let domain = LivingDomain::new(3700, 6, 3);
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle: Vec<ChronicleEntry> = Vec::new();
@@ -81,7 +81,7 @@ fn no_proposal_without_a_region() {
     // is left untouched -- living reads two Physical facts and needs both.
     let mut store = MemoryStore::new();
     seed_int(&mut store, FactKey::new(ORGANISM, BODY_HEAT), 3700);
-    let domain = LivingDomain::new(vec![ORGANISM], 3700, 6, 3);
+    let domain = LivingDomain::new(3700, 6, 3);
     let domains: [&dyn Domain; 1] = [&domain];
     let systems = domain.systems();
     let mut chronicle = Vec::new();

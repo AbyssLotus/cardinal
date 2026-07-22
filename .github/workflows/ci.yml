@@ -20,10 +20,11 @@ jobs:
         with:
           components: rustfmt
 
-      # Informational: rustfmt versions can drift, so this never blocks a PR.
+      # Formatting is law, mechanically enforced: a badly-formatted diff fails the build,
+      # the same way the workspace lints fail a doc gap. The toolchain is pinned to stable so
+      # rustfmt does not drift between runs.
       - name: Format check
         run: cargo fmt --all --check
-        continue-on-error: true
 
       # missing_docs and unsafe_code are denied by the workspace lints, so a doc gap or any
       # unsafe block fails this build directly — the layer law is enforced the same way,
