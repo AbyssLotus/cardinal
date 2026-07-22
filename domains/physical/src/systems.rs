@@ -13,10 +13,11 @@
 //! into being mid-simulation is simulated the moment its facts commit; systems hold no
 //! state between ticks (Vol. II Ch. 3).
 
+use crate::materials::thermal_capacity_of;
 use crate::schema::{
-    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, HUMIDITY, ILLUMINATION, MAX_DANGER,
-    PERCENT_FULL, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE, POSITION_Z, PRESSURE, TEMPERATURE,
-    WIND_SPEED, WIND_TOWARD,
+    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, HUMIDITY, ILLUMINATION, MADE_OF,
+    MATERIAL_THERMAL_CAPACITY, MAX_DANGER, PERCENT_FULL, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE,
+    POSITION_Z, PRESSURE, TEMPERATURE, WIND_SPEED, WIND_TOWARD,
 };
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::identity::EntityId;
@@ -27,7 +28,9 @@ use kernel::value::Value;
 // Read sets. Every weather system also reads TEMPERATURE — not for its value, but to
 // enumerate the regions to simulate: the loader guarantees each region carries a temperature
 // fact, so `entities_with(TEMPERATURE)` is the region roster (Vol. V Ch. 2 §2.1, clause 5).
-const DIURNAL_READS: &[FactType] = &[TEMPERATURE, EXPOSURE];
+// The temperature systems additionally read a region's composition (MADE_OF) and its
+// materials' thermal capacity, to damp the swing by thermal mass (Vol. III Ch. 1 §1.9, §1.10).
+const DIURNAL_READS: &[FactType] = &[TEMPERATURE, EXPOSURE, MADE_OF, MATERIAL_THERMAL_CAPACITY];
 const TEMPERATURE_W: &[FactType] = &[TEMPERATURE];
 const ILLUMINATION_READS: &[FactType] = &[TEMPERATURE, EXPOSURE];
 const ILLUMINATION_W: &[FactType] = &[ILLUMINATION];
@@ -75,6 +78,24 @@ fn attenuate(value: i64, exposure: i64) -> i64 {
     value.saturating_mul(exposure) / PERCENT_FULL
 }
 
+/// A region's thermal-mass damping factor for temperature changes, in hundredths of a percent
+/// (0..=10000), from the thermal capacity of the materials it is built of (Vol. III Ch. 1
+/// §1.9, §1.10). Thermal mass is inertia: a heavy stone hall resists the day/night swing a
+/// canvas tent cannot. The factor is `reference / (reference + capacity)` — 1.0 (no damping)
+/// when the region has no thermal-mass material, falling toward 0 as capacity grows past
+/// `reference`, the world-tuned capacity at which the swing is halved. A region that declares
+/// no composition is unaffected, so worlds without materials behave exactly as before.
+fn thermal_damping(view: &dyn CommittedView, region: EntityId, reference: i64) -> i64 {
+    let capacity = thermal_capacity_of(view, region).unwrap_or(0).max(0);
+    let reference = reference.max(0);
+    let denom = reference.saturating_add(capacity);
+    if denom == 0 {
+        // No reference and no capacity: nothing to damp.
+        return PERCENT_FULL;
+    }
+    (reference.saturating_mul(PERCENT_FULL) / denom).clamp(0, PERCENT_FULL)
+}
+
 /// The regions to simulate this tick: every entity carrying a committed temperature fact.
 ///
 /// Temperature is the one environmental fact the loader seeds for every region, so it is the
@@ -86,18 +107,26 @@ fn regions(view: &dyn CommittedView) -> Vec<EntityId> {
 
 /// A deterministic day/night temperature swing (Vol. III Ch. 1 §1.10). Proposes the per-tick
 /// delta of a triangle wave over the day, so the swing is bounded and reproducible, for
-/// every region.
+/// every region — damped by the region's exposure and its thermal mass (§1.9).
 pub struct DiurnalCycle {
     ticks_per_day: u64,
     amplitude_centi_c: i64,
+    thermal_mass_reference: i64,
 }
 
 impl DiurnalCycle {
     /// Drive every region with a swing of `amplitude_centi_c` over `ticks_per_day` ticks.
-    pub const fn new(ticks_per_day: u64, amplitude_centi_c: i64) -> Self {
+    /// `thermal_mass_reference` is the material thermal capacity at which a region's swing is
+    /// halved (Vol. III Ch. 1 §1.9); larger means thermal mass matters less.
+    pub const fn new(
+        ticks_per_day: u64,
+        amplitude_centi_c: i64,
+        thermal_mass_reference: i64,
+    ) -> Self {
         Self {
             ticks_per_day,
             amplitude_centi_c,
+            thermal_mass_reference,
         }
     }
 }
@@ -123,11 +152,14 @@ impl System for DiurnalCycle {
             .into_iter()
             .map(|region| {
                 let exposure = exposure_of(view, region);
+                let mass = thermal_damping(view, region, self.thermal_mass_reference);
                 Proposal::new(
                     self.id(),
                     FactKey::new(region, TEMPERATURE),
                     ctx.basis_tick(),
-                    Change::Delta(attenuate(level - prev, exposure)),
+                    // Both dampers scale the delta: an open field of heavy stone still swings
+                    // less than an open field of nothing (§1.9, §1.10).
+                    Change::Delta(attenuate(attenuate(level - prev, exposure), mass)),
                     Cause::new("diurnal_shift"),
                 )
             })
@@ -136,15 +168,22 @@ impl System for DiurnalCycle {
 }
 
 /// A small stochastic weather perturbation of temperature, drawn from the kernel-issued
-/// substream (Vol. V Ch. 4 §4.1), for every region.
+/// substream (Vol. V Ch. 4 §4.1), for every region — damped by thermal mass like the diurnal
+/// swing (Vol. III Ch. 1 §1.9).
 pub struct WeatherNoise {
     max_swing_centi_c: i64,
+    thermal_mass_reference: i64,
 }
 
 impl WeatherNoise {
     /// Perturb each region's temperature by up to +/- `max_swing_centi_c` each tick.
-    pub const fn new(max_swing_centi_c: i64) -> Self {
-        Self { max_swing_centi_c }
+    /// `thermal_mass_reference` damps the perturbation by the region's thermal mass, as in
+    /// [`DiurnalCycle::new`].
+    pub const fn new(max_swing_centi_c: i64, thermal_mass_reference: i64) -> Self {
+        Self {
+            max_swing_centi_c,
+            thermal_mass_reference,
+        }
     }
 }
 
@@ -172,11 +211,12 @@ impl System for WeatherNoise {
                 let mut rng = ctx.rng(region.raw());
                 let raw = rng.below(span) as i64 - swing;
                 let exposure = exposure_of(view, region);
+                let mass = thermal_damping(view, region, self.thermal_mass_reference);
                 Proposal::new(
                     self.id(),
                     FactKey::new(region, TEMPERATURE),
                     ctx.basis_tick(),
-                    Change::Delta(attenuate(raw, exposure)),
+                    Change::Delta(attenuate(attenuate(raw, exposure), mass)),
                     Cause::new("weather_perturbation"),
                 )
             })

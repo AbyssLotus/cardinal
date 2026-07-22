@@ -22,6 +22,7 @@ pressure_weather_swing = 20          # +/- per-tick pressure jitter
 pressure_settle_divisor = 8          # how fast pressure returns to baseline
 wind_gradient_divisor = 10           # larger = gentler wind per unit pressure gap
 fall_danger_per_meter = 1500        # danger points per metre of fall height
+thermal_mass_reference = 1500       # material heat capacity (J/kg-K) that halves the swing
 
 [rules.living]
 set_point_centi_c = 3700     # 37.00 C metabolic set point

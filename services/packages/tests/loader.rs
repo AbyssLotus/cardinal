@@ -67,7 +67,7 @@ fn rejects_engine_out_of_range() {
 
 #[test]
 fn rejects_world_without_physical() {
-    let text = "[manifest]\nid = world.void\nversion = 0.1.0\nengine = >=0.0, <1.0\ndomains =\n\n[rules.physical]\nticks_per_day = 24\ndiurnal_amplitude_centi_c = 500\nweather_max_swing_centi_c = 50\nillumination_peak = 10000\nhumidity_baseline = 6000\nhumidity_swing = 100\nhumidity_drying_divisor = 8\npressure_sea_level = 10130\npressure_elevation_factor = 1\npressure_weather_swing = 20\npressure_settle_divisor = 8\nwind_gradient_divisor = 10\nfall_danger_per_meter = 1500\n";
+    let text = "[manifest]\nid = world.void\nversion = 0.1.0\nengine = >=0.0, <1.0\ndomains =\n\n[rules.physical]\nticks_per_day = 24\ndiurnal_amplitude_centi_c = 500\nweather_max_swing_centi_c = 50\nillumination_peak = 10000\nhumidity_baseline = 6000\nhumidity_swing = 100\nhumidity_drying_divisor = 8\npressure_sea_level = 10130\npressure_elevation_factor = 1\npressure_weather_swing = 20\npressure_settle_divisor = 8\nwind_gradient_divisor = 10\nfall_danger_per_meter = 1500\nthermal_mass_reference = 1500\n";
     let pkg = parse_world(text).unwrap();
     let err = load(&pkg, engine_version()).unwrap_err();
     assert!(matches!(err, LoadError::PhysicalNotSelected));
@@ -77,6 +77,6 @@ fn rejects_world_without_physical() {
 fn missing_required_rule_is_rejected_with_no_default() {
     // weather_max_swing_centi_c omitted -> rejected; the engine never invents a default
     // (Vol. IV Ch. 2, "The Godlike Default" anti-pattern).
-    let text = "[manifest]\nid = w\nversion = 0.1.0\nengine = >=0.0, <1.0\ndomains = physical\n\n[rules.physical]\nticks_per_day = 24\ndiurnal_amplitude_centi_c = 500\nillumination_peak = 10000\nhumidity_baseline = 6000\nhumidity_swing = 100\nhumidity_drying_divisor = 8\npressure_sea_level = 10130\npressure_elevation_factor = 1\npressure_weather_swing = 20\npressure_settle_divisor = 8\nwind_gradient_divisor = 10\nfall_danger_per_meter = 1500\n";
+    let text = "[manifest]\nid = w\nversion = 0.1.0\nengine = >=0.0, <1.0\ndomains = physical\n\n[rules.physical]\nticks_per_day = 24\ndiurnal_amplitude_centi_c = 500\nillumination_peak = 10000\nhumidity_baseline = 6000\nhumidity_swing = 100\nhumidity_drying_divisor = 8\npressure_sea_level = 10130\npressure_elevation_factor = 1\npressure_weather_swing = 20\npressure_settle_divisor = 8\nwind_gradient_divisor = 10\nfall_danger_per_meter = 1500\nthermal_mass_reference = 1500\n";
     assert!(parse_world(text).is_err());
 }

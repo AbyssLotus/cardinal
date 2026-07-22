@@ -173,6 +173,7 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         pressure_settle_divisor: package.physical_rules.pressure_settle_divisor,
         wind_gradient_divisor: package.physical_rules.wind_gradient_divisor,
         fall_danger_per_meter: package.physical_rules.fall_danger_per_meter,
+        thermal_mass_reference: package.physical_rules.thermal_mass_reference,
     };
     let physical = PhysicalDomain::new(config);
     systems.extend(physical.systems());

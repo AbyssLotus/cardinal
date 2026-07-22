@@ -22,6 +22,7 @@ pressure_weather_swing = 20
 pressure_settle_divisor = 8
 wind_gradient_divisor = 10
 fall_danger_per_meter = 1500        # danger points per metre of fall height
+thermal_mass_reference = 1500       # material heat capacity (J/kg-K) that halves the swing
 
 [regions]
 # region_id = temperature[, elevation]

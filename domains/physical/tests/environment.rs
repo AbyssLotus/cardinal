@@ -40,6 +40,7 @@ fn config() -> PhysicalConfig {
         pressure_settle_divisor: 8,
         wind_gradient_divisor: 10,
         fall_danger_per_meter: 1500,
+        thermal_mass_reference: 1000,
     }
 }
 
