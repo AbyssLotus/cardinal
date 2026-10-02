@@ -9,6 +9,7 @@ use kernel::fact::{Cause, Fact, FactKey, Provenance, SystemId};
 use kernel::identity::EntityId;
 use kernel::store::MemoryStore;
 use kernel::system::CommittedView;
+use kernel::time::SimClock;
 use kernel::value::Value;
 use physical::schema::{MADE_OF, MATERIAL_THERMAL_CAPACITY, TEMPERATURE};
 use physical::{PhysicalConfig, PhysicalDomain};
@@ -20,17 +21,18 @@ const SEED_TEMP: i64 = 2000;
 
 fn config() -> PhysicalConfig {
     PhysicalConfig {
-        ticks_per_day: 24,
+        clock: SimClock::new(3_600_000),
+        day_length_seconds: 86_400,
+        environment_step_seconds: 3600,
         diurnal_amplitude_centi_c: 1000,
-        weather_max_swing_centi_c: 0, // no weather noise: the diurnal swing alone, deterministic
+        temperature_variability_centi_c: 0, // no weather
+        weather_persistence_seconds: 21_600,
         illumination_peak: 10000,
         humidity_baseline: 6000,
-        humidity_swing: 100,
-        humidity_drying_divisor: 8,
+        humidity_variability: 800,
         pressure_sea_level: 10130,
         pressure_elevation_factor: 1,
-        pressure_weather_swing: 20,
-        pressure_settle_divisor: 8,
+        pressure_variability: 60,
         wind_gradient_divisor: 10,
         fall_danger_per_meter: 1500,
         // The swing halves at capacity == reference; stone's 3000 is 3x this, so the heavy

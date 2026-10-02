@@ -9,6 +9,7 @@ use kernel::identity::EntityId;
 use kernel::store::MemoryStore;
 use kernel::system::CommittedView;
 use kernel::tick::run_tick;
+use kernel::time::SimClock;
 use kernel::value::Value;
 use physical::schema::{
     CONTAINED_IN, HAS_PORTAL, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE, POSITION_Z,
@@ -40,17 +41,18 @@ fn portal(s: &mut MemoryStore, id: u64, host: u64, z: i64, pin: Option<i64>) {
 
 fn config() -> PhysicalConfig {
     PhysicalConfig {
-        ticks_per_day: 24,
+        clock: SimClock::new(3_600_000),
+        day_length_seconds: 86_400,
+        environment_step_seconds: 3600,
         diurnal_amplitude_centi_c: 400,
-        weather_max_swing_centi_c: 40,
+        temperature_variability_centi_c: 300,
+        weather_persistence_seconds: 21_600,
         illumination_peak: 10000,
         humidity_baseline: 5500,
-        humidity_swing: 80,
-        humidity_drying_divisor: 8,
+        humidity_variability: 800,
         pressure_sea_level: 10130,
         pressure_elevation_factor: 1,
-        pressure_weather_swing: 20,
-        pressure_settle_divisor: 8,
+        pressure_variability: 60,
         wind_gradient_divisor: 10,
         fall_danger_per_meter: 1500,
         thermal_mass_reference: 1000,

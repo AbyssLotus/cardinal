@@ -9,18 +9,23 @@ version = 0.1.0
 engine = >=0.0, <1.0
 domains = physical
 
+[clock]
+# How much simulated time one tick lasts, and how long a day is (Vol. II Ch. 2, Amendment A-1).
+# Every rate below is in simulated time, so changing the tick changes resolution, not behaviour.
+tick_seconds = 3600
+day_seconds = 86400
+
 [rules.physical]
-ticks_per_day = 24
+environment_step_seconds = 3600         # the environment steps once a simulated hour
 diurnal_amplitude_centi_c = 400
-weather_max_swing_centi_c = 40
+temperature_variability_centi_c = 300   # weather's typical departure from normal: 3.00 C
+weather_persistence_seconds = 21600     # a spell of weather lasts about six hours
 illumination_peak = 10000
 humidity_baseline = 5500
-humidity_swing = 80
-humidity_drying_divisor = 8
+humidity_variability = 800              # typical departure: 8.00% relative humidity
 pressure_sea_level = 10130
 pressure_elevation_factor = 1
-pressure_weather_swing = 20
-pressure_settle_divisor = 8
+pressure_variability = 60               # typical departure: 6 hPa
 wind_gradient_divisor = 10
 fall_danger_per_meter = 1500        # danger points per metre of fall height
 thermal_mass_reference = 1500       # material heat capacity (J/kg-K) that halves the swing

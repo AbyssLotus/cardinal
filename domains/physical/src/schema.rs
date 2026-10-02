@@ -129,6 +129,21 @@ pub const WIND_SPEED: FactType = FactType::new("physical.environment.wind_speed"
 /// downwind region; absent when the air is calm.
 pub const WIND_TOWARD: FactType = FactType::new("physical.environment.wind_toward");
 
+/// Weather's current departure from a region's normal temperature, in **sub-units**:
+/// [`ANOMALY_SCALE`] × centidegrees (i.e. millionths of a degree). A mean-reverting quantity
+/// the weather system steps (Vol. III Ch. 1 §1.10; Amendment A-1); temperature carries its
+/// rounded, damped effect. Kept at fine resolution so the small per-step change at a short tick
+/// length is never rounded away. Absent means "normal" (zero).
+pub const TEMPERATURE_ANOMALY: FactType = FactType::new("physical.environment.temperature_anomaly");
+
+/// Weather's current departure from a region's baseline humidity, in sub-units
+/// ([`ANOMALY_SCALE`] × hundredths of a percent). See [`TEMPERATURE_ANOMALY`].
+pub const HUMIDITY_ANOMALY: FactType = FactType::new("physical.environment.humidity_anomaly");
+
+/// Weather's current departure from a region's baseline pressure, in sub-units
+/// ([`ANOMALY_SCALE`] × decapascals). See [`TEMPERATURE_ANOMALY`].
+pub const PRESSURE_ANOMALY: FactType = FactType::new("physical.environment.pressure_anomaly");
+
 // ---- Materials (Vol. III Ch. 1 §1.9) ---------------------------------------------------
 //
 // Materials describe what reality is *composed of*. Cardinal never prescribes a material
@@ -174,6 +189,11 @@ pub const MATERIAL_CONDUCTIVITY: FactType = FactType::new("physical.material.con
 pub const MATERIAL_TOXICITY: FactType = FactType::new("physical.material.toxicity");
 
 // ---- Physical constants (laws of the mechanism, not tunable world rules) ----------------
+
+/// How many sub-units make one unit of a field, for the weather anomaly facts
+/// ([`TEMPERATURE_ANOMALY`] and friends). A representation constant, not a world rule: it sets
+/// how finely the anomaly is carried, never how weather behaves.
+pub const ANOMALY_SCALE: i64 = 10_000;
 
 /// Absolute zero in centidegrees Celsius (−273.15 °C) — the floor below which temperature is
 /// physically meaningless. The Validate stage rejects any resolved temperature beneath it.

@@ -7,9 +7,12 @@
 
 use crate::schema::{AMBIENT_TEMPERATURE, BODY_HEAT, CONTAINED_IN};
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
+use kernel::fixed::div_dither;
 use kernel::identity::EntityId;
 use kernel::proposal::{Change, Proposal};
+use kernel::rng::Rng;
 use kernel::system::{Cadence, CommittedView, System, TickContext};
+use kernel::time::Step;
 use kernel::value::Value;
 
 /// Reads: the organism's containment (to learn its region) and that region's temperature —
@@ -28,27 +31,42 @@ const THERMO_WRITES: &[FactType] = &[BODY_HEAT];
 /// discovers the organisms from committed reality — every entity bearing [`BODY_HEAT`] — so
 /// an organism born mid-simulation is regulated the tick its body heat commits
 /// (Vol. V Ch. 2 §2.1, clause 5).
+///
+/// **The rule is a pair of time constants** (Amendment A-1): body heat `H` obeys
+/// `dH/dt = (S − H)/τ_warm + (A − H)/τ_cold`, set point `S`, ambient `A`. Each step solves it
+/// implicitly over the step's simulated duration `dt`:
+///
+/// ```text
+/// H' = (H·τw·τc + dt·τc·S + dt·τw·A) / (τw·τc + dt·τc + dt·τw)
+/// ```
+///
+/// which is stable for any step length and settles at the same equilibrium,
+/// `(S·τc + A·τw)/(τc + τw)`, whatever the tick length. The division is rounded without bias
+/// ([`kernel::fixed::div_dither`]): at fine tick lengths the per-step change is a fraction of a
+/// centidegree, and ordinary rounding would freeze the body short of equilibrium.
 pub struct Thermoregulation {
+    step: Step,
     set_point_centi_c: i64,
-    warm_response: i64,
-    cold_response: i64,
+    warm_ms: u64,
+    cold_ms: u64,
 }
 
 impl Thermoregulation {
-    /// Configure homeostasis shared by every organism. `set_point_centi_c` is the metabolic
-    /// target; `warm_response`/`cold_response` are divisors — larger means slower pull toward
-    /// the set point / toward ambient (world-package rules, Vol. IV Ch. 2).
-    pub const fn new(set_point_centi_c: i64, warm_response: i64, cold_response: i64) -> Self {
+    /// Configure homeostasis shared by every organism, stepping as `step` says.
+    /// `set_point_centi_c` is the metabolic target; `warm_ms`/`cold_ms` are the time constants
+    /// of the pull toward the set point and toward ambient (world-package rules, Vol. IV Ch. 2).
+    pub const fn new(step: Step, set_point_centi_c: i64, warm_ms: u64, cold_ms: u64) -> Self {
         Self {
+            step,
             set_point_centi_c,
-            warm_response,
-            cold_response,
+            warm_ms: if warm_ms == 0 { 1 } else { warm_ms },
+            cold_ms: if cold_ms == 0 { 1 } else { cold_ms },
         }
     }
 
-    /// The body-heat delta for one organism, given its ambient region temperature and current
-    /// heat — or `None` if it is not placed in a region with a committed temperature.
-    fn delta_for(&self, view: &dyn CommittedView, organism: EntityId) -> Option<i64> {
+    /// The organism's region temperature and its current body heat — or `None` if it is not
+    /// placed in a region with a committed temperature.
+    fn state_of(&self, view: &dyn CommittedView, organism: EntityId) -> Option<(i64, i64)> {
         // 1. Where am I? Read my containment (a Physical fact) to find my region.
         let region = match view.read(FactKey::new(organism, CONTAINED_IN))?.value {
             Value::Entity(r) => r,
@@ -64,10 +82,24 @@ impl Thermoregulation {
             .read(FactKey::new(organism, BODY_HEAT))?
             .value
             .as_int()?;
+        Some((ambient, current))
+    }
 
-        let warm = self.warm_response.max(1);
-        let cold = self.cold_response.max(1);
-        Some((self.set_point_centi_c - current) / warm + (ambient - current) / cold)
+    /// Body heat after one step from `current`, given `ambient`, rounded without bias.
+    fn settle(&self, ambient: i64, current: i64, rng: &mut Rng) -> i64 {
+        let (h, s, a) = (
+            current as i128,
+            self.set_point_centi_c as i128,
+            ambient as i128,
+        );
+        let (tw, tc, dt) = (
+            self.warm_ms as i128,
+            self.cold_ms as i128,
+            self.step.dt_ms as i128,
+        );
+        let numerator = h * tw * tc + dt * tc * s + dt * tw * a;
+        let denominator = tw * tc + dt * tc + dt * tw;
+        div_dither(numerator, denominator, rng) as i64
     }
 }
 
@@ -75,33 +107,29 @@ impl System for Thermoregulation {
     fn id(&self) -> SystemId {
         SystemId::new("living.thermoregulation")
     }
-
     fn reads(&self) -> &'static [FactType] {
         THERMO_READS
     }
-
     fn writes(&self) -> &'static [FactType] {
         THERMO_WRITES
     }
-
     fn cadence(&self) -> Cadence {
-        Cadence::EveryTick
+        self.step.cadence()
     }
-
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         // The organism roster: every entity bearing body heat (Vol. V Ch. 2 §2.1, clause 5).
         view.entities_with(BODY_HEAT)
             .into_iter()
             .filter_map(|organism| {
-                self.delta_for(view, organism).map(|delta| {
-                    Proposal::new(
-                        self.id(),
-                        FactKey::new(organism, BODY_HEAT),
-                        ctx.basis_tick(),
-                        Change::Delta(delta),
-                        Cause::new("thermoregulation"),
-                    )
-                })
+                let (ambient, current) = self.state_of(view, organism)?;
+                let next = self.settle(ambient, current, &mut ctx.rng(organism.raw()));
+                Some(Proposal::new(
+                    self.id(),
+                    FactKey::new(organism, BODY_HEAT),
+                    ctx.basis_tick(),
+                    Change::Delta(next - current),
+                    Cause::new("thermoregulation"),
+                ))
             })
             .collect()
     }

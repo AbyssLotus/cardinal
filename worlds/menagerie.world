@@ -8,26 +8,32 @@ version = 0.1.0
 engine = >=0.0, <1.0
 domains = physical, living
 
+[clock]
+# How much simulated time one tick lasts, and how long a day is (Vol. II Ch. 2, Amendment A-1).
+# Every rate below is in simulated time, so changing the tick changes resolution, not behaviour.
+tick_seconds = 3600
+day_seconds = 86400
+
 [rules.physical]
-ticks_per_day = 24
+environment_step_seconds = 3600         # the environment steps once a simulated hour
 diurnal_amplitude_centi_c = 400
-weather_max_swing_centi_c = 40
+temperature_variability_centi_c = 300   # weather's typical departure from normal: 3.00 C
+weather_persistence_seconds = 21600     # a spell of weather lasts about six hours
 illumination_peak = 10000
 humidity_baseline = 5500
-humidity_swing = 80
-humidity_drying_divisor = 8
-pressure_sea_level = 10130           # ~1013 hPa baseline at the datum
-pressure_elevation_factor = 1        # decapascals lost per metre of elevation
-pressure_weather_swing = 20          # +/- per-tick pressure jitter
-pressure_settle_divisor = 8          # how fast pressure returns to baseline
-wind_gradient_divisor = 10           # larger = gentler wind per unit pressure gap
+humidity_variability = 800              # typical departure: 8.00% relative humidity
+pressure_sea_level = 10130
+pressure_elevation_factor = 1
+pressure_variability = 60               # typical departure: 6 hPa
+wind_gradient_divisor = 10
 fall_danger_per_meter = 1500        # danger points per metre of fall height
 thermal_mass_reference = 1500       # material heat capacity (J/kg-K) that halves the swing
 
 [rules.living]
-set_point_centi_c = 3700     # 37.00 C metabolic set point
-warm_response = 6            # pull toward the set point (larger = slower)
-cold_response = 3            # pull toward ambient temperature (larger = slower)
+metabolism_step_seconds = 3600   # metabolism steps once a simulated hour
+set_point_centi_c = 3700         # 37.00 C metabolic set point
+warm_response_seconds = 21600    # time constant of the pull toward the set point (6 h)
+cold_response_seconds = 10800    # time constant of the pull toward ambient (3 h)
 
 [regions]
 # region_id = temperature[, elevation]

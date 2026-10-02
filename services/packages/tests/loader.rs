@@ -19,8 +19,10 @@ fn parses_the_wilderness_world_file() {
     let pkg = parse_world(WILDERNESS).expect("world file parses");
     assert_eq!(pkg.manifest.id, "world.wilderness");
     assert_eq!(pkg.manifest.domains, vec!["physical".to_string()]);
-    assert_eq!(pkg.physical_rules.ticks_per_day, 24);
-    assert_eq!(pkg.physical_rules.weather_max_swing_centi_c, 50);
+    assert_eq!(pkg.clock.tick_ms, 3_600_000);
+    assert_eq!(pkg.clock.day_seconds, 86_400);
+    assert_eq!(pkg.physical_rules.temperature_variability_centi_c, 300);
+    assert_eq!(pkg.physical_rules.weather_persistence_seconds, 21_600);
     assert_eq!(pkg.regions.len(), 3);
     assert_eq!(pkg.regions[0].temperature_centi_c, 1500);
 }
@@ -67,16 +69,27 @@ fn rejects_engine_out_of_range() {
 
 #[test]
 fn rejects_world_without_physical() {
-    let text = "[manifest]\nid = world.void\nversion = 0.1.0\nengine = >=0.0, <1.0\ndomains =\n\n[rules.physical]\nticks_per_day = 24\ndiurnal_amplitude_centi_c = 500\nweather_max_swing_centi_c = 50\nillumination_peak = 10000\nhumidity_baseline = 6000\nhumidity_swing = 100\nhumidity_drying_divisor = 8\npressure_sea_level = 10130\npressure_elevation_factor = 1\npressure_weather_swing = 20\npressure_settle_divisor = 8\nwind_gradient_divisor = 10\nfall_danger_per_meter = 1500\nthermal_mass_reference = 1500\n";
-    let pkg = parse_world(text).unwrap();
+    // The wilderness, with its domain selection emptied: every rule is present, but the
+    // mandatory Physical Reality domain is not selected.
+    let text = WILDERNESS.replace("domains = physical", "domains =");
+    let pkg = parse_world(&text).unwrap();
     let err = load(&pkg, engine_version()).unwrap_err();
     assert!(matches!(err, LoadError::PhysicalNotSelected));
 }
 
 #[test]
 fn missing_required_rule_is_rejected_with_no_default() {
-    // weather_max_swing_centi_c omitted -> rejected; the engine never invents a default
-    // (Vol. IV Ch. 2, "The Godlike Default" anti-pattern).
-    let text = "[manifest]\nid = w\nversion = 0.1.0\nengine = >=0.0, <1.0\ndomains = physical\n\n[rules.physical]\nticks_per_day = 24\ndiurnal_amplitude_centi_c = 500\nillumination_peak = 10000\nhumidity_baseline = 6000\nhumidity_swing = 100\nhumidity_drying_divisor = 8\npressure_sea_level = 10130\npressure_elevation_factor = 1\npressure_weather_swing = 20\npressure_settle_divisor = 8\nwind_gradient_divisor = 10\nfall_danger_per_meter = 1500\nthermal_mass_reference = 1500\n";
-    assert!(parse_world(text).is_err());
+    // temperature_variability_centi_c omitted -> rejected, naming the rule; the engine never
+    // invents a default (Vol. IV Ch. 2, "The Godlike Default" anti-pattern).
+    let text: String = WILDERNESS
+        .lines()
+        .filter(|l| !l.starts_with("temperature_variability_centi_c"))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let err = parse_world(&text).expect_err("a missing rule is an error");
+    assert!(
+        err.reason.contains("temperature_variability_centi_c"),
+        "the error names the missing rule, got: {}",
+        err.reason
+    );
 }

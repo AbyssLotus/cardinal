@@ -21,9 +21,10 @@ use kernel::identity::EntityId;
 use kernel::store::MemoryStore;
 use kernel::system::System;
 use kernel::tick::{run_tick, TickError};
+use kernel::time::SimClock;
 use kernel::value::Value;
 use living::schema::BODY_HEAT;
-use living::LivingDomain;
+use living::{LivingConfig, LivingDomain};
 use physical::schema::{
     ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, IN_REGION, LEADS_TO, MADE_OF,
     MATERIAL_CONDUCTIVITY, MATERIAL_DENSITY, MATERIAL_FLAMMABILITY, MATERIAL_HARDNESS,
@@ -159,21 +160,25 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     // 3a. Physical Reality: configured from package rules (invariant 5). The domain needs no
     //     region list — its systems discover regions from the seeded temperature facts below
     //     (Vol. V Ch. 2 §2.1, clause 5).
+    // The world's clock (Vol. II Ch. 2, Amendment A-1): both domains step in simulated time.
+    let clock = SimClock::new(package.clock.tick_ms);
+    let r = &package.physical_rules;
     let config = PhysicalConfig {
-        ticks_per_day: package.physical_rules.ticks_per_day,
-        diurnal_amplitude_centi_c: package.physical_rules.diurnal_amplitude_centi_c,
-        weather_max_swing_centi_c: package.physical_rules.weather_max_swing_centi_c,
-        illumination_peak: package.physical_rules.illumination_peak,
-        humidity_baseline: package.physical_rules.humidity_baseline,
-        humidity_swing: package.physical_rules.humidity_swing,
-        humidity_drying_divisor: package.physical_rules.humidity_drying_divisor,
-        pressure_sea_level: package.physical_rules.pressure_sea_level,
-        pressure_elevation_factor: package.physical_rules.pressure_elevation_factor,
-        pressure_weather_swing: package.physical_rules.pressure_weather_swing,
-        pressure_settle_divisor: package.physical_rules.pressure_settle_divisor,
-        wind_gradient_divisor: package.physical_rules.wind_gradient_divisor,
-        fall_danger_per_meter: package.physical_rules.fall_danger_per_meter,
-        thermal_mass_reference: package.physical_rules.thermal_mass_reference,
+        clock,
+        day_length_seconds: package.clock.day_seconds,
+        environment_step_seconds: r.environment_step_seconds,
+        diurnal_amplitude_centi_c: r.diurnal_amplitude_centi_c,
+        temperature_variability_centi_c: r.temperature_variability_centi_c,
+        weather_persistence_seconds: r.weather_persistence_seconds,
+        illumination_peak: r.illumination_peak,
+        humidity_baseline: r.humidity_baseline,
+        humidity_variability: r.humidity_variability,
+        pressure_sea_level: r.pressure_sea_level,
+        pressure_elevation_factor: r.pressure_elevation_factor,
+        pressure_variability: r.pressure_variability,
+        wind_gradient_divisor: r.wind_gradient_divisor,
+        fall_danger_per_meter: r.fall_danger_per_meter,
+        thermal_mass_reference: r.thermal_mass_reference,
     };
     let physical = PhysicalDomain::new(config);
     systems.extend(physical.systems());
@@ -304,11 +309,13 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     //     containment and region temperature by id — no wiring between domains is needed.
     if has_living {
         let rules = package.living_rules.ok_or(LoadError::LivingRulesMissing)?;
-        let living = LivingDomain::new(
-            rules.set_point_centi_c,
-            rules.warm_response,
-            rules.cold_response,
-        );
+        let living = LivingDomain::new(LivingConfig {
+            clock,
+            metabolism_step_seconds: rules.metabolism_step_seconds,
+            set_point_centi_c: rules.set_point_centi_c,
+            warm_response_seconds: rules.warm_response_seconds,
+            cold_response_seconds: rules.cold_response_seconds,
+        });
         systems.extend(living.systems());
         domains.push(Box::new(living));
         for o in &package.organisms {

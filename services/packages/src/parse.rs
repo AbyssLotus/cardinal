@@ -6,7 +6,7 @@
 //! pure data — this reads declarations, it never executes them (Vol. IV Ch. 1, invariant 6).
 
 use crate::model::{
-    AdjacencySpec, ContainmentSpec, ExposureSpec, LivingRules, MadeOfSpec, Manifest,
+    AdjacencySpec, ClockRules, ContainmentSpec, ExposureSpec, LivingRules, MadeOfSpec, Manifest,
     MaterialProperty, MaterialSpec, OrganismSpec, PhysicalRules, PortalDangerSpec, PortalSpec,
     PositionSpec, RegionMembershipSpec, RegionSpec, WorldPackage,
 };
@@ -44,7 +44,8 @@ impl fmt::Display for ParseError {
 
 /// Parse a world file into a [`WorldPackage`].
 ///
-/// Recognised sections: `[manifest]`, `[rules.physical]`, `[rules.living]`, `[regions]`
+/// Recognised sections: `[manifest]`, `[clock]` (`tick_seconds` or `tick_ms`, and
+/// `day_seconds`), `[rules.physical]`, `[rules.living]`, `[regions]`
 /// (`region_id = temperature[, elevation]`), `[organisms]`
 /// (`organism_id = region_id, body_heat`), `[containment]` (`child_id = parent_id`),
 /// `[adjacency]`, `[exposure]`, `[positions]`, `[portals]`, `[portal_danger]`, `[materials]`
@@ -58,23 +59,25 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut version: Option<Version> = None;
     let mut engine: Option<EngineReq> = None;
     let mut domains: Option<Vec<String>> = None;
-    let mut ticks_per_day: Option<u64> = None;
+    let mut tick_ms: Option<u64> = None;
+    let mut day_seconds: Option<u64> = None;
+    let mut environment_step_seconds: Option<u64> = None;
     let mut amplitude: Option<i64> = None;
-    let mut swing: Option<i64> = None;
+    let mut temperature_variability: Option<i64> = None;
+    let mut weather_persistence_seconds: Option<u64> = None;
     let mut illumination_peak: Option<i64> = None;
     let mut humidity_baseline: Option<i64> = None;
-    let mut humidity_swing: Option<i64> = None;
-    let mut humidity_drying_divisor: Option<i64> = None;
+    let mut humidity_variability: Option<i64> = None;
     let mut pressure_sea_level: Option<i64> = None;
     let mut pressure_elevation_factor: Option<i64> = None;
-    let mut pressure_weather_swing: Option<i64> = None;
-    let mut pressure_settle_divisor: Option<i64> = None;
+    let mut pressure_variability: Option<i64> = None;
     let mut wind_gradient_divisor: Option<i64> = None;
     let mut fall_danger_per_meter: Option<i64> = None;
     let mut thermal_mass_reference: Option<i64> = None;
+    let mut metabolism_step_seconds: Option<u64> = None;
     let mut set_point: Option<i64> = None;
-    let mut warm_response: Option<i64> = None;
-    let mut cold_response: Option<i64> = None;
+    let mut warm_response_seconds: Option<u64> = None;
+    let mut cold_response_seconds: Option<u64> = None;
     let mut regions: Vec<RegionSpec> = Vec::new();
     let mut organisms: Vec<OrganismSpec> = Vec::new();
     let mut containment: Vec<ContainmentSpec> = Vec::new();
@@ -129,26 +132,58 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     ))
                 }
             },
+            "clock" => match key {
+                // The tick may be declared in whole seconds or in milliseconds — one or the
+                // other — so an hour-long tick and a tenth-of-a-second tick both read naturally.
+                "tick_seconds" | "tick_ms" => {
+                    if tick_ms.is_some() {
+                        return Err(ParseError::at(
+                            line_no,
+                            "declare the tick length once, as tick_seconds or tick_ms",
+                        ));
+                    }
+                    let n: u64 = parse_num(value, line_no)?;
+                    let ms = if key == "tick_seconds" {
+                        n.checked_mul(1000)
+                            .ok_or_else(|| ParseError::at(line_no, "tick length overflows"))?
+                    } else {
+                        n
+                    };
+                    if ms == 0 {
+                        return Err(ParseError::at(
+                            line_no,
+                            "a tick must last some time (zero length)",
+                        ));
+                    }
+                    tick_ms = Some(ms);
+                }
+                "day_seconds" => day_seconds = Some(parse_num(value, line_no)?),
+                other => {
+                    return Err(ParseError::at(
+                        line_no,
+                        format!("unknown clock key {other:?}"),
+                    ))
+                }
+            },
             "rules.physical" => match key {
-                "ticks_per_day" => ticks_per_day = Some(parse_num(value, line_no)?),
+                "environment_step_seconds" => {
+                    environment_step_seconds = Some(parse_num(value, line_no)?)
+                }
                 "diurnal_amplitude_centi_c" => amplitude = Some(parse_num(value, line_no)?),
-                "weather_max_swing_centi_c" => swing = Some(parse_num(value, line_no)?),
+                "temperature_variability_centi_c" => {
+                    temperature_variability = Some(parse_num(value, line_no)?)
+                }
+                "weather_persistence_seconds" => {
+                    weather_persistence_seconds = Some(parse_num(value, line_no)?)
+                }
                 "illumination_peak" => illumination_peak = Some(parse_num(value, line_no)?),
                 "humidity_baseline" => humidity_baseline = Some(parse_num(value, line_no)?),
-                "humidity_swing" => humidity_swing = Some(parse_num(value, line_no)?),
-                "humidity_drying_divisor" => {
-                    humidity_drying_divisor = Some(parse_num(value, line_no)?)
-                }
+                "humidity_variability" => humidity_variability = Some(parse_num(value, line_no)?),
                 "pressure_sea_level" => pressure_sea_level = Some(parse_num(value, line_no)?),
                 "pressure_elevation_factor" => {
                     pressure_elevation_factor = Some(parse_num(value, line_no)?)
                 }
-                "pressure_weather_swing" => {
-                    pressure_weather_swing = Some(parse_num(value, line_no)?)
-                }
-                "pressure_settle_divisor" => {
-                    pressure_settle_divisor = Some(parse_num(value, line_no)?)
-                }
+                "pressure_variability" => pressure_variability = Some(parse_num(value, line_no)?),
                 "wind_gradient_divisor" => wind_gradient_divisor = Some(parse_num(value, line_no)?),
                 "fall_danger_per_meter" => fall_danger_per_meter = Some(parse_num(value, line_no)?),
                 "thermal_mass_reference" => {
@@ -162,9 +197,12 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 }
             },
             "rules.living" => match key {
+                "metabolism_step_seconds" => {
+                    metabolism_step_seconds = Some(parse_num(value, line_no)?)
+                }
                 "set_point_centi_c" => set_point = Some(parse_num(value, line_no)?),
-                "warm_response" => warm_response = Some(parse_num(value, line_no)?),
-                "cold_response" => cold_response = Some(parse_num(value, line_no)?),
+                "warm_response_seconds" => warm_response_seconds = Some(parse_num(value, line_no)?),
+                "cold_response_seconds" => cold_response_seconds = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -288,30 +326,33 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         engine: require(engine, "manifest.engine")?,
         domains: require(domains, "manifest.domains")?,
     };
+    let clock = ClockRules {
+        tick_ms: require(tick_ms, "clock.tick_seconds (or clock.tick_ms)")?,
+        day_seconds: require(day_seconds, "clock.day_seconds")?,
+    };
     let physical_rules = PhysicalRules {
-        ticks_per_day: require(ticks_per_day, "rules.physical.ticks_per_day")?,
+        environment_step_seconds: require(
+            environment_step_seconds,
+            "rules.physical.environment_step_seconds",
+        )?,
         diurnal_amplitude_centi_c: require(amplitude, "rules.physical.diurnal_amplitude_centi_c")?,
-        weather_max_swing_centi_c: require(swing, "rules.physical.weather_max_swing_centi_c")?,
+        temperature_variability_centi_c: require(
+            temperature_variability,
+            "rules.physical.temperature_variability_centi_c",
+        )?,
+        weather_persistence_seconds: require(
+            weather_persistence_seconds,
+            "rules.physical.weather_persistence_seconds",
+        )?,
         illumination_peak: require(illumination_peak, "rules.physical.illumination_peak")?,
         humidity_baseline: require(humidity_baseline, "rules.physical.humidity_baseline")?,
-        humidity_swing: require(humidity_swing, "rules.physical.humidity_swing")?,
-        humidity_drying_divisor: require(
-            humidity_drying_divisor,
-            "rules.physical.humidity_drying_divisor",
-        )?,
+        humidity_variability: require(humidity_variability, "rules.physical.humidity_variability")?,
         pressure_sea_level: require(pressure_sea_level, "rules.physical.pressure_sea_level")?,
         pressure_elevation_factor: require(
             pressure_elevation_factor,
             "rules.physical.pressure_elevation_factor",
         )?,
-        pressure_weather_swing: require(
-            pressure_weather_swing,
-            "rules.physical.pressure_weather_swing",
-        )?,
-        pressure_settle_divisor: require(
-            pressure_settle_divisor,
-            "rules.physical.pressure_settle_divisor",
-        )?,
+        pressure_variability: require(pressure_variability, "rules.physical.pressure_variability")?,
         wind_gradient_divisor: require(
             wind_gradient_divisor,
             "rules.physical.wind_gradient_divisor",
@@ -325,17 +366,33 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "rules.physical.thermal_mass_reference",
         )?,
     };
-    let living_rules = match (set_point, warm_response, cold_response) {
-        (None, None, None) => None,
+    let living_rules = match (
+        metabolism_step_seconds,
+        set_point,
+        warm_response_seconds,
+        cold_response_seconds,
+    ) {
+        (None, None, None, None) => None,
         _ => Some(LivingRules {
+            metabolism_step_seconds: require(
+                metabolism_step_seconds,
+                "rules.living.metabolism_step_seconds",
+            )?,
             set_point_centi_c: require(set_point, "rules.living.set_point_centi_c")?,
-            warm_response: require(warm_response, "rules.living.warm_response")?,
-            cold_response: require(cold_response, "rules.living.cold_response")?,
+            warm_response_seconds: require(
+                warm_response_seconds,
+                "rules.living.warm_response_seconds",
+            )?,
+            cold_response_seconds: require(
+                cold_response_seconds,
+                "rules.living.cold_response_seconds",
+            )?,
         }),
     };
 
     Ok(WorldPackage {
         manifest,
+        clock,
         physical_rules,
         living_rules,
         regions,
@@ -529,18 +586,20 @@ id = world.test
 version = 0.1.0
 engine = >=0.0, <1.0
 domains = physical
+[clock]
+tick_seconds = 3600
+day_seconds = 86400
 [rules.physical]
-ticks_per_day = 24
+environment_step_seconds = 3600
 diurnal_amplitude_centi_c = 400
-weather_max_swing_centi_c = 40
+temperature_variability_centi_c = 300
+weather_persistence_seconds = 21600
 illumination_peak = 10000
 humidity_baseline = 5500
-humidity_swing = 80
-humidity_drying_divisor = 8
+humidity_variability = 800
 pressure_sea_level = 10130
 pressure_elevation_factor = 1
-pressure_weather_swing = 20
-pressure_settle_divisor = 8
+pressure_variability = 60
 wind_gradient_divisor = 10
 fall_danger_per_meter = 1500
 thermal_mass_reference = 1000
@@ -622,6 +681,24 @@ thermal_mass_reference = 1000
         assert!(
             err.reason.contains("sparkliness"),
             "error should name the offending property, got: {}",
+            err.reason
+        );
+    }
+
+    #[test]
+    fn the_clock_takes_seconds_or_milliseconds_but_not_both() {
+        let tenth = HEADER.replace("tick_seconds = 3600", "tick_ms = 100");
+        assert_eq!(parse_world(&tenth).expect("parses").clock.tick_ms, 100);
+        assert_eq!(parse_world(HEADER).unwrap().clock.tick_ms, 3_600_000);
+        let both = HEADER.replace("tick_seconds = 3600", "tick_seconds = 3600\ntick_ms = 100");
+        assert!(parse_world(&both).is_err(), "two tick lengths is ambiguous");
+        let zero = HEADER.replace("tick_seconds = 3600", "tick_seconds = 0");
+        assert!(parse_world(&zero).is_err(), "time must pass");
+        let none = HEADER.replace("tick_seconds = 3600\n", "");
+        let err = parse_world(&none).expect_err("no default tick length");
+        assert!(
+            err.reason.contains("clock.tick_seconds"),
+            "got {}",
             err.reason
         );
     }

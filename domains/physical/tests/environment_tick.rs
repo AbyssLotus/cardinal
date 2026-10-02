@@ -10,6 +10,7 @@ use kernel::proposal::{Change, Proposal};
 use kernel::store::{MemoryStore, RealityStore};
 use kernel::system::{Cadence, CommittedView, System, TickContext};
 use kernel::tick::{run_tick, TickError};
+use kernel::time::SimClock;
 use kernel::value::Value;
 use physical::schema::{ABSOLUTE_ZERO_CENTI_C, TEMPERATURE};
 use physical::{PhysicalConfig, PhysicalDomain};
@@ -19,17 +20,18 @@ const SEED_TEMP_CENTI_C: i64 = 2000; // 20.00 C
 
 fn config() -> PhysicalConfig {
     PhysicalConfig {
-        ticks_per_day: 24,
+        clock: SimClock::new(3_600_000),
+        day_length_seconds: 86_400,
+        environment_step_seconds: 3600,
         diurnal_amplitude_centi_c: 500,
-        weather_max_swing_centi_c: 50,
+        temperature_variability_centi_c: 300,
+        weather_persistence_seconds: 21_600,
         illumination_peak: 10000,
         humidity_baseline: 6000,
-        humidity_swing: 100,
-        humidity_drying_divisor: 8,
+        humidity_variability: 800,
         pressure_sea_level: 10130,
         pressure_elevation_factor: 1,
-        pressure_weather_swing: 20,
-        pressure_settle_divisor: 8,
+        pressure_variability: 60,
         wind_gradient_divisor: 10,
         fall_danger_per_meter: 1500,
         thermal_mass_reference: 1000,
@@ -79,12 +81,14 @@ fn tick_loop_commits_and_chronicles_the_environment() {
         .as_int()
         .expect("temperature is integer");
     assert!(temp >= ABSOLUTE_ZERO_CENTI_C);
-    // On tick 1, five environmental proposals commit: temperature is moved by two systems
-    // (diurnal_shift and weather_perturbation), plus illumination, humidity, and pressure.
-    // The chronicle records one entry per committed proposal, so both temperature causes are
-    // kept (Vol. V Ch. 6 §6.1). Wind reads committed pressure, which does not exist until
-    // pressure is first written, so wind begins on tick 2 (effects chain across ticks).
-    assert_eq!(chronicle.len(), 5);
+    // On tick 1, eight environmental proposals commit: temperature is moved by two systems
+    // (diurnal_shift and weather), plus illumination, humidity, and pressure; and the weather
+    // records its three anomalies (temperature, humidity, pressure) beside the fields they
+    // drive (Amendment A-1). The chronicle records one entry per committed proposal, so both
+    // temperature causes are kept (Vol. V Ch. 6 §6.1). Wind reads committed pressure, which
+    // does not exist until pressure is first written, so wind begins on the second step
+    // (effects chain across ticks).
+    assert_eq!(chronicle.len(), 8);
     assert!(chronicle.iter().any(|e| e.fact_type() == TEMPERATURE));
 }
 

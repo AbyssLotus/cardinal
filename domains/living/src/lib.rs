@@ -26,6 +26,7 @@ use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
 use kernel::fact::FactType;
 use kernel::proposal::Change;
 use kernel::system::System;
+use kernel::time::SimClock;
 use kernel::value::Value;
 
 /// The Living Systems domain, plugged into the kernel (Appendix A owner of vital state).
@@ -37,19 +38,31 @@ use kernel::value::Value;
 /// Per-species rules keyed on declared categories are a later refinement (Vol. IV Ch. 2
 /// §2.2).
 pub struct LivingDomain {
-    set_point_centi_c: i64,
-    warm_response: i64,
-    cold_response: i64,
+    config: LivingConfig,
+}
+
+/// The tunable metabolic rules the living domain consumes, all sourced from the world package
+/// (Vol. IV Ch. 2 §2.2). Rates are time constants in simulated time (Vol. II Ch. 2,
+/// Amendment A-1), so a body cools at the same pace whatever the world's tick length.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct LivingConfig {
+    /// The world's clock: how much simulated time one tick lasts.
+    pub clock: SimClock,
+    /// How often metabolism steps, in seconds of simulated time (rounded to whole ticks).
+    pub metabolism_step_seconds: u64,
+    /// Metabolic set-point body heat, in centidegrees Celsius.
+    pub set_point_centi_c: i64,
+    /// Time constant of the pull toward the set point, in seconds: the time over which the
+    /// body would close most of the gap on its own (larger = slower).
+    pub warm_response_seconds: u64,
+    /// Time constant of the pull toward the ambient temperature, in seconds (larger = slower).
+    pub cold_response_seconds: u64,
 }
 
 impl LivingDomain {
     /// Configure the domain with shared metabolic rules.
-    pub fn new(set_point_centi_c: i64, warm_response: i64, cold_response: i64) -> Self {
-        Self {
-            set_point_centi_c,
-            warm_response,
-            cold_response,
-        }
+    pub fn new(config: LivingConfig) -> Self {
+        Self { config }
     }
 }
 
@@ -64,10 +77,12 @@ impl Domain for LivingDomain {
 
     fn systems(&self) -> Vec<Box<dyn System>> {
         // One instance for the whole world; it iterates every organism it finds in reality.
+        let c = self.config;
         vec![Box::new(systems::Thermoregulation::new(
-            self.set_point_centi_c,
-            self.warm_response,
-            self.cold_response,
+            c.clock.step(c.metabolism_step_seconds.saturating_mul(1000)),
+            c.set_point_centi_c,
+            c.warm_response_seconds.saturating_mul(1000),
+            c.cold_response_seconds.saturating_mul(1000),
         ))]
     }
 

@@ -19,6 +19,6 @@ pub mod parse;
 pub mod version;
 
 pub use loader::{engine_version, load, LoadError, LoadedWorld};
-pub use model::{Manifest, PhysicalRules, RegionSpec, WorldPackage};
+pub use model::{ClockRules, Manifest, PhysicalRules, RegionSpec, WorldPackage};
 pub use parse::{parse_world, ParseError};
 pub use version::{EngineReq, Version, VersionParseError};

@@ -38,35 +38,43 @@ use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
 use kernel::fact::{Cardinality, FactType};
 use kernel::proposal::Change;
 use kernel::system::System;
+use kernel::time::SimClock;
 use kernel::value::Value;
 
 /// The tunable rules the physical domain consumes, all sourced from the world package
 /// (Vol. IV Ch. 2 §2.2, invariant 5) — no climate, field, or wind number is hardcoded in
-/// engine code.
+/// engine code. Every rule about change over time is a rate or a statistic in simulated time
+/// (Vol. II Ch. 2, Amendment A-1), so the same rules give the same climate at any tick length.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PhysicalConfig {
-    /// Ticks in one day/night cycle (shared by temperature and illumination).
-    pub ticks_per_day: u64,
+    /// The world's clock: how much simulated time one tick lasts.
+    pub clock: SimClock,
+    /// The length of one day/night cycle, in seconds of simulated time.
+    pub day_length_seconds: u64,
+    /// How often the environment (temperature, light, humidity, pressure, wind) steps, in
+    /// seconds of simulated time. Rounded to whole ticks; each step advances exactly the time
+    /// it covers.
+    pub environment_step_seconds: u64,
     /// Peak diurnal temperature swing, in centidegrees Celsius.
     pub diurnal_amplitude_centi_c: i64,
-    /// Maximum per-tick temperature weather perturbation, in centidegrees Celsius.
-    pub weather_max_swing_centi_c: i64,
+    /// Typical size (standard deviation) of weather's departure from normal temperature, in
+    /// centidegrees Celsius.
+    pub temperature_variability_centi_c: i64,
+    /// How long a spell of weather tends to last — the memory of the temperature, humidity,
+    /// and pressure anomalies — in seconds of simulated time.
+    pub weather_persistence_seconds: u64,
     /// Illumination at midday, in hundredths of a percent (0..=10000).
     pub illumination_peak: i64,
-    /// Humidity baseline the weather drifts toward, in hundredths of a percent.
+    /// Humidity baseline the weather departs from, in hundredths of a percent.
     pub humidity_baseline: i64,
-    /// Maximum per-tick humidity weather perturbation, in hundredths of a percent.
-    pub humidity_swing: i64,
-    /// Divisor governing how fast humidity returns to baseline (larger = slower).
-    pub humidity_drying_divisor: i64,
+    /// Typical size of weather's departure from baseline humidity, in hundredths of a percent.
+    pub humidity_variability: i64,
     /// Baseline atmospheric pressure at the datum, in decapascals.
     pub pressure_sea_level: i64,
     /// Decapascals of pressure lost per metre of elevation.
     pub pressure_elevation_factor: i64,
-    /// Maximum per-tick pressure weather perturbation, in decapascals.
-    pub pressure_weather_swing: i64,
-    /// Divisor governing how fast pressure returns to its baseline (larger = slower).
-    pub pressure_settle_divisor: i64,
+    /// Typical size of weather's departure from baseline pressure, in decapascals.
+    pub pressure_variability: i64,
     /// Divisor scaling wind speed per unit pressure gradient (larger = gentler wind).
     pub wind_gradient_divisor: i64,
     /// Danger points added per metre of a portal's height above the ground (fall danger).
@@ -103,6 +111,9 @@ impl Domain for PhysicalDomain {
 
     fn owns(&self, fact_type: FactType) -> bool {
         fact_type == schema::TEMPERATURE
+            || fact_type == schema::TEMPERATURE_ANOMALY
+            || fact_type == schema::HUMIDITY_ANOMALY
+            || fact_type == schema::PRESSURE_ANOMALY
             || fact_type == schema::ILLUMINATION
             || fact_type == schema::HUMIDITY
             || fact_type == schema::PRESSURE
@@ -146,39 +157,53 @@ impl Domain for PhysicalDomain {
 
     fn systems(&self) -> Vec<Box<dyn System>> {
         // One instance of each system kind; each discovers its regions from committed reality
-        // and iterates them, so the count is fixed regardless of world size.
+        // and iterates them, so the count is fixed regardless of world size. The environment
+        // steps together, on one cadence in simulated time (Vol. V Ch. 3 §3.2, Amendment A-1).
+        let c = self.config;
+        let step = c
+            .clock
+            .step(c.environment_step_seconds.saturating_mul(1000));
+        let day_ms = c.day_length_seconds.saturating_mul(1000);
+        let memory_ms = c.weather_persistence_seconds.saturating_mul(1000);
         vec![
             Box::new(systems::DiurnalCycle::new(
-                self.config.ticks_per_day,
-                self.config.diurnal_amplitude_centi_c,
-                self.config.thermal_mass_reference,
+                c.clock,
+                step,
+                day_ms,
+                c.diurnal_amplitude_centi_c,
+                c.thermal_mass_reference,
             )),
-            Box::new(systems::WeatherNoise::new(
-                self.config.weather_max_swing_centi_c,
-                self.config.thermal_mass_reference,
+            Box::new(systems::TemperatureWeather::new(
+                step,
+                c.temperature_variability_centi_c,
+                memory_ms,
+                c.thermal_mass_reference,
             )),
             Box::new(systems::DayNightCycle::new(
-                self.config.ticks_per_day,
-                self.config.illumination_peak,
+                c.clock,
+                step,
+                day_ms,
+                c.illumination_peak,
             )),
             Box::new(systems::Precipitation::new(
-                self.config.humidity_baseline,
-                self.config.humidity_swing,
-                self.config.humidity_drying_divisor,
+                step,
+                c.humidity_baseline,
+                c.humidity_variability,
+                memory_ms,
             )),
             Box::new(systems::PressureSystem::new(
-                self.config.pressure_sea_level,
-                self.config.pressure_elevation_factor,
-                self.config.pressure_weather_swing,
-                self.config.pressure_settle_divisor,
+                step,
+                c.pressure_sea_level,
+                c.pressure_elevation_factor,
+                c.pressure_variability,
+                memory_ms,
             )),
             Box::new(systems::WindSystem::new(
-                self.config.wind_gradient_divisor,
+                step,
+                c.wind_gradient_divisor,
                 schema::MAX_WIND,
             )),
-            Box::new(systems::PortalDanger::new(
-                self.config.fall_danger_per_meter,
-            )),
+            Box::new(systems::PortalDanger::new(c.fall_danger_per_meter)),
         ]
     }
 
@@ -189,6 +214,9 @@ impl Domain for PhysicalDomain {
         changes: &[Change],
     ) -> Result<Resolved, ResolveError> {
         if fact_type == schema::TEMPERATURE
+            || fact_type == schema::TEMPERATURE_ANOMALY
+            || fact_type == schema::HUMIDITY_ANOMALY
+            || fact_type == schema::PRESSURE_ANOMALY
             || fact_type == schema::ELEVATION
             || fact_type == schema::POSITION_X
             || fact_type == schema::POSITION_Y

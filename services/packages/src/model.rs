@@ -11,6 +11,8 @@ use crate::version::{EngineReq, Version};
 pub struct WorldPackage {
     /// Identity, version, and engine requirement.
     pub manifest: Manifest,
+    /// The world's clock: tick length and day length (Vol. II Ch. 2, Amendment A-1).
+    pub clock: ClockRules,
     /// Tunable rules for the physical domain.
     pub physical_rules: PhysicalRules,
     /// Tunable rules for the living domain, present only if the domain is selected.
@@ -111,32 +113,43 @@ pub struct Manifest {
     pub domains: Vec<String>,
 }
 
+/// The world's clock rule (Vol. II Ch. 2, *Simulated Duration*, Amendment A-1): how much
+/// simulated time a tick lasts and how long a day is. Every rate elsewhere in the package is
+/// declared in simulated time, so changing `tick_ms` changes resolution, never behaviour.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ClockRules {
+    /// Simulated length of one tick, in milliseconds (always positive).
+    pub tick_ms: u64,
+    /// Simulated length of one day/night cycle, in seconds.
+    pub day_seconds: u64,
+}
+
 /// Tunable environmental rules the physical domain consumes (Vol. IV Ch. 2 §2.2). Every
-/// number here is package data; none is hardcoded in the engine (invariant 5).
+/// number here is package data; none is hardcoded in the engine (invariant 5). Rules about
+/// change over time are rates or statistics in simulated time (Amendment A-1).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PhysicalRules {
-    /// Ticks in one day/night cycle (shared by temperature and illumination).
-    pub ticks_per_day: u64,
+    /// How often the environment steps, in seconds of simulated time.
+    pub environment_step_seconds: u64,
     /// Peak diurnal temperature swing, in centidegrees Celsius.
     pub diurnal_amplitude_centi_c: i64,
-    /// Maximum per-tick temperature weather perturbation, in centidegrees Celsius.
-    pub weather_max_swing_centi_c: i64,
+    /// Typical size (standard deviation) of weather's departure from normal temperature, in
+    /// centidegrees Celsius.
+    pub temperature_variability_centi_c: i64,
+    /// How long a spell of weather tends to last, in seconds of simulated time.
+    pub weather_persistence_seconds: u64,
     /// Illumination at midday, in hundredths of a percent (0..=10000).
     pub illumination_peak: i64,
-    /// Humidity baseline the weather drifts toward, in hundredths of a percent.
+    /// Humidity baseline the weather departs from, in hundredths of a percent.
     pub humidity_baseline: i64,
-    /// Maximum per-tick humidity weather perturbation, in hundredths of a percent.
-    pub humidity_swing: i64,
-    /// Divisor governing how fast humidity returns to baseline (larger = slower).
-    pub humidity_drying_divisor: i64,
+    /// Typical size of weather's departure from baseline humidity, in hundredths of a percent.
+    pub humidity_variability: i64,
     /// Baseline atmospheric pressure at the datum, in decapascals.
     pub pressure_sea_level: i64,
     /// Decapascals of pressure lost per metre of elevation.
     pub pressure_elevation_factor: i64,
-    /// Maximum per-tick pressure weather perturbation, in decapascals.
-    pub pressure_weather_swing: i64,
-    /// Divisor governing how fast pressure returns to baseline (larger = slower).
-    pub pressure_settle_divisor: i64,
+    /// Typical size of weather's departure from baseline pressure, in decapascals.
+    pub pressure_variability: i64,
     /// Divisor scaling wind speed per unit pressure gradient (larger = gentler wind).
     pub wind_gradient_divisor: i64,
     /// Danger points added per metre of a portal's height above the ground (fall danger).
@@ -146,15 +159,18 @@ pub struct PhysicalRules {
     pub thermal_mass_reference: i64,
 }
 
-/// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2).
+/// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2), as time constants
+/// in simulated time (Amendment A-1).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct LivingRules {
+    /// How often metabolism steps, in seconds of simulated time.
+    pub metabolism_step_seconds: u64,
     /// Metabolic set-point body heat, in centidegrees Celsius.
     pub set_point_centi_c: i64,
-    /// Divisor governing pull toward the set point (larger = slower).
-    pub warm_response: i64,
-    /// Divisor governing pull toward ambient temperature (larger = slower).
-    pub cold_response: i64,
+    /// Time constant of the pull toward the set point, in seconds (larger = slower).
+    pub warm_response_seconds: u64,
+    /// Time constant of the pull toward ambient temperature, in seconds (larger = slower).
+    pub cold_response_seconds: u64,
 }
 
 /// One region the world begins with (Vol. IV Ch. 4, generation): an id, a starting

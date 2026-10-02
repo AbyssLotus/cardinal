@@ -72,6 +72,8 @@ The scheduler owns two questions: *who runs this tick*, and *in what order do th
 
 Each system registers its cadence (every tick, hourly, daily, monthly — simulation time, per Volume II). The scheduler maintains the cadence calendar and, at stage 1, selects the due set. Two refinements earn their complexity:
 
+**Cadence is declared in simulated time** *(Amendment A-1)*. A system asks to run "every minute", not "every 60 ticks"; the world's clock rule converts that to a period in ticks (never less than one). The step a system takes is the simulated duration its period actually covers, so a weather system stepping once a minute in a world of one-second ticks advances one minute of weather per run, and the same system in a world of hour-long ticks advances an hour per run — the same weather either way (Volume II, Time, invariant 11).
+
 **Dirty-region hints.** Systems may declare interest predicates ("run for regions where weather changed"). Hints *narrow* work; they may never *add* work outside cadence, and a hintless run must produce identical results (hints are pure optimization — Chapter 4's observational-equivalence clause applies).
 
 **Alignment ticks.** When multiple cadences coincide (the daily set and the monthly set on day 30), all due systems run in the same tick under the same ordering rules — never as stacked mini-ticks, which would create observable intermediate states.

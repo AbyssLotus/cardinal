@@ -8,19 +8,24 @@ engine = >=0.0, <1.0
 domains = physical
 
 # Every tunable number lives in the package, never in engine code (Vol. IV Ch. 2, inv. 5).
+[clock]
+# How much simulated time one tick lasts, and how long a day is (Vol. II Ch. 2, Amendment A-1).
+# Every rate below is in simulated time, so changing the tick changes resolution, not behaviour.
+tick_seconds = 3600
+day_seconds = 86400
+
 [rules.physical]
-ticks_per_day = 24
-diurnal_amplitude_centi_c = 500      # +5.00 C peak day/night swing
-weather_max_swing_centi_c = 50       # +/- 0.50 C per-tick weather jitter
-illumination_peak = 10000            # full daylight at midday (100.00%)
-humidity_baseline = 6000             # 60.00% relative humidity
-humidity_swing = 100                 # +/- 1.00% per-tick weather jitter
-humidity_drying_divisor = 8          # how fast humidity returns to baseline
-pressure_sea_level = 10130           # ~1013 hPa baseline at the datum
-pressure_elevation_factor = 1        # decapascals lost per metre of elevation
-pressure_weather_swing = 20          # +/- per-tick pressure jitter
-pressure_settle_divisor = 8          # how fast pressure returns to baseline
-wind_gradient_divisor = 10           # larger = gentler wind per unit pressure gap
+environment_step_seconds = 3600         # the environment steps once a simulated hour
+diurnal_amplitude_centi_c = 500
+temperature_variability_centi_c = 300   # weather's typical departure from normal: 3.00 C
+weather_persistence_seconds = 21600     # a spell of weather lasts about six hours
+illumination_peak = 10000
+humidity_baseline = 6000
+humidity_variability = 800              # typical departure: 8.00% relative humidity
+pressure_sea_level = 10130
+pressure_elevation_factor = 1
+pressure_variability = 60               # typical departure: 6 hPa
+wind_gradient_divisor = 10
 fall_danger_per_meter = 1500        # danger points per metre of fall height
 thermal_mass_reference = 1500       # material heat capacity (J/kg-K) that halves the swing
 
