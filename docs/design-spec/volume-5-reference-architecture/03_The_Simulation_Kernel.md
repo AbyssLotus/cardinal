@@ -64,6 +64,8 @@ The `cause` field is where chronicle honesty is manufactured: a proposal must na
 
 ---
 
+
+**Owners may refuse writers** *(Amendment A-5)*. An owning domain may declare that some of its fact types accept proposals only from its own systems — the systems it registered at bootstrap. The kernel enforces this at Resolve: a proposal from any other system to such a fact fails the tick, named, exactly as an undeclared write does. This is how a ruling like Appendix A's Ruling 13 ("no other domain ever writes a position") becomes law rather than etiquette: deciders propose *intents*, which are open to them, and only the owner's systems turn intents into the restricted facts. Because authority is checked against the systems the owner registered, the kernel also refuses to run two systems under one id — a duplicate id would let a stranger wear an owner's name, and would share its random streams besides.
 # 3.2 The Scheduler
 
 The scheduler owns two questions: *who runs this tick*, and *in what order do their effects compose*.

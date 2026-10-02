@@ -469,6 +469,10 @@ gates above. Same machine and method as §4 unless noted.
 
 ### Gates
 
+*Since this audit, the per-feature tests and worlds named below (`time_units.rs`,
+`building.rs`, `terrain.rs`, `cottage.world`, …) have been folded into the Ashford reference
+suite, which holds every gate here in one city: see [tests/reference](../../tests/reference/README.md).*
+
 | Phase | Gate | Result |
 |---|---|---|
 | 1 · Time with units | Same day/night swing at 1 h, 1 min, 1 s ticks | **Met.** 4.00 °C open, 2.00 °C half-sheltered, at all three (`time_units.rs`) |

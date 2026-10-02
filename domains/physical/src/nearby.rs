@@ -132,8 +132,9 @@ const SLACK_PER_LEVEL: i64 = 4;
 ///
 /// Every placed entity lives in exactly one frame, and every frame that holds anything is a
 /// subframe of its own container, so descending from the root visits each candidate exactly
-/// once. A frame is entered whether or not its own point is in range — a room's contents can be
-/// near even when the room's origin is not.
+/// once. A frame is entered whenever its origin is within the radius plus its reach (the index's
+/// bound on how far its contents can be from it) — a room's contents can be near even when the
+/// room's origin is not, but a room across town cannot.
 #[allow(clippy::too_many_arguments)]
 fn search(
     view: &dyn CommittedView,
@@ -172,12 +173,22 @@ fn search(
         } else {
             local_position(view, sub)
         };
-        let turn = heading(view, sub);
         let shifted = [
             local_at[0] - origin[0],
             local_at[1] - origin[1],
             local_at[2] - origin[2],
         ];
+        // Skip a whole room, house, or town when nothing in it can be in range: everything it
+        // holds lies within its reach of its origin (a bound the index keeps, valid through any
+        // turn — Amendment A-2), so if the question's centre is farther from that origin than
+        // the radius plus the reach, the subtree has no answers. This is what keeps a question
+        // asked in one home from visiting every home in the city (sweep D9).
+        let gap = isqrt(shifted.iter().map(|c| (*c as i128).pow(2)).sum::<i128>() as u128);
+        let limit = radius as u128 + index.reach(sub) as u128 + slack as u128 * 2;
+        if gap > limit {
+            continue;
+        }
+        let turn = heading(view, sub);
         // `frames` lists innermost first, so the subframe goes in front for the descent.
         frames.insert(0, (origin, turn));
         search(

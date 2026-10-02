@@ -11,13 +11,17 @@
 //! - Between regions, it routes only through portals that are **open**, that the body **fits**
 //!   (no wider and no taller than the opening; an opening without a size constrains nothing),
 //!   and that it can **reach** (no higher above the floor than the body is tall), and passes
-//!   through an opening to its **far side** — the linked face, or else the nearest face back. If no such way exists it reports the travel **blocked**
-//!   ([`TRAVEL_BLOCKED`]), and keeps the intent: open the door and it goes on.
+//!   through an opening to its **far side** — the linked face, or else the nearest face back. If
+//!   no such way exists it reports the travel **blocked** ([`TRAVEL_BLOCKED`]), and keeps the
+//!   intent: open the door and it goes on. An intent for a body that is not mobile, or with no
+//!   speed, is reported blocked too — it can never be carried out.
 //! - Within a region, it walks straight when nothing **solid** and taller than a step stands in
 //!   the way and the ground is not too steep; otherwise it plans around obstacles on a grid
 //!   (A*, eight-connected, never cutting a corner) and walks to the farthest point of that path
-//!   it can reach in a straight line. Waypoints sit on the ground (or on a low solid top), so a
-//!   walker follows terrain from point to point.
+//!   it can reach in a straight line. Waypoints sit on the ground (or on a low solid top), and
+//!   on terrain no leg is longer than half a sample spacing, so a walker stays on the ground.
+//!   Planning state — which entities are places, each region's obstacles, its grid — is built
+//!   once per tick and shared by every traveller.
 //! - **One body per opening per tick**: if two would pass through the same opening on the same
 //!   tick, the lower id goes and the other waits a tick.
 //! - It acts only on a body that is standing on something and not mid-leg; a body that is
@@ -40,7 +44,7 @@ use crate::schema::{
     TERRAIN_SPACING, TRAVEL_BLOCKED, TRAVEL_SPEED, TRAVEL_TO,
 };
 use crate::shape::{body_box, BodyBox};
-use crate::space::{local_position, portal_destination, portals_in, route_where};
+use crate::space::{far_side, local_position, portal_destination, rotate, route_where};
 use crate::terrain::{ground, is_true, slope_percent, support, support_at};
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::fixed::isqrt;
@@ -49,7 +53,7 @@ use kernel::proposal::{Change, Proposal};
 use kernel::system::{Cadence, CommittedView, System, TickContext};
 use kernel::time::SimClock;
 use kernel::value::Value;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// How close counts as "there", in centimetres, beyond the bodies' own sizes. A representation
 /// tolerance — the gap below which two placements are the same place — not a world rule.
@@ -76,6 +80,8 @@ pub struct MoveRules {
     pub max_slope_percent: i64,
     /// The cell size of a travel planning grid, in centimetres.
     pub nav_cell_cm: i64,
+    /// How far beyond its own body a body can reach to operate something, in centimetres.
+    pub reach_cm: i64,
 }
 
 /// A body's horizontal radius: the larger of its half-width and half-depth (0 for a point).
@@ -126,184 +132,318 @@ pub fn reachable(view: &dyn CommittedView, body: EntityId, portal: EntityId, ste
     at[2] - ground(view, host, at[0], at[1]) <= climb
 }
 
-/// The face something emerges from after passing through `portal` into `dest`: the linked far
-/// side if the world declared one, else the destination's portal leading back to `portal`'s host
-/// that is nearest to `portal` (lowest id on a tie), else none.
-pub fn far_side(view: &dyn CommittedView, portal: EntityId, dest: EntityId) -> Option<EntityId> {
-    if let Some(Value::Entity(linked)) = view
-        .read(FactKey::new(portal, PORTAL_FAR_SIDE))
-        .map(|f| f.value)
-    {
-        return Some(linked);
-    }
-    let host = container_of(view, portal)?;
-    portals_in(view, dest)
-        .into_iter()
-        .filter(|q| portal_destination(view, *q) == Some(host))
-        .min_by_key(|q| {
-            (
-                crate::space::distance(view, portal, *q).unwrap_or(i64::MAX),
-                *q,
-            )
-        })
+/// A planning grid over one region: which cells a walker of a given radius may stand in. Cell
+/// `(i, j)` is centred at `lo + (i, j) · cell + cell/2` in the region's frame.
+struct Grid {
+    lo: [i64; 2],
+    cell: i64,
+    nx: i64,
+    ny: i64,
+    blocked: Vec<bool>,
 }
 
-/// Whether `e` is a place one can be *in* — a region with openings, or one an opening leads to —
-/// rather than a thing one goes up to.
-fn is_place(view: &dyn CommittedView, e: EntityId) -> bool {
-    !view.read_all(FactKey::new(e, HAS_PORTAL)).is_empty()
-        || view
-            .entities_with(LEADS_TO)
-            .into_iter()
-            .any(|p| portal_destination(view, p) == Some(e))
-}
-
-/// Solid bodies in `frame` too tall to step onto from the ground — the obstacles a walker goes
-/// around — with their boxes. `ignore` lists bodies that are not obstacles (the walker; what it
-/// is walking up to). Whatever the walker is standing *on* is not an obstacle either: someone on
-/// a shed's roof walks across it, and off its edge.
-fn obstacles(
-    view: &dyn CommittedView,
-    frame: EntityId,
-    step: i64,
-    walker: EntityId,
-    ignore: &[EntityId],
-) -> Vec<BodyBox> {
-    let at = local_position(view, walker);
-    crate::nearby::contents(view, frame)
-        .into_iter()
-        .filter(|e| *e != walker && !ignore.contains(e) && is_true(view, *e, SOLID))
-        .filter_map(|e| body_box(view, e))
-        .filter(|b| b.top() > ground(view, frame, b.base[0], b.base[1]) + step)
-        .filter(|b| !(b.footprint_contains(at, 0) && b.top() <= at[2] + step))
-        .collect()
-}
-
-/// Whether a walker of horizontal radius `r` can go straight from `a` to `b` in `frame`: no
-/// obstacle's footprint (grown by `r`) crosses the track, and no ground along it is steeper than
-/// the rules allow.
-fn clear(
-    view: &dyn CommittedView,
-    frame: EntityId,
-    rules: &MoveRules,
-    walls: &[BodyBox],
-    r: i64,
-    a: [i64; 3],
-    b: [i64; 3],
-) -> bool {
-    if walls.iter().any(|w| w.track_hits(a, b, r)) {
-        return false;
-    }
-    let run = flat_distance(a, b);
-    let samples = (run / rules.nav_cell_cm.max(1)).clamp(1, 4096);
-    (0..=samples).all(|k| {
-        let x = a[0] + (b[0] - a[0]) * k / samples;
-        let y = a[1] + (b[1] - a[1]) * k / samples;
-        slope_percent(view, frame, x, y).map_or(true, |s| s <= rules.max_slope_percent)
-    })
-}
-
-/// The next point a walker of radius `r` standing at `start` in `frame` should walk straight to,
-/// on its way to `goal` (stopping `stop` short of it): the goal itself if the way is clear, else
-/// the farthest clear point along a planned path around the obstacles. `None` if no path exists.
-#[allow(clippy::too_many_arguments)]
-fn next_waypoint(
-    view: &dyn CommittedView,
-    rules: &MoveRules,
-    frame: EntityId,
-    walls: &[BodyBox],
-    r: i64,
-    start: [i64; 3],
-    goal: [i64; 3],
-    stop: i64,
-) -> Option<[i64; 2]> {
-    // The goal, shortened by `stop` along the straight line to it.
-    let len = flat_distance(start, goal);
-    let end = if stop > 0 && len > stop {
-        let keep = (len - stop) as i128;
+impl Grid {
+    fn centre(&self, i: i64, j: i64, z: i64) -> [i64; 3] {
         [
-            start[0] + ((goal[0] - start[0]) as i128 * keep / len as i128) as i64,
-            start[1] + ((goal[1] - start[1]) as i128 * keep / len as i128) as i64,
+            self.lo[0] + i * self.cell + self.cell / 2,
+            self.lo[1] + j * self.cell + self.cell / 2,
+            z,
         ]
-    } else {
-        [goal[0], goal[1]]
-    };
-    let end3 = [end[0], end[1], start[2]];
-    if clear(view, frame, rules, walls, r, start, end3) {
-        return Some(end);
     }
 
-    // Plan on a grid over the region — its size, if it has one; else the ground its terrain
-    // covers, if it has terrain; else the area around the walker, the goal, and the obstacles —
-    // coarsened if needed so neither side exceeds MAX_GRID cells.
-    let (lo, hi) = match (size_of(view, frame), terrain_extent(view, frame)) {
-        (Some(s), _) => ([-s[0], -s[1]], [s[0], s[1]]),
-        (None, Some(far)) => (
-            [start[0].min(goal[0]).min(0), start[1].min(goal[1]).min(0)],
-            [
-                start[0].max(goal[0]).max(far[0]),
-                start[1].max(goal[1]).max(far[1]),
-            ],
-        ),
-        (None, None) => {
-            let mut lo = [start[0].min(goal[0]), start[1].min(goal[1])];
-            let mut hi = [start[0].max(goal[0]), start[1].max(goal[1])];
-            for w in walls {
-                let reach = w.size[0].max(w.size[1]) + r;
-                lo = [lo[0].min(w.base[0] - reach), lo[1].min(w.base[1] - reach)];
-                hi = [hi[0].max(w.base[0] + reach), hi[1].max(w.base[1] + reach)];
-            }
-            let pad = 4 * rules.nav_cell_cm.max(1);
-            ([lo[0] - pad, lo[1] - pad], [hi[0] + pad, hi[1] + pad])
-        }
-    };
-    let span = (hi[0] - lo[0]).max(hi[1] - lo[1]).max(1);
-    let cell = rules
-        .nav_cell_cm
-        .max(1)
-        .max((span + MAX_GRID - 1) / MAX_GRID);
-    let (nx, ny) = ((hi[0] - lo[0]) / cell + 1, (hi[1] - lo[1]) / cell + 1);
-    let centre = |i: i64, j: i64| {
-        [
-            lo[0] + i * cell + cell / 2,
-            lo[1] + j * cell + cell / 2,
-            start[2],
-        ]
-    };
-    let cell_of = |p: [i64; 3]| {
+    fn cell_of(&self, p: [i64; 3]) -> (i64, i64) {
         (
-            ((p[0] - lo[0]) / cell).clamp(0, nx - 1),
-            ((p[1] - lo[1]) / cell).clamp(0, ny - 1),
+            ((p[0] - self.lo[0]) / self.cell).clamp(0, self.nx - 1),
+            ((p[1] - self.lo[1]) / self.cell).clamp(0, self.ny - 1),
         )
-    };
-    let (si, sj) = cell_of(start);
-    let (gi, gj) = cell_of(goal);
-    let blocked = |i: i64, j: i64| {
-        if (i, j) == (si, sj) || (i, j) == (gi, gj) {
+    }
+
+    fn is_blocked(&self, i: i64, j: i64) -> bool {
+        self.blocked[(j * self.nx + i) as usize]
+    }
+}
+
+/// Planning state built during one evaluation of [`Travel`] and shared by every traveller in it:
+/// which entities are places, each region's tall solids, its terrain cells' slopes, and its
+/// planning grids. Nothing here outlives the evaluation — systems hold no state between ticks
+/// (Vol. II Ch. 3) — but within a tick a crowd crossing one room plans against one grid instead
+/// of each rebuilding it (sweep D8). Every cache is a `BTreeMap`, so nothing depends on hash
+/// order.
+struct Planner<'v> {
+    view: &'v dyn CommittedView,
+    rules: MoveRules,
+    places: BTreeSet<EntityId>,
+    walls: BTreeMap<EntityId, Vec<(EntityId, BodyBox)>>,
+    slopes: BTreeMap<(EntityId, i64, i64), Option<i64>>,
+    grids: BTreeMap<(EntityId, i64), Grid>,
+}
+
+impl<'v> Planner<'v> {
+    fn new(view: &'v dyn CommittedView, rules: MoveRules) -> Self {
+        // A place is anything one can be *in*: a region with openings, or one an opening leads
+        // to. Found once per tick rather than by scanning every portal for every traveller.
+        let mut places: BTreeSet<EntityId> = view.entities_with(HAS_PORTAL).into_iter().collect();
+        for portal in view.entities_with(LEADS_TO) {
+            if let Some(dest) = portal_destination(view, portal) {
+                places.insert(dest);
+            }
+        }
+        Self {
+            view,
+            rules,
+            places,
+            walls: BTreeMap::new(),
+            slopes: BTreeMap::new(),
+            grids: BTreeMap::new(),
+        }
+    }
+
+    /// The solid bodies in `frame` too tall to step onto from the ground beneath them — what a
+    /// walker goes around — computed once per frame per tick.
+    fn walls_in(&mut self, frame: EntityId) -> Vec<(EntityId, BodyBox)> {
+        let view = self.view;
+        let step = self.rules.step_height_cm;
+        self.walls
+            .entry(frame)
+            .or_insert_with(|| {
+                crate::nearby::contents(view, frame)
+                    .into_iter()
+                    .filter(|e| is_true(view, *e, SOLID))
+                    .filter_map(|e| Some((e, body_box(view, e)?)))
+                    .filter(|(_, b)| b.top() > ground(view, frame, b.base[0], b.base[1]) + step)
+                    .collect()
+            })
+            .clone()
+    }
+
+    /// The slope of the terrain cell under `(x, y)` in `frame`, cached by terrain cell — the
+    /// grade is one value per cell, so every planning cell inside it shares the answer.
+    fn slope(&mut self, frame: EntityId, x: i64, y: i64) -> Option<i64> {
+        let sp = crate::terrain::spacing(self.view, frame)?;
+        let key = (frame, x.div_euclid(sp), y.div_euclid(sp));
+        let view = self.view;
+        *self
+            .slopes
+            .entry(key)
+            .or_insert_with(|| slope_percent(view, frame, x, y))
+    }
+
+    /// Whether a walker of horizontal radius `r` can go straight from `a` to `b` in `frame`: no
+    /// obstacle's footprint (grown by `r`) crosses the track, and no ground along it is steeper
+    /// than the rules allow.
+    fn clear(
+        &mut self,
+        frame: EntityId,
+        walls: &[BodyBox],
+        r: i64,
+        a: [i64; 3],
+        b: [i64; 3],
+    ) -> bool {
+        if walls.iter().any(|w| w.track_hits(a, b, r)) {
             return false;
         }
-        let c = centre(i, j);
-        walls.iter().any(|w| w.footprint_contains(c, r))
-            || slope_percent(view, frame, c[0], c[1]).is_some_and(|s| s > rules.max_slope_percent)
-    };
-    let path = astar(nx, ny, (si, sj), (gi, gj), blocked)?;
+        if crate::terrain::spacing(self.view, frame).is_none() {
+            return true;
+        }
+        let run = flat_distance(a, b);
+        let samples = (run / self.rules.nav_cell_cm.max(1)).clamp(1, 4096);
+        let max = self.rules.max_slope_percent;
+        (0..=samples).all(|k| {
+            let x = a[0] + (b[0] - a[0]) * k / samples;
+            let y = a[1] + (b[1] - a[1]) * k / samples;
+            self.slope(frame, x, y).map_or(true, |s| s <= max)
+        })
+    }
 
-    // Walk to the farthest point of the path reachable in a straight line.
-    for &(i, j) in path.iter().rev() {
-        let target = if (i, j) == (gi, gj) {
-            end3
-        } else {
-            centre(i, j)
+    /// A grid over `lo..hi` of `frame`, with every cell blocked that lies inside one of `walls`'
+    /// footprints (grown by `r`) or on ground steeper than the rules allow. Obstacles are
+    /// stamped onto only the cells under their own extent, so building costs the obstacles'
+    /// area, not cells × obstacles.
+    fn build_grid(
+        &mut self,
+        frame: EntityId,
+        lo: [i64; 2],
+        hi: [i64; 2],
+        walls: &[BodyBox],
+        r: i64,
+    ) -> Grid {
+        let span = (hi[0] - lo[0]).max(hi[1] - lo[1]).max(1);
+        let cell = self
+            .rules
+            .nav_cell_cm
+            .max(1)
+            .max((span + MAX_GRID - 1) / MAX_GRID);
+        let (nx, ny) = ((hi[0] - lo[0]) / cell + 1, (hi[1] - lo[1]) / cell + 1);
+        let mut grid = Grid {
+            lo,
+            cell,
+            nx,
+            ny,
+            blocked: vec![false; (nx * ny) as usize],
         };
-        if clear(view, frame, rules, walls, r, start, target) {
-            return Some([target[0], target[1]]);
+        for w in walls {
+            // The turned footprint's enclosing box, grown by r, in grid cells.
+            let (mut x0, mut y0, mut x1, mut y1) = (i64::MAX, i64::MAX, i64::MIN, i64::MIN);
+            for (cx, cy) in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
+                let c = rotate(w.heading, [cx * (w.size[0] + r), cy * (w.size[1] + r), 0]);
+                x0 = x0.min(w.base[0] + c[0]);
+                x1 = x1.max(w.base[0] + c[0]);
+                y0 = y0.min(w.base[1] + c[1]);
+                y1 = y1.max(w.base[1] + c[1]);
+            }
+            let (i0, j0) = grid.cell_of([x0, y0, 0]);
+            let (i1, j1) = grid.cell_of([x1, y1, 0]);
+            for j in j0..=j1 {
+                for i in i0..=i1 {
+                    if w.footprint_contains(grid.centre(i, j, w.base[2]), r) {
+                        grid.blocked[(j * nx + i) as usize] = true;
+                    }
+                }
+            }
+        }
+        if crate::terrain::spacing(self.view, frame).is_some() {
+            let max = self.rules.max_slope_percent;
+            for j in 0..ny {
+                for i in 0..nx {
+                    let c = grid.centre(i, j, 0);
+                    if self.slope(frame, c[0], c[1]).is_some_and(|s| s > max) {
+                        grid.blocked[(j * nx + i) as usize] = true;
+                    }
+                }
+            }
+        }
+        grid
+    }
+
+    /// The next point a walker standing at `start` in `frame` should walk straight to on its way
+    /// to `goal`, stopping `stop` short of it: the goal itself if the way is clear, else the
+    /// farthest clear point along a planned path around the obstacles. `None` if no path exists.
+    /// `target` is the thing walked up to, if any — not an obstacle to its own approach.
+    fn next_waypoint(
+        &mut self,
+        frame: EntityId,
+        walker: EntityId,
+        start: [i64; 3],
+        goal: [i64; 3],
+        stop: i64,
+        target: Option<EntityId>,
+    ) -> Option<[i64; 2]> {
+        let r = radius(self.view, walker);
+        let step = self.rules.step_height_cm;
+        // Obstacles for this walker: the region's tall solids, less the walker itself, what it is
+        // walking up to, and whatever it is standing on (someone on a shed's roof walks across
+        // it, and off its edge).
+        let all = self.walls_in(frame);
+        let walls: Vec<BodyBox> = all
+            .iter()
+            .filter(|(e, b)| {
+                *e != walker
+                    && Some(*e) != target
+                    && !(b.footprint_contains(start, 0) && b.top() <= start[2] + step)
+            })
+            .map(|(_, b)| *b)
+            .collect();
+        let personal = walls.len() != all.len();
+
+        // The goal, shortened by `stop` along the straight line to it.
+        let len = flat_distance(start, goal);
+        let end = if stop > 0 && len > stop {
+            let keep = (len - stop) as i128;
+            [
+                start[0] + ((goal[0] - start[0]) as i128 * keep / len as i128) as i64,
+                start[1] + ((goal[1] - start[1]) as i128 * keep / len as i128) as i64,
+            ]
+        } else {
+            [goal[0], goal[1]]
+        };
+        let end3 = [end[0], end[1], start[2]];
+        if self.clear(frame, &walls, r, start, end3) {
+            return Some(end);
+        }
+
+        // Plan on a grid over the region — its size, if it has one; else the ground its terrain
+        // covers; else the area around the walker, the goal, and the obstacles. A region with
+        // fixed bounds and no walker-specific exclusions shares one grid per walker size.
+        let fixed = match (size_of(self.view, frame), terrain_extent(self.view, frame)) {
+            (Some(s), _) => Some(([-s[0], -s[1]], [s[0], s[1]])),
+            (None, Some(far)) => Some(([0, 0], far)),
+            (None, None) => None,
+        };
+        let shared_key = (frame, r);
+        let grid = match fixed {
+            Some(_) if !personal && self.grids.contains_key(&shared_key) => {
+                self.grids.remove(&shared_key).expect("checked present")
+            }
+            Some((lo, hi)) if !personal => {
+                // Shared: the region's own bounds only, never stretched to fit one walker (a
+                // point outside them plans from the nearest edge cell).
+                self.build_grid(frame, lo, hi, &walls, r)
+            }
+            Some((lo, hi)) => {
+                let lo = [
+                    lo[0].min(start[0]).min(goal[0]),
+                    lo[1].min(start[1]).min(goal[1]),
+                ];
+                let hi = [
+                    hi[0].max(start[0]).max(goal[0]),
+                    hi[1].max(start[1]).max(goal[1]),
+                ];
+                self.build_grid(frame, lo, hi, &walls, r)
+            }
+            None => {
+                let mut lo = [start[0].min(goal[0]), start[1].min(goal[1])];
+                let mut hi = [start[0].max(goal[0]), start[1].max(goal[1])];
+                for w in &walls {
+                    let far = w.size[0].max(w.size[1]) + r;
+                    lo = [lo[0].min(w.base[0] - far), lo[1].min(w.base[1] - far)];
+                    hi = [hi[0].max(w.base[0] + far), hi[1].max(w.base[1] + far)];
+                }
+                let pad = 4 * self.rules.nav_cell_cm.max(1);
+                self.build_grid(
+                    frame,
+                    [lo[0] - pad, lo[1] - pad],
+                    [hi[0] + pad, hi[1] + pad],
+                    &walls,
+                    r,
+                )
+            }
+        };
+        let (si, sj) = grid.cell_of(start);
+        let (gi, gj) = grid.cell_of(goal);
+        let blocked =
+            |i: i64, j: i64| (i, j) != (si, sj) && (i, j) != (gi, gj) && grid.is_blocked(i, j);
+        let path = astar(grid.nx, grid.ny, (si, sj), (gi, gj), blocked);
+        let mut answer = None;
+        if let Some(path) = &path {
+            // Walk to the farthest point of the path reachable in a straight line.
+            for &(i, j) in path.iter().rev() {
+                let target_pt = if (i, j) == (gi, gj) {
+                    end3
+                } else {
+                    grid.centre(i, j, start[2])
+                };
+                if self.clear(frame, &walls, r, start, target_pt) {
+                    answer = Some([target_pt[0], target_pt[1]]);
+                    break;
+                }
+            }
+            // Failing that, the first step of the path is adjacent and clear of corners.
+            if answer.is_none() {
+                answer = path.get(1).map(|&(i, j)| {
+                    let c = grid.centre(i, j, start[2]);
+                    [c[0], c[1]]
+                });
+            }
+        }
+        if fixed.is_some() && !personal {
+            self.grids.insert(shared_key, grid);
+        }
+        if path.is_some() {
+            answer
+        } else {
+            None
         }
     }
-    // The first step of the path is always adjacent and clear of corners.
-    path.get(1).map(|&(i, j)| {
-        let c = centre(i, j);
-        [c[0], c[1]]
-    })
 }
 
 /// The far corner of `frame`'s terrain grid (its last column and row, in centimetres), if it has
@@ -546,12 +686,8 @@ enum Step {
 
 impl Travel {
     /// Decide one traveller's step. `taken` holds the openings already being passed this tick.
-    fn step_for(
-        &self,
-        view: &dyn CommittedView,
-        body: EntityId,
-        taken: &BTreeSet<EntityId>,
-    ) -> Step {
+    fn step_for(&self, plan: &mut Planner, body: EntityId, taken: &BTreeSet<EntityId>) -> Step {
+        let view = plan.view;
         let Some(Value::Entity(target)) = view.read(FactKey::new(body, TRAVEL_TO)).map(|f| f.value)
         else {
             return Step::Wait;
@@ -560,17 +696,22 @@ impl Travel {
             .read(FactKey::new(body, TRAVEL_SPEED))
             .and_then(|f| f.value.as_int())
             .unwrap_or(0);
+        // Only a free body can travel, and only at some speed: an intent without either can
+        // never be carried out, and the decider is told so rather than left waiting (sweep D5).
+        if speed <= 0 || !is_true(view, body, MOBILE) {
+            return Step::Blocked;
+        }
         let step = self.rules.step_height_cm;
-        if speed <= 0 || is_moving(view, body) || !supported(view, body, step) {
+        if is_moving(view, body) || !supported(view, body, step) {
             return Step::Wait;
         }
         let Some(here) = container_of(view, body) else {
-            return Step::Wait;
+            return Step::Blocked;
         };
         let at = local_position(view, body);
 
         // Where must it be? Inside a place, or beside a thing.
-        let (goal_region, approach) = if is_place(view, target) {
+        let (goal_region, approach) = if plan.places.contains(&target) {
             (target, None)
         } else {
             let Some(region) = container_of(view, target) else {
@@ -578,6 +719,13 @@ impl Travel {
             };
             (region, Some(target))
         };
+        let walk =
+            |plan: &mut Planner, goal: [i64; 3], stop: i64, thing: Option<EntityId>| match plan
+                .next_waypoint(here, body, at, goal, stop, thing)
+            {
+                Some(w) => Step::Walk(cap_on_terrain(view, here, at, w)),
+                None => Step::Blocked,
+            };
         if here == goal_region {
             let Some(thing) = approach else {
                 return Step::Arrive;
@@ -587,23 +735,10 @@ impl Travel {
             if flat_distance(at, goal) <= reach {
                 return Step::Arrive;
             }
-            let walls = obstacles(view, here, step, body, &[thing]);
-            return match next_waypoint(
-                view,
-                &self.rules,
-                here,
-                &walls,
-                radius(view, body),
-                at,
-                goal,
-                reach - ARRIVAL_TOLERANCE,
-            ) {
-                Some(w) => Step::Walk(w),
-                None => Step::Blocked,
-            };
+            return walk(plan, goal, reach - ARRIVAL_TOLERANCE, Some(thing));
         }
 
-        // Another region: the way out, through openings it fits that are open.
+        // Another region: the way out, through openings it fits that are open and in reach.
         let usable =
             |p: EntityId| is_open(view, p) && fits(view, body, p) && reachable(view, body, p, step);
         let Some(route) = route_where(view, here, goal_region, usable) else {
@@ -619,21 +754,31 @@ impl Travel {
             }
             return Step::Pass(portal);
         }
-        let walls = obstacles(view, here, step, body, &[]);
-        match next_waypoint(
-            view,
-            &self.rules,
-            here,
-            &walls,
-            radius(view, body),
-            at,
-            door,
-            0,
-        ) {
-            Some(w) => Step::Walk(w),
-            None => Step::Blocked,
-        }
+        walk(plan, door, 0, None)
     }
+}
+
+/// On terrain, a leg is at most half a sample spacing long. A leg is a straight line and ground
+/// is curved, so a long leg over a hill would cut through it or float above a hollow; short legs
+/// keep a walker on the ground (sweep D10) at the cost of a few more writes per journey.
+fn cap_on_terrain(
+    view: &dyn CommittedView,
+    frame: EntityId,
+    at: [i64; 3],
+    w: [i64; 2],
+) -> [i64; 2] {
+    let Some(sp) = crate::terrain::spacing(view, frame) else {
+        return w;
+    };
+    let limit = (sp / 2).max(1);
+    let len = flat_distance(at, [w[0], w[1], at[2]]);
+    if len <= limit {
+        return w;
+    }
+    [
+        at[0] + ((w[0] - at[0]) as i128 * limit as i128 / len as i128) as i64,
+        at[1] + ((w[1] - at[1]) as i128 * limit as i128 / len as i128) as i64,
+    ]
 }
 
 impl System for Travel {
@@ -652,11 +797,12 @@ impl System for Travel {
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let mut out = Vec::new();
         let mut taken: BTreeSet<EntityId> = BTreeSet::new();
+        let mut plan = Planner::new(view, self.rules);
         let was_blocked = |b: EntityId| is_true(view, b, TRAVEL_BLOCKED);
         // Ascending id: when two bodies reach one opening on one tick, the lower id goes first.
         for body in view.entities_with(TRAVEL_TO) {
             let mut changes: Vec<(FactKey, Change, &'static str)> = Vec::new();
-            let step = self.step_for(view, body, &taken);
+            let step = self.step_for(&mut plan, body, &taken);
             if !matches!(step, Step::Blocked | Step::Wait) && was_blocked(body) {
                 changes.push((
                     FactKey::new(body, TRAVEL_BLOCKED),
@@ -686,17 +832,17 @@ impl System for Travel {
                 Step::Walk([x, y]) => {
                     let here = local_position(view, body);
                     let frame = container_of(view, body).expect("a traveller is somewhere");
-                    // Walk on whatever is underfoot at the waypoint — unless that is more than a
-                    // step below: then the walker goes on level, off the edge, and gravity takes
-                    // it when the leg ends (a leg is walked through; gravity acts between legs).
-                    let below = support_at(
-                        view,
-                        frame,
-                        [x, y, here[2]],
-                        self.rules.step_height_cm,
-                        &[body],
-                    );
-                    let z = if here[2] - below > self.rules.step_height_cm {
+                    // Walk on whatever is underfoot at the waypoint. The one exception is a
+                    // walker standing on top of something solid — a roof, a boulder — whose
+                    // waypoint lies more than a step below: it goes on level, off the edge, and
+                    // gravity takes it when the leg ends (a leg is walked through; gravity acts
+                    // between legs). Walking down a slope is not a ledge: the planner has already
+                    // judged the ground walkable, so the walker follows it down.
+                    let step = self.rules.step_height_cm;
+                    let below = support_at(view, frame, [x, y, here[2]], step, &[body]);
+                    let on_top_of_something =
+                        support(view, body, step) > ground(view, frame, here[0], here[1]) + 1;
+                    let z = if on_top_of_something && here[2] - below > step {
                         here[2]
                     } else {
                         below

@@ -52,6 +52,9 @@ pub enum LoadError {
     LivingRulesMissing,
     /// A selected domain has no implementation wired into the loader yet.
     UnsupportedDomain(String),
+    /// The package failed validation (Vol. IV Ch. 7 §7.1): every problem found, each naming its
+    /// layer, subject, and rule. Nothing is seeded from an invalid package.
+    Invalid(Vec<crate::validate::Problem>),
 }
 
 impl fmt::Display for LoadError {
@@ -69,6 +72,13 @@ impl fmt::Display for LoadError {
             }
             LoadError::UnsupportedDomain(d) => {
                 write!(f, "selected domain `{d}` is not implemented yet")
+            }
+            LoadError::Invalid(problems) => {
+                write!(f, "package is invalid ({} problems)", problems.len())?;
+                for p in problems {
+                    write!(f, "\n  {p}")?;
+                }
+                Ok(())
             }
         }
     }
@@ -116,6 +126,63 @@ impl LoadedWorld {
             chronicle,
         )
     }
+
+    /// Attach a front-door system to the running world: a decider standing in for a player or a
+    /// mind, which proposes intents — where to go, what to open, which way to face (Appendix A,
+    /// Ruling 13). It runs beside the world's own systems under the same law: declared reads and
+    /// writes, a unique id, and owners' authority over what it may write (Amendment A-5).
+    pub fn attach(&mut self, system: Box<dyn System>) {
+        self.systems.push(system);
+    }
+
+    /// The enabled domains, for read-only inspection.
+    pub fn domains(&self) -> &[Box<dyn Domain>] {
+        &self.domains
+    }
+}
+
+/// The Living Systems configuration a package declares, exactly as [`load`] configures the
+/// domain — or `None` if the package has no `[rules.living]`. Exposed, like
+/// [`physical_config`], so a harness can run living alone against a loaded world's store.
+pub fn living_config(package: &WorldPackage) -> Option<LivingConfig> {
+    let rules = package.living_rules?;
+    Some(LivingConfig {
+        clock: SimClock::new(package.clock.tick_ms),
+        metabolism_step_seconds: rules.metabolism_step_seconds,
+        set_point_centi_c: rules.set_point_centi_c,
+        warm_response_seconds: rules.warm_response_seconds,
+        cold_response_seconds: rules.cold_response_seconds,
+    })
+}
+
+/// The Physical Reality configuration a package declares: its clock and every physical rule,
+/// exactly as [`load`] configures the domain. Exposed so a harness can run one physical system
+/// in isolation against a loaded world's store.
+pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
+    let r = &package.physical_rules;
+    PhysicalConfig {
+        clock: SimClock::new(package.clock.tick_ms),
+        day_length_seconds: package.clock.day_seconds,
+        environment_step_seconds: r.environment_step_seconds,
+        diurnal_amplitude_centi_c: r.diurnal_amplitude_centi_c,
+        temperature_variability_centi_c: r.temperature_variability_centi_c,
+        weather_persistence_seconds: r.weather_persistence_seconds,
+        illumination_peak: r.illumination_peak,
+        humidity_baseline: r.humidity_baseline,
+        humidity_variability: r.humidity_variability,
+        pressure_sea_level: r.pressure_sea_level,
+        pressure_elevation_factor: r.pressure_elevation_factor,
+        pressure_variability: r.pressure_variability,
+        wind_gradient_divisor: r.wind_gradient_divisor,
+        fall_danger_per_meter: r.fall_danger_per_meter,
+        thermal_mass_reference: r.thermal_mass_reference,
+        gravity_cm_s2: r.gravity_cm_s2,
+        step_height_cm: r.step_height_cm,
+        max_slope_percent: r.max_slope_percent,
+        nav_cell_cm: r.nav_cell_cm,
+        reach_cm: r.reach_cm,
+        indoor_coupling_seconds: r.indoor_coupling_seconds,
+    }
 }
 
 /// The engine version this build presents to packages (from the crate version).
@@ -137,6 +204,13 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             ),
             engine,
         });
+    }
+
+    // 1b. Validate the package before anything is seeded (Vol. IV Ch. 7 §7.1): references
+    //     resolve, nothing is declared twice, containment is a hierarchy.
+    let problems = crate::validate::validate(package);
+    if !problems.is_empty() {
+        return Err(LoadError::Invalid(problems));
     }
 
     // 2. Domain selection: Physical Reality is mandatory; unknown domains are refused rather
@@ -161,30 +235,8 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     // 3a. Physical Reality: configured from package rules (invariant 5). The domain needs no
     //     region list — its systems discover regions from the seeded temperature facts below
     //     (Vol. V Ch. 2 §2.1, clause 5).
-    // The world's clock (Vol. II Ch. 2, Amendment A-1): both domains step in simulated time.
-    let clock = SimClock::new(package.clock.tick_ms);
-    let r = &package.physical_rules;
-    let config = PhysicalConfig {
-        clock,
-        day_length_seconds: package.clock.day_seconds,
-        environment_step_seconds: r.environment_step_seconds,
-        diurnal_amplitude_centi_c: r.diurnal_amplitude_centi_c,
-        temperature_variability_centi_c: r.temperature_variability_centi_c,
-        weather_persistence_seconds: r.weather_persistence_seconds,
-        illumination_peak: r.illumination_peak,
-        humidity_baseline: r.humidity_baseline,
-        humidity_variability: r.humidity_variability,
-        pressure_sea_level: r.pressure_sea_level,
-        pressure_elevation_factor: r.pressure_elevation_factor,
-        pressure_variability: r.pressure_variability,
-        wind_gradient_divisor: r.wind_gradient_divisor,
-        fall_danger_per_meter: r.fall_danger_per_meter,
-        thermal_mass_reference: r.thermal_mass_reference,
-        gravity_cm_s2: r.gravity_cm_s2,
-        step_height_cm: r.step_height_cm,
-        max_slope_percent: r.max_slope_percent,
-        nav_cell_cm: r.nav_cell_cm,
-    };
+    // Both domains step in simulated time on the world's clock (Vol. II Ch. 2, Amendment A-1).
+    let config = physical_config(package);
     let physical = PhysicalDomain::new(config);
     systems.extend(physical.systems());
     domains.push(Box::new(physical));
@@ -210,6 +262,16 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             FactKey::new(EntityId::from_raw(o.id), CONTAINED_IN),
             seeded(Value::Entity(EntityId::from_raw(o.region_id))),
         );
+    }
+    // Places that only hold other places (a continent, a town): their own containment link, if
+    // they lie within something.
+    for &(place, within) in &package.places {
+        if let Some(parent) = within {
+            store.seed(
+                FactKey::new(EntityId::from_raw(place), CONTAINED_IN),
+                seeded(Value::Entity(EntityId::from_raw(parent))),
+            );
+        }
     }
     for c in &package.containment {
         store.seed(
@@ -387,14 +449,8 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     // 3b. Living Systems (optional): configured from package rules. Living reads organism
     //     containment and region temperature by id — no wiring between domains is needed.
     if has_living {
-        let rules = package.living_rules.ok_or(LoadError::LivingRulesMissing)?;
-        let living = LivingDomain::new(LivingConfig {
-            clock,
-            metabolism_step_seconds: rules.metabolism_step_seconds,
-            set_point_centi_c: rules.set_point_centi_c,
-            warm_response_seconds: rules.warm_response_seconds,
-            cold_response_seconds: rules.cold_response_seconds,
-        });
+        let living =
+            LivingDomain::new(living_config(package).ok_or(LoadError::LivingRulesMissing)?);
         systems.extend(living.systems());
         domains.push(Box::new(living));
         for o in &package.organisms {

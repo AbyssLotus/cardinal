@@ -760,6 +760,12 @@ Physical Reality's own constraints are facts about bodies and places, and every 
 - A **mobile** body that is not supported falls, under the world's gravity, until it is. (Falling is kinematic — a body drops to its support in the time gravity takes — not a rigid-body simulation; Physics remains a consumer, §1.1.)
 - **Line of sight** between two bodies holds when the straight line from the observer's eye to the other's centre crosses no opaque body, no rising ground, and no enclosed boundary except through an opening that lets sight through.
 
+**Shelter** *(Amendment A-5)*. An enclosed region is out of the weather: the sun does not shine into it and the sky's weather does not fall on it, unless the world declares how exposed it is. Daylight reaches it only through openings that let light through, in proportion to their area against its floor — a room with one small window is dim at noon. Its temperature follows the air outside it (the region it stands in) with a lag the world declares, so a cottage warms through a summer afternoon and keeps some of that warmth into the night.
+
+**Thermal mass** *(Amendment A-6)* is the heat a region's material stores per unit volume — its density times its specific heat. The more it stores, the less the day and the weather move the region's temperature, and the longer an indoor room takes to follow the air outside: a granite hall answers the afternoon later than a timber kitchen, though timber holds more heat per kilogram.
+
+**Height above the ground** *(Amendment A-5)* is measured from the ground directly beneath — the terrain of the nearest enclosing place that has terrain, or the outermost frame's floor where none does. A door at the foot of a hillside cottage is at ground level, however high the hill; the loft is a storey above the hillside, not a storey above sea level.
+
 **Travel** obeys all of these. A body given somewhere to go — a place to enter or a thing to reach — is moved by Physical Reality: from region to region through openings it fits and that are open, and within a region around whatever is solid, at the speed it was asked to travel, one straight segment at a time. Two bodies cannot squeeze through one opening on the same tick; the one with the lower id goes first. When no way exists, the travel is reported blocked — a fact a decider can read and reconsider — rather than silently abandoned or impossibly completed.
 
 ---

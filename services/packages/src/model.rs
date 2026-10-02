@@ -61,6 +61,11 @@ pub struct WorldPackage {
     pub terrain: Vec<TerrainSpec>,
     /// Travel intents under way when the world begins (Ruling 13).
     pub travel: Vec<TravelSpec>,
+    /// Places that exist to hold other places — a continent, a city's hinterland, a town — each
+    /// with the place it lies in (`None` for the outermost). A place declared here has no climate
+    /// of its own; it, and everything in it without one, inherits the nearest enclosing climate
+    /// (Amendment A-5).
+    pub places: Vec<(u64, Option<u64>)>,
 }
 
 /// A constraint flag a world may set on an entity (Amendment A-4).
@@ -255,8 +260,9 @@ pub struct PhysicalRules {
     pub wind_gradient_divisor: i64,
     /// Danger points added per metre of a portal's height above the ground (fall danger).
     pub fall_danger_per_meter: i64,
-    /// Material thermal capacity (J/(kg·K)) at which a region's temperature swing is halved
-    /// (Vol. III Ch. 1 §1.9). Governs how strongly thermal mass resists the day/night swing.
+    /// Thermal mass — heat stored per unit volume, kJ/(m³·K) — at which a region's temperature
+    /// swing is halved (Vol. III Ch. 1 §1.9; Amendment A-6). Governs how strongly thermal mass
+    /// resists the day/night swing and the weather, and lengthens an indoor room's lag.
     pub thermal_mass_reference: i64,
     /// Gravitational acceleration, in centimetres per second squared.
     pub gravity_cm_s2: i64,
@@ -266,6 +272,10 @@ pub struct PhysicalRules {
     pub max_slope_percent: i64,
     /// The cell size of a travel planning grid, in centimetres.
     pub nav_cell_cm: i64,
+    /// How far beyond its own body a body can reach to operate something, in centimetres.
+    pub reach_cm: i64,
+    /// Time constant of a sheltered room's air following the air outside it, in seconds.
+    pub indoor_coupling_seconds: u64,
 }
 
 /// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2), as time constants

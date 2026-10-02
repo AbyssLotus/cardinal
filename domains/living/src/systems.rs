@@ -8,12 +8,12 @@
 use crate::schema::{AMBIENT_TEMPERATURE, BODY_HEAT, CONTAINED_IN};
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::fixed::div_dither;
+use kernel::hierarchy::ancestry;
 use kernel::identity::EntityId;
 use kernel::proposal::{Change, Proposal};
 use kernel::rng::Rng;
 use kernel::system::{Cadence, CommittedView, System, TickContext};
 use kernel::time::Step;
-use kernel::value::Value;
 
 /// Reads: the organism's containment (to learn its region) and that region's temperature —
 /// both owned by Physical Reality — plus the organism's own body heat. Writes: body heat.
@@ -64,20 +64,21 @@ impl Thermoregulation {
         }
     }
 
-    /// The organism's region temperature and its current body heat — or `None` if it is not
-    /// placed in a region with a committed temperature.
+    /// The temperature of the air around the organism and its current body heat — or `None` if
+    /// nothing enclosing it has a temperature.
     fn state_of(&self, view: &dyn CommittedView, organism: EntityId) -> Option<(i64, i64)> {
-        // 1. Where am I? Read my containment (a Physical fact) to find my region.
-        let region = match view.read(FactKey::new(organism, CONTAINED_IN))?.value {
-            Value::Entity(r) => r,
-            _ => return None,
-        };
-        // 2. How cold is it here? Read that region's ambient temperature (a Physical fact).
-        let ambient = view
-            .read(FactKey::new(region, AMBIENT_TEMPERATURE))?
-            .value
-            .as_int()?;
-        // 3. My own current body heat (a Living fact).
+        // 1. Where am I, and what air is around me? Walk up my containment (a Physical fact) to
+        //    the nearest place with a temperature: the room I stand in, or — riding in a cart, or
+        //    carried in a bag — the region the cart or the bag is in. Climate is inherited down
+        //    the hierarchy (Amendment A-5), so a body feels the air of whatever encloses it.
+        let ambient = ancestry(view, organism, CONTAINED_IN)
+            .into_iter()
+            .skip(1)
+            .find_map(|place| {
+                view.read(FactKey::new(place, AMBIENT_TEMPERATURE))
+                    .and_then(|f| f.value.as_int())
+            })?;
+        // 2. My own current body heat (a Living fact).
         let current = view
             .read(FactKey::new(organism, BODY_HEAT))?
             .value

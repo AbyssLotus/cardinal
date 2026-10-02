@@ -111,7 +111,12 @@ reference engine is being built here, from the specification, in roadmap order
       segments (Amendment A-3)
 - [x] Constraints and travel: solids, opacity, enclosure, open/shut and linked openings,
       fit, terrain, gravity, line of sight, intent-driven travel (Amendment A-4, Ruling 13)
-- [ ] Validation stack (Vol. IV Ch. 7)
+- [x] Authority, shelter, and ground-relative height (Amendment A-5); thermal mass as heat
+      stored per volume (Amendment A-6)
+- [x] Package validation, layers 1–4: schema, reference, coherence, world (Vol. IV Ch. 7)
+- [x] Ashford, the working reference city: the whole integration suite runs in one fictional
+      world ([worlds/ashford.world](worlds/ashford.world), [tests/reference](tests/reference/README.md))
+- [ ] Validation layer 5 (scenarios), invariant soaks, liveness envelopes (Vol. IV Ch. 7)
 - [ ] Persistence: chronicle tail + snapshots, two-road recovery (Vol. V Ch. 7)
 - [ ] Hybrid store hot tier; residency ladder; parallel evaluation (Vol. V Ch. 2, Ch. 5)
 - [ ] Presentation stream for clients (text narrator, 3D viewer) (Vol. V Ch. 5–6, Ch. 9)

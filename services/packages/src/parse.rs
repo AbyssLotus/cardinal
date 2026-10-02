@@ -55,8 +55,8 @@ impl fmt::Display for ParseError {
 /// (`entity_id = half_width, half_depth, height`), `[facing]` (`entity_id = degrees`), and
 /// `[motion]` (`entity_id = x, y, z, seconds`), `[flags]` (`entity_id = flag[, …]`, flags
 /// `solid`, `opaque`, `enclosed`, `mobile`, `closed`), `[portal_pairs]` (`portal = portal`),
-/// `[terrain]` (`region_id = spacing, columns, h h h …` row-major), and `[travel]`
-/// (`entity_id = target_id, speed`).
+/// `[terrain]` (`region_id = spacing, columns, h h h …` row-major), `[travel]`
+/// (`entity_id = target_id, speed`), and `[places]` (`place_id = container_id` or `none`).
 /// Blank lines and `#` comments are ignored. A missing required field is an error — the
 /// loader never fabricates defaults (Vol. IV Ch. 2).
 pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
@@ -84,6 +84,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut step_height_cm: Option<i64> = None;
     let mut max_slope_percent: Option<i64> = None;
     let mut nav_cell_cm: Option<i64> = None;
+    let mut reach_cm: Option<i64> = None;
+    let mut indoor_coupling_seconds: Option<u64> = None;
     let mut metabolism_step_seconds: Option<u64> = None;
     let mut set_point: Option<i64> = None;
     let mut warm_response_seconds: Option<u64> = None;
@@ -106,6 +108,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut portal_pairs: Vec<(u64, u64)> = Vec::new();
     let mut terrain: Vec<TerrainSpec> = Vec::new();
     let mut travel: Vec<TravelSpec> = Vec::new();
+    let mut places: Vec<(u64, Option<u64>)> = Vec::new();
 
     for (i, raw) in text.lines().enumerate() {
         let line_no = i + 1;
@@ -210,6 +213,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "step_height_cm" => step_height_cm = Some(parse_num(value, line_no)?),
                 "max_slope_percent" => max_slope_percent = Some(parse_num(value, line_no)?),
                 "nav_cell_cm" => nav_cell_cm = Some(parse_num(value, line_no)?),
+                "reach_cm" => reach_cm = Some(parse_num(value, line_no)?),
+                "indoor_coupling_seconds" => {
+                    indoor_coupling_seconds = Some(parse_num(value, line_no)?)
+                }
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -423,6 +430,14 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     heights,
                 });
             }
+            "places" => {
+                let place: u64 = parse_num(key, line_no)?;
+                let within = match value.trim() {
+                    "none" => None,
+                    v => Some(parse_num(v, line_no)?),
+                };
+                places.push((place, within));
+            }
             "travel" => {
                 let entity_id: u64 = parse_num(key, line_no)?;
                 let [target, speed_cm_s] = parse_ints::<2>(value, line_no, "target, speed")?;
@@ -502,6 +517,11 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         step_height_cm: require(step_height_cm, "rules.physical.step_height_cm")?,
         max_slope_percent: require(max_slope_percent, "rules.physical.max_slope_percent")?,
         nav_cell_cm: require(nav_cell_cm, "rules.physical.nav_cell_cm")?,
+        reach_cm: require(reach_cm, "rules.physical.reach_cm")?,
+        indoor_coupling_seconds: require(
+            indoor_coupling_seconds,
+            "rules.physical.indoor_coupling_seconds",
+        )?,
     };
     let living_rules = match (
         metabolism_step_seconds,
@@ -550,6 +570,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         portal_pairs,
         terrain,
         travel,
+        places,
     })
 }
 
@@ -804,6 +825,8 @@ gravity_cm_s2 = 981
 step_height_cm = 40
 max_slope_percent = 100
 nav_cell_cm = 50
+reach_cm = 75
+indoor_coupling_seconds = 14400
 [regions]
 1 = 1500
 ";

@@ -13,7 +13,7 @@
 //! behaviour is derived from its constituents' *properties*, and only for aggregates that are
 //! well-defined without knowing each material's proportion: a structure is only as strong as
 //! its weakest material, and burns or poisons as readily as its worst one. Proportion-weighted
-//! aggregates (bulk density, total thermal mass) await a per-constituent proportion fact and
+//! aggregates (bulk density, total heat stored) await a per-constituent proportion fact and
 //! are deliberately not offered yet.
 
 use crate::schema::{
@@ -114,16 +114,24 @@ pub fn toxicity_of(view: &dyn CommittedView, object: EntityId) -> Option<i64> {
         .max()
 }
 
-/// The thermal capacity of a composite `object`: the **maximum** specific heat across its
-/// materials, J/(kg·K) — a proportion-free estimate of the object's thermal inertia, its
-/// resistance to changing temperature (Vol. III Ch. 1 §1.9). Like the other composite
-/// aggregates here it uses the dominant constituent rather than a mass-weighted mean, which
-/// awaits a per-constituent proportion fact. `None` if no material exposes a thermal capacity;
-/// consumers (the environment's temperature systems) read this to damp a region's swing.
-pub fn thermal_capacity_of(view: &dyn CommittedView, object: EntityId) -> Option<i64> {
+/// A material's thermal mass: the heat one cubic metre of it stores per degree, kJ/(m³·K) —
+/// its density times its specific heat (Amendment A-6). A wall holds heat by volume, not by
+/// weight: timber stores more per kilogram than granite, granite nearly twice as much per cubic
+/// metre. `None` unless the material exposes both.
+pub fn thermal_mass(view: &dyn CommittedView, material: EntityId) -> Option<i64> {
+    Some(density(view, material)?.saturating_mul(thermal_capacity(view, material)?) / 1000)
+}
+
+/// The thermal mass of a composite `object`, kJ/(m³·K): the **maximum** across its materials —
+/// a proportion-free estimate of its thermal inertia, its resistance to changing temperature
+/// (Vol. III Ch. 1 §1.9; Amendment A-6). Like the other composite aggregates here it uses the
+/// dominant constituent rather than a volume-weighted mean, which awaits a per-constituent
+/// proportion fact. `None` if no material exposes a thermal mass; consumers (the environment's
+/// temperature systems) read this to damp a region's swing.
+pub fn thermal_mass_of(view: &dyn CommittedView, object: EntityId) -> Option<i64> {
     materials_of(view, object)
         .into_iter()
-        .filter_map(|m| thermal_capacity(view, m))
+        .filter_map(|m| thermal_mass(view, m))
         .max()
 }
 
@@ -201,20 +209,28 @@ mod tests {
     }
 
     #[test]
-    fn thermal_capacity_takes_the_most_massive_constituent() {
-        // A stone wall lined with a thin timber panel: the stone's high capacity dominates the
-        // wall's thermal inertia.
+    fn thermal_mass_is_heat_stored_per_volume() {
+        // A granite wall lined with a timber panel. Timber stores more heat per kilogram, but
+        // granite — nearly four times as dense — stores far more per cubic metre, and it is the
+        // granite that gives the wall its thermal inertia.
         let wall = EntityId::from_raw(1);
         let stone = EntityId::from_raw(300);
         let timber = EntityId::from_raw(301);
         let mut store = MemoryStore::new();
-        seed_int(&mut store, stone, MATERIAL_THERMAL_CAPACITY, 900);
+        seed_int(&mut store, stone, MATERIAL_DENSITY, 2700);
+        seed_int(&mut store, stone, MATERIAL_THERMAL_CAPACITY, 790);
+        seed_int(&mut store, timber, MATERIAL_DENSITY, 700);
         seed_int(&mut store, timber, MATERIAL_THERMAL_CAPACITY, 1700);
         made_of(&mut store, wall, stone);
         made_of(&mut store, wall, timber);
-        assert_eq!(thermal_capacity_of(&store, wall), Some(1700));
-        // No materials -> no thermal inertia to report.
-        assert_eq!(thermal_capacity_of(&store, EntityId::from_raw(999)), None);
+        assert_eq!(thermal_mass(&store, timber), Some(1190));
+        assert_eq!(thermal_mass(&store, stone), Some(2133));
+        assert_eq!(thermal_mass_of(&store, wall), Some(2133));
+        // A material without a density has no thermal mass to report; nor has no material.
+        let mystery = EntityId::from_raw(302);
+        seed_int(&mut store, mystery, MATERIAL_THERMAL_CAPACITY, 4000);
+        assert_eq!(thermal_mass(&store, mystery), None);
+        assert_eq!(thermal_mass_of(&store, EntityId::from_raw(999)), None);
     }
 
     #[test]

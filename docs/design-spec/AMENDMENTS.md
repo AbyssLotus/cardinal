@@ -86,3 +86,46 @@ movement") without making any of them a fact or a query, and nothing moved bodie
 3D-readiness audit's building test had to use a stand-in walker that could teleport anywhere.
 A world that responds to its own actions needs the world itself — not each decider — to say
 whether a way is open, what can be seen, and what happens when a body steps off a ledge.
+
+---
+
+## A-5 — Authority, shelter, and ground-relative height (2026-10)
+
+**Edits:** Vol. V Ch. 3 §3.1 (*Owners may refuse writers*); Appendix A Ruling 13 (operating
+and turning are intents; restricted facts); Vol. III Ch. 1 *Constraints Made Concrete*
+(*Shelter*; *Height above the ground*).
+
+**Change.** An owner may restrict a fact type to writes from its own registered systems, and
+the kernel enforces it, refusing duplicate system ids. Physical Reality restricts position,
+containment, motion, facing, door state, and its derived reports; deciders open, shut, and
+turn through intents that are carried out only within reach (a world rule), with both faces of
+a door moving together. Enclosed regions are sheltered: no direct sun or sky weather unless
+declared exposed, daylight through light-passing openings in proportion to their area, and a
+temperature that follows the outside air with a declared lag. Height above the ground is
+measured from the ground beneath, not from the world datum.
+
+**Rationale.** The systems sweep (`docs/audits/system-sweep.md`) verified that any system could
+teleport a body or open a door from anywhere (D2), that a walled kitchen got full noon sun and
+its own outdoor weather (D4), and that terrain made a ground-level door on a hillside rate as
+a 3 m fall (D3).
+
+---
+
+## A-6 — Thermal mass is heat stored per volume (2026-10)
+
+**Edits:** Vol. III Ch. 1 *Materials* and *Constraints Made Concrete* (*Thermal mass*).
+
+**Change.** How strongly a region's material resists changes of temperature — damping its
+day/night swing and its weather, and lengthening an indoor room's lag behind the outside air —
+is the heat its material stores per unit volume: density × specific heat, kJ/(m³·K). Before,
+it was specific heat alone. As with the other composite aggregates, a composite uses its
+dominant constituent; a material that declares no density has no thermal mass. The world rule
+`thermal_mass_reference` is restated in the same unit: the thermal mass at which a swing is
+halved.
+
+**Rationale.** A wall holds heat in proportion to its volume, not its weight. Per kilogram,
+timber (1700 J/(kg·K)) stores twice what granite (790) does; per cubic metre granite stores
+nearly twice what timber does (2133 against 1190 kJ/(m³·K)). Measured per kilogram, the Ashford
+reference world's timber kitchen lagged the weather *more* than its granite manor — the
+opposite of A-5's promise that a stone cottage keeps the afternoon's warmth into the night.
+

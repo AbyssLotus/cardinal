@@ -28,17 +28,20 @@
 //!   [`ANOMALY_SCALE`] times the field's unit, so a step's tiny change survives; only the
 //!   rounded level reaches the field itself.
 
-use crate::materials::thermal_capacity_of;
+use crate::climate::{daylight_fraction, exposure_of, is_sheltered, outside_temperature};
+use crate::materials::thermal_mass_of;
 use crate::schema::{
-    ADJACENT_TO, ANOMALY_SCALE, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, HEADING, HUMIDITY,
-    HUMIDITY_ANOMALY, ILLUMINATION, MADE_OF, MATERIAL_THERMAL_CAPACITY, MAX_DANGER, MAX_PRESSURE,
-    MOTION_END, MOTION_START, MOTION_TARGET, PERCENT_FULL, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE,
-    POSITION, PRESSURE, PRESSURE_ANOMALY, TEMPERATURE, TEMPERATURE_ANOMALY, WIND_SPEED,
-    WIND_TOWARD,
+    ADJACENT_TO, ANOMALY_SCALE, BODY_SIZE, CONTAINED_IN, ELEVATION, ENCLOSED, EXPOSURE, HAS_PORTAL,
+    HEADING, HUMIDITY, HUMIDITY_ANOMALY, ILLUMINATION, LEADS_TO, MADE_OF, MATERIAL_DENSITY,
+    MATERIAL_THERMAL_CAPACITY, MAX_DANGER, MAX_PRESSURE, MOTION_END, MOTION_START, MOTION_TARGET,
+    OPAQUE, PERCENT_FULL, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE, PORTAL_FAR_SIDE, PORTAL_OPEN,
+    POSITION, PRESSURE, PRESSURE_ANOMALY, TEMPERATURE, TEMPERATURE_ANOMALY, TERRAIN_SAMPLE,
+    TERRAIN_SPACING, WIND_SPEED, WIND_TOWARD,
 };
-use crate::space::height_above_ground;
+use crate::space::{far_side, height_above_ground, portal_destination};
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
-use kernel::fixed::{div_round, isqrt};
+use kernel::fixed::{div_dither, div_round, isqrt};
+use kernel::hierarchy::lowest_common_ancestor;
 use kernel::identity::EntityId;
 use kernel::proposal::{Change, Proposal};
 use kernel::rng::Rng;
@@ -50,27 +53,55 @@ use kernel::value::Value;
 // enumerate the regions to simulate: the loader guarantees each region carries a temperature
 // fact, so `entities_with(TEMPERATURE)` is the region roster (Vol. V Ch. 2 §2.1, clause 5).
 // The temperature systems additionally read a region's composition (MADE_OF) and its
-// materials' thermal capacity, to damp the swing by thermal mass (Vol. III Ch. 1 §1.9, §1.10).
-const DIURNAL_READS: &[FactType] = &[TEMPERATURE, EXPOSURE, MADE_OF, MATERIAL_THERMAL_CAPACITY];
+// materials' density and specific heat, to damp the swing by thermal mass (Vol. III Ch. 1 §1.9,
+// §1.10; Amendment A-6).
+const DIURNAL_READS: &[FactType] = &[
+    TEMPERATURE,
+    EXPOSURE,
+    ENCLOSED,
+    MADE_OF,
+    MATERIAL_DENSITY,
+    MATERIAL_THERMAL_CAPACITY,
+];
 const TEMPERATURE_W: &[FactType] = &[TEMPERATURE];
 const WEATHER_READS: &[FactType] = &[
     TEMPERATURE,
     TEMPERATURE_ANOMALY,
     EXPOSURE,
+    ENCLOSED,
     MADE_OF,
+    MATERIAL_DENSITY,
     MATERIAL_THERMAL_CAPACITY,
 ];
 const WEATHER_WRITES: &[FactType] = &[TEMPERATURE, TEMPERATURE_ANOMALY];
-const ILLUMINATION_READS: &[FactType] = &[TEMPERATURE, EXPOSURE];
+const ILLUMINATION_READS: &[FactType] = &[
+    TEMPERATURE,
+    EXPOSURE,
+    ENCLOSED,
+    HAS_PORTAL,
+    LEADS_TO,
+    PORTAL_OPEN,
+    OPAQUE,
+    BODY_SIZE,
+];
 const ILLUMINATION_W: &[FactType] = &[ILLUMINATION];
-const HUMIDITY_READS: &[FactType] = &[TEMPERATURE, HUMIDITY_ANOMALY, EXPOSURE];
+const HUMIDITY_READS: &[FactType] = &[TEMPERATURE, HUMIDITY_ANOMALY, EXPOSURE, ENCLOSED];
 const HUMIDITY_WRITES: &[FactType] = &[HUMIDITY, HUMIDITY_ANOMALY];
-const PRESSURE_READS: &[FactType] = &[TEMPERATURE, PRESSURE_ANOMALY, ELEVATION, EXPOSURE];
+const PRESSURE_READS: &[FactType] = &[TEMPERATURE, PRESSURE_ANOMALY, ELEVATION, EXPOSURE, ENCLOSED];
 const PRESSURE_WRITES: &[FactType] = &[PRESSURE, PRESSURE_ANOMALY];
-const WIND_READS: &[FactType] = &[TEMPERATURE, ADJACENT_TO, PRESSURE];
+const WIND_READS: &[FactType] = &[TEMPERATURE, ADJACENT_TO, PRESSURE, EXPOSURE, ENCLOSED];
 const WIND_WRITES: &[FactType] = &[WIND_SPEED, WIND_TOWARD];
 // Danger reads a portal's height above the ground, composed up its containers — their
 // positions (live, so their motion facts too) and headings.
+const SHELTER_READS: &[FactType] = &[
+    ENCLOSED,
+    EXPOSURE,
+    TEMPERATURE,
+    CONTAINED_IN,
+    MADE_OF,
+    MATERIAL_DENSITY,
+    MATERIAL_THERMAL_CAPACITY,
+];
 const DANGER_READS: &[FactType] = &[
     HAS_PORTAL,
     PORTAL_DANGER_OVERRIDE,
@@ -80,6 +111,10 @@ const DANGER_READS: &[FactType] = &[
     MOTION_TARGET,
     MOTION_START,
     MOTION_END,
+    LEADS_TO,
+    PORTAL_FAR_SIDE,
+    TERRAIN_SPACING,
+    TERRAIN_SAMPLE,
 ];
 const DANGER_WRITES: &[FactType] = &[PORTAL_DANGER];
 
@@ -98,17 +133,6 @@ fn wave(at_ms: u64, period_ms: u64, amp: i64) -> i64 {
     ((amp as i128 * up) / half) as i64
 }
 
-/// A region's exposure to the open sky, in hundredths of a percent (0..=10000). A region with
-/// no committed exposure fact is treated as fully exposed -- open ground under open sky -- so
-/// exposure only ever *attenuates* surface weather (Vol. III Ch. 1 §1.6, Enclosed / Exposed).
-/// A sealed chamber reads 0; a cave mouth or forest floor is partial; a field is full.
-fn exposure_of(view: &dyn CommittedView, region: EntityId) -> i64 {
-    view.read(FactKey::new(region, EXPOSURE))
-        .and_then(|f| f.value.as_int())
-        .unwrap_or(PERCENT_FULL)
-        .clamp(0, PERCENT_FULL)
-}
-
 /// Scale `value` by `exposure` (0..=10000): full exposure passes it unchanged, a sealed
 /// chamber (0) blocks it entirely.
 fn attenuate(value: i64, exposure: i64) -> i64 {
@@ -116,29 +140,40 @@ fn attenuate(value: i64, exposure: i64) -> i64 {
 }
 
 /// A region's thermal-mass damping factor for temperature changes, in hundredths of a percent
-/// (0..=10000), from the thermal capacity of the materials it is built of (Vol. III Ch. 1
-/// §1.9, §1.10). Thermal mass is inertia: a heavy stone hall resists the day/night swing a
-/// canvas tent cannot. The factor is `reference / (reference + capacity)` — 1.0 (no damping)
-/// when the region has no thermal-mass material, falling toward 0 as capacity grows past
-/// `reference`, the world-tuned capacity at which the swing is halved. A region that declares
+/// (0..=10000), from the thermal mass of the materials it is built of — heat stored per unit
+/// volume (Vol. III Ch. 1 §1.9, §1.10; Amendment A-6). Thermal mass is inertia: a heavy stone
+/// hall resists the day/night swing a canvas tent cannot. The factor is
+/// `reference / (reference + mass)` — 1.0 (no damping) when the region has no thermal-mass
+/// material, falling toward 0 as mass grows past `reference`, the world-tuned thermal mass at
+/// which the swing is halved. A region that declares
 /// no composition is unaffected, so worlds without materials behave exactly as before.
 fn thermal_damping(view: &dyn CommittedView, region: EntityId, reference: i64) -> i64 {
-    let capacity = thermal_capacity_of(view, region).unwrap_or(0).max(0);
+    let mass = thermal_mass_of(view, region).unwrap_or(0).max(0);
     let reference = reference.max(0);
-    let denom = reference.saturating_add(capacity);
+    let denom = reference.saturating_add(mass);
     if denom == 0 {
-        // No reference and no capacity: nothing to damp.
+        // No reference and no mass: nothing to damp.
         return PERCENT_FULL;
     }
     (reference.saturating_mul(PERCENT_FULL) / denom).clamp(0, PERCENT_FULL)
 }
 
-/// The regions to simulate this tick: every entity carrying a committed temperature fact.
+/// The regions the sky's weather runs on this tick: every climate region — an entity carrying a
+/// committed temperature — that is not sheltered (Amendment A-5).
 ///
-/// Temperature is the one environmental fact the loader seeds for every region, so it is the
-/// region roster (Vol. V Ch. 2 §2.1, clause 5). Reading it through the scoped view both
-/// discovers the regions and declares the dependency the tick loop checks.
+/// Temperature marks a climate (Vol. V Ch. 2 §2.1, clause 5), and places nested inside a climate
+/// without one inherit it (`crate::climate`), so the weather is simulated once per climate, not
+/// once per room. A sheltered room's temperature is driven by [`Shelter`] instead.
 fn regions(view: &dyn CommittedView) -> Vec<EntityId> {
+    view.entities_with(TEMPERATURE)
+        .into_iter()
+        .filter(|r| !is_sheltered(view, *r))
+        .collect()
+}
+
+/// Every climate region, sheltered or not — the roster for daylight, which reaches indoors
+/// through openings.
+fn all_climates(view: &dyn CommittedView) -> Vec<EntityId> {
     view.entities_with(TEMPERATURE)
 }
 
@@ -228,8 +263,8 @@ pub struct DiurnalCycle {
 
 impl DiurnalCycle {
     /// Swing every region by `amplitude_centi_c` over a day of `day_ms` simulated time, stepping
-    /// as `step` says. `thermal_mass_reference` is the material thermal capacity at which a
-    /// region's swing is halved (Vol. III Ch. 1 §1.9); larger means thermal mass matters less.
+    /// as `step` says. `thermal_mass_reference` is the thermal mass (kJ/(m³·K)) at which a
+    /// region's swing is halved (Vol. III Ch. 1 §1.9; Amendment A-6); larger means thermal mass matters less.
     pub const fn new(
         clock: SimClock,
         step: Step,
@@ -406,15 +441,21 @@ impl System for DayNightCycle {
             self.day_ms,
             self.peak_illumination,
         );
-        regions(view)
+        all_climates(view)
             .into_iter()
             .map(|region| {
-                let exposure = exposure_of(view, region);
+                // Open ground takes the sun as its exposure allows; a sheltered room takes only
+                // what its openings let in (Amendment A-5).
+                let share = if is_sheltered(view, region) {
+                    daylight_fraction(view, region)
+                } else {
+                    exposure_of(view, region)
+                };
                 Proposal::new(
                     self.id(),
                     FactKey::new(region, ILLUMINATION),
                     ctx.basis_tick(),
-                    Change::Set(Value::Int(attenuate(sun, exposure))),
+                    Change::Set(Value::Int(attenuate(sun, share))),
                     Cause::new("solar_position"),
                 )
             })
@@ -674,9 +715,115 @@ impl System for WindSystem {
     }
 }
 
+/// Indoor air (Amendment A-5): every walled region's temperature follows the air outside it —
+/// the nearest enclosing climate — with the lag the world declares (`indoor_coupling_seconds`),
+/// lengthened by the thermal mass of what the room is built of, so a stone cottage holds the
+/// day's warmth longer than a timber shed. A walled region with no temperature yet is given the
+/// outside air's on its first step, and from then on is an indoor climate of its own — what
+/// stands in it inherits *its* temperature, not the sky's.
+///
+/// Solved implicitly over the step, so it is stable at any step length, and rounded without
+/// bias so a slow lag at fine ticks still converges (Amendment A-1).
+pub struct Shelter {
+    step: Step,
+    coupling_ms: u64,
+    thermal_mass_reference: i64,
+}
+
+impl Shelter {
+    /// Indoor air following outdoor air with time constant `coupling_ms`, stepping as `step`
+    /// says; `thermal_mass_reference` as for the day/night swing.
+    pub const fn new(step: Step, coupling_ms: u64, thermal_mass_reference: i64) -> Self {
+        Self {
+            step,
+            coupling_ms,
+            thermal_mass_reference,
+        }
+    }
+}
+
+impl System for Shelter {
+    fn id(&self) -> SystemId {
+        SystemId::new("physical.shelter")
+    }
+    fn reads(&self) -> &'static [FactType] {
+        SHELTER_READS
+    }
+    fn writes(&self) -> &'static [FactType] {
+        TEMPERATURE_W
+    }
+    fn cadence(&self) -> Cadence {
+        self.step.cadence()
+    }
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+        let mut out = Vec::new();
+        for room in view.entities_with(ENCLOSED) {
+            if !crate::terrain::is_true(view, room, ENCLOSED) {
+                continue;
+            }
+            let Some(outside) = outside_temperature(view, room) else {
+                continue;
+            };
+            let key = FactKey::new(room, TEMPERATURE);
+            let Some(inside) = view.read(key).and_then(|f| f.value.as_int()) else {
+                out.push(Proposal::new(
+                    self.id(),
+                    key,
+                    ctx.basis_tick(),
+                    Change::Set(Value::Int(outside)),
+                    Cause::new("sheltered"),
+                ));
+                continue;
+            };
+            // Heavier rooms answer more slowly: the lag stretches by the inverse of the same
+            // damping factor that shrinks their day/night swing (§1.9).
+            let damping = thermal_damping(view, room, self.thermal_mass_reference).max(1) as i128;
+            let tau = self.coupling_ms.max(1) as i128 * PERCENT_FULL as i128 / damping;
+            let dt = self.step.dt_ms as i128;
+            let next = div_dither(
+                inside as i128 * tau + outside as i128 * dt,
+                tau + dt,
+                &mut ctx.rng(room.raw()),
+            ) as i64;
+            if next != inside {
+                out.push(Proposal::new(
+                    self.id(),
+                    key,
+                    ctx.basis_tick(),
+                    Change::Delta(next - inside),
+                    Cause::new("indoor_air"),
+                ));
+            }
+        }
+        out
+    }
+}
+
+/// How far one would drop on passing through `portal`: the height of the landing spot above the
+/// floor or ground of the destination. The landing spot is the opening's far face where it has
+/// one, else the opening itself as seen from the destination; an opening that leads nowhere is
+/// judged by its height above the ground.
+fn drop_beyond(view: &dyn CommittedView, portal: EntityId) -> i64 {
+    let Some(dest) = portal_destination(view, portal) else {
+        return height_above_ground(view, portal);
+    };
+    let landing = match far_side(view, portal, dest) {
+        Some(face) => Some(crate::space::local_position(view, face)),
+        None => lowest_common_ancestor(view, portal, dest, CONTAINED_IN).and_then(|common| {
+            let at = crate::space::position_in(view, portal, common)?;
+            crate::space::lower(view, at, dest, common)
+        }),
+    };
+    match landing {
+        Some(p) => p[2] - crate::terrain::ground(view, dest, p[0], p[1]),
+        None => height_above_ground(view, portal),
+    }
+}
+
 /// Writes each portal's effective danger (Vol. III Ch. 1 §1.11). If the world pinned a fixed
-/// danger the system echoes it; otherwise it derives danger from the portal's height above
-/// the ground -- a fall -- leaving a slot for weather to raise it later. Enumerates every
+/// danger the system echoes it; otherwise it derives danger from the drop on the far side — how
+/// high the face one emerges from stands above the ground beneath it — leaving a slot for
+/// weather to raise it later. Enumerates every
 /// region that hosts portals through `has_portal`, so it needs no separate portal list.
 pub struct PortalDanger {
     fall_danger_per_meter: i64,
@@ -720,9 +867,12 @@ impl System for PortalDanger {
                 {
                     // World-defined: pinned regardless of height or weather.
                     Some(pinned) => pinned.clamp(0, MAX_DANGER),
-                    // Derived: danger of the fall from this portal's height.
+                    // Derived: the drop on the far side — how far the spot one emerges at
+                    // stands above the floor or ground of the place one emerges into (Amendment
+                    // A-5). Stairs land you on a floor; a ground-floor door on a hillside drops
+                    // you nowhere; a bedroom window's yard face hangs 3.8 m above the yard.
                     None => {
-                        let height = height_above_ground(view, portal).max(0);
+                        let height = drop_beyond(view, portal).max(0);
                         let fall = height.saturating_mul(self.fall_danger_per_meter) / 100;
                         // TODO(weather): add a term from the host region's wind/precipitation.
                         fall.clamp(0, MAX_DANGER)

@@ -239,6 +239,13 @@ writes a position, a motion segment, or a containment link to move a body.
 set positions directly, it would be a second authority on space, and a wall would be a
 suggestion. With intents, a guard can *want* to walk through a locked door — and the world says
 no, in a way the guard can notice. (Ch. 1 §1.11; Ruling 4.)
+
+*Amendment A-5 (2026-10):* the same holds for **operating** and **turning**. Opening or shutting
+a door and facing a new way are intents a decider proposes; Physical Reality carries them out
+only for a body within reach of the door (a door's two faces open and shut together), and
+reports when it cannot. Positions, containment, motion, facing, and door state accept writes
+from Physical Reality's own systems alone, and the kernel enforces it (Vol. V Ch. 3, *Owners
+may refuse writers*).
 ---
 
 # Amending This Matrix

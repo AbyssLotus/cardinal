@@ -186,6 +186,23 @@ pub const TRAVEL_SPEED: FactType = FactType::new("physical.travel.speed");
 /// blocked.
 pub const TRAVEL_BLOCKED: FactType = FactType::new("physical.travel.blocked");
 
+/// A decider's intent that a body open a door (Appendix A, Ruling 13 as amended by A-5): an
+/// entity reference to the portal. Carried out by Physical Reality only if the body is within
+/// reach of it — both faces of the opening then open together — and cleared either way.
+pub const ACT_OPEN: FactType = FactType::new("physical.act.open");
+
+/// A decider's intent that a body shut a door; as [`ACT_OPEN`].
+pub const ACT_CLOSE: FactType = FactType::new("physical.act.close");
+
+/// A decider's intent that a body turn to face a compass bearing (hundredths of a degree, as
+/// [`HEADING`]). Carried out for a mobile body; cleared either way.
+pub const ACT_FACE: FactType = FactType::new("physical.act.face");
+
+/// What a body last tried and could not do (Amendment A-5): an entity reference to the door it
+/// could not reach, or to itself if it could not turn. Written by Physical Reality so a decider
+/// can notice and reconsider; cleared by the body's next act that succeeds.
+pub const ACT_REFUSED: FactType = FactType::new("physical.act.refused");
+
 /// How far a body fell in its most recent fall, in centimetres (Amendment A-4): written when the
 /// fall begins, so a consumer — Living Systems judging an injury (Appendix A, Ruling 9) — can
 /// read what gravity did without Physical Reality deciding what it meant.

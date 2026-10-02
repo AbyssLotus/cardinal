@@ -206,15 +206,30 @@ pub fn relative_bearing(view: &dyn CommittedView, observer: EntityId, to: Entity
     Some(rel)
 }
 
-/// How far `entity` is above the ground, in centimetres (Vol. III Ch. 1 §1.6, "Above" /
-/// "Below"): its height in the frame of its hierarchy's root, whose origin is the ground datum.
-/// Someone standing on a second-storey floor stacked 3 m up a house reads 300; someone in a
-/// cellar sunk 3 m reads −300 (below ground). An entity with no container is the ground frame
-/// itself and reads 0. Headings turn frames about the vertical, so they never change a height.
-///
-/// This is height within the containment hierarchy, not terrain: [`crate::schema::ELEVATION`]
-/// says how high the ground itself stands above the world datum.
+/// How far `entity` is above the ground directly beneath it, in centimetres (Vol. III Ch. 1
+/// §1.6, "Above" / "Below"; Amendment A-5). The ground is the terrain of the nearest place
+/// enclosing the entity that has terrain, sampled under the entity; where no enclosing place has
+/// terrain, it is the outermost frame's floor. Someone on a second storey reads about 300 —
+/// whether the house stands at sea level or 3 m up a hillside; someone in a cellar reads about
+/// −300; a door at the foot of a hillside cottage reads 0. Headings turn frames about the
+/// vertical, so they never change a height.
 pub fn height_above_ground(view: &dyn CommittedView, entity: EntityId) -> i64 {
+    let chain = ancestry(view, entity, CONTAINED_IN);
+    for &place in chain.iter().skip(1) {
+        if crate::terrain::spacing(view, place).is_some() {
+            let Some(p) = position_in(view, entity, place) else {
+                break;
+            };
+            let floor = crate::terrain::terrain_height(view, place, p[0], p[1]).unwrap_or(0);
+            return p[2] - floor;
+        }
+    }
+    height_above_datum(view, entity)
+}
+
+/// How far `entity` is above its hierarchy's datum — the outermost frame's `z = 0` — in
+/// centimetres, regardless of terrain. A storey up a house on a 3 m hill reads 600.
+pub fn height_above_datum(view: &dyn CommittedView, entity: EntityId) -> i64 {
     let root = root_of(view, entity);
     position_in(view, entity, root).map_or(0, |p| p[2])
 }
@@ -344,4 +359,26 @@ pub fn route_where(
         }
     }
     None
+}
+
+/// The face something emerges from after passing through `portal` into `dest`: the linked far
+/// side if the world declared one ([`crate::schema::PORTAL_FAR_SIDE`]), else the destination's
+/// portal leading back to `portal`'s host that is nearest to `portal` (lowest id on a tie), else
+/// none. One opening, two faces: travel emerges here, a door's two faces open together, and the
+/// danger of passing through is the drop on this side (Amendment A-4, A-5).
+pub fn far_side(view: &dyn CommittedView, portal: EntityId, dest: EntityId) -> Option<EntityId> {
+    if let Some(Value::Entity(linked)) = view
+        .read(FactKey::new(portal, crate::schema::PORTAL_FAR_SIDE))
+        .map(|f| f.value)
+    {
+        return Some(linked);
+    }
+    let host = match view.read(FactKey::new(portal, CONTAINED_IN))?.value {
+        Value::Entity(h) => h,
+        _ => return None,
+    };
+    portals_in(view, dest)
+        .into_iter()
+        .filter(|q| portal_destination(view, *q) == Some(host))
+        .min_by_key(|q| (distance(view, portal, *q).unwrap_or(i64::MAX), *q))
 }

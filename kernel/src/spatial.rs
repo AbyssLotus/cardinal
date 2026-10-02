@@ -186,6 +186,14 @@ pub trait SpatialQuery {
     /// The entities placed directly in `frame` that are themselves frames (something is placed
     /// in them), sorted by id — the branches a search descends into.
     fn subframes(&self, frame: EntityId) -> Vec<EntityId>;
+
+    /// An upper bound on how far from `frame`'s origin anything in its whole subtree can be —
+    /// its children's boxes, their children's, and so on down — in `frame`'s units (0 for a
+    /// frame holding nothing). A bound on *distance* composes through turned frames without the
+    /// kernel knowing how they turn (turning preserves distance), so a search can skip any frame
+    /// whose origin is farther from the question than this, plus the question's own radius.
+    /// Never smaller than the truth; it may run larger for a while after things leave.
+    fn reach(&self, frame: EntityId) -> u64;
 }
 
 /// The number of grid levels per frame.
@@ -287,6 +295,12 @@ pub struct SpatialIndex {
     children: FastMap<EntityId, BTreeSet<EntityId>>,
     /// Per frame, the children that are themselves frames.
     subframes: FastMap<EntityId, BTreeSet<EntityId>>,
+    /// Per frame, an upper bound on how far anything in its whole subtree can be from the
+    /// frame's origin, in its own units (see [`SpatialQuery::reach`]). Grows eagerly as things
+    /// are filed; shrinks only when the frame is recomputed after enough removals.
+    reach: FastMap<EntityId, u64>,
+    /// Per frame, removals since its reach was last recomputed exactly.
+    churn: FastMap<EntityId, u32>,
 }
 
 impl fmt::Debug for SpatialIndex {
@@ -309,6 +323,8 @@ impl SpatialIndex {
             level_counts: FastMap::default(),
             children: FastMap::default(),
             subframes: FastMap::default(),
+            reach: FastMap::default(),
+            churn: FastMap::default(),
         }
     }
 
@@ -374,6 +390,58 @@ impl SpatialIndex {
                 }
             }
         }
+        // Reach: a removal can only make the frame's true reach smaller, so the stored bound
+        // stays sound. Recompute it exactly once removals outnumber the frame's members — the
+        // recomputation costs one pass over the members, so it is paid for by the removals that
+        // triggered it (amortized constant per update).
+        let churn = self.churn.entry(frame).or_insert(0);
+        *churn += 1;
+        let members = self.children.get(&frame).map_or(0, |c| c.len());
+        if *churn as usize > members + 16 {
+            self.churn.insert(frame, 0);
+            let exact = self
+                .children
+                .get(&frame)
+                .into_iter()
+                .flatten()
+                .map(|c| self.contribution(*c))
+                .max()
+                .unwrap_or(0);
+            self.reach.insert(frame, exact);
+        }
+    }
+
+    /// How far from its frame's origin anything in `entity`'s own subtree can be: the farthest
+    /// corner of its box (which also holds its origin, wherever it is along a journey), plus,
+    /// if it holds things, its own reach.
+    fn contribution(&self, entity: EntityId) -> u64 {
+        let Some(slot) = self.slots.get(&entity) else {
+            return 0;
+        };
+        let own = corner_distance(&slot.placement.bounds);
+        if self.is_frame(entity) {
+            own.saturating_add(self.reach.get(&entity).copied().unwrap_or(0))
+        } else {
+            own
+        }
+    }
+
+    /// Raise `frame`'s reach to at least `value`, and carry any increase up through its
+    /// containers. Stops as soon as a container's bound already covers it.
+    fn raise(&mut self, mut frame: EntityId, mut value: u64) {
+        loop {
+            let current = self.reach.get(&frame).copied().unwrap_or(0);
+            if value <= current {
+                return;
+            }
+            self.reach.insert(frame, value);
+            let Some(slot) = self.slots.get(&frame) else {
+                return;
+            };
+            let parent = slot.placement.frame;
+            value = corner_distance(&slot.placement.bounds).saturating_add(value);
+            frame = parent;
+        }
     }
 
     fn file(&mut self, entity: EntityId, placement: Placement) {
@@ -415,7 +483,24 @@ impl SpatialIndex {
         if self.is_frame(entity) {
             self.subframes.entry(frame).or_default().insert(entity);
         }
+        let reach = self.contribution(entity);
+        self.raise(frame, reach);
     }
+}
+
+/// The distance from the origin to the farthest corner of `b`, rounded up — an upper bound on
+/// how far from the origin anything in the box can be. Saturates for unbounded boxes.
+fn corner_distance(b: &Aabb) -> u64 {
+    let mut sum: u128 = 0;
+    for i in 0..3 {
+        let far = (b.min[i] as i128)
+            .unsigned_abs()
+            .max((b.max[i] as i128).unsigned_abs());
+        sum = sum.saturating_add(far.saturating_mul(far));
+    }
+    let root = crate::fixed::isqrt(sum);
+    let up = if root * root < sum { root + 1 } else { root };
+    u64::try_from(up).unwrap_or(u64::MAX)
 }
 
 /// Every cell key in the inclusive range at `level` of `frame`.
@@ -500,6 +585,10 @@ impl SpatialQuery for SpatialIndex {
             .map(|c| c.iter().copied().collect())
             .unwrap_or_default()
     }
+
+    fn reach(&self, frame: EntityId) -> u64 {
+        self.reach.get(&frame).copied().unwrap_or(0)
+    }
 }
 
 #[cfg(test)]
@@ -561,6 +650,36 @@ mod tests {
         // Removing it removes it everywhere.
         ix.update(e(4), None);
         assert_eq!(ids(ix.candidates(e(1), &Aabb::EVERYTHING)), vec![2, 3]);
+    }
+
+    #[test]
+    fn reach_bounds_everything_in_the_subtree_and_tightens() {
+        // town (1) > house (2) at (1000, 0) > room (3) at (0, 500) > lamp (10) at (300, 0).
+        let mut ix = SpatialIndex::new(Arc::new(Never));
+        ix.update(e(2), at(1, Aabb::point([1_000, 0, 0])));
+        ix.update(e(3), at(2, Aabb::point([0, 500, 0])));
+        ix.update(e(10), at(3, Aabb::point([300, 0, 0])));
+        assert_eq!(ix.reach(e(3)), 300);
+        assert_eq!(
+            ix.reach(e(2)),
+            800,
+            "room origin 500 away, lamp 300 beyond it"
+        );
+        assert_eq!(ix.reach(e(1)), 1_800);
+        // Something far away arrives and leaves: the bound grows, then — after enough
+        // removals — comes back down.
+        for i in 0..40 {
+            ix.update(e(100 + i), at(3, Aabb::point([90_000, 0, 0])));
+        }
+        assert_eq!(ix.reach(e(3)), 90_000);
+        for i in 0..40 {
+            ix.update(e(100 + i), None);
+        }
+        assert!(ix.reach(e(3)) >= 300, "never below the truth");
+        for _ in 0..40 {
+            ix.update(e(10), at(3, Aabb::point([300, 0, 0])));
+        }
+        assert_eq!(ix.reach(e(3)), 300, "tightened again");
     }
 
     #[test]

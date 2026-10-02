@@ -6,7 +6,7 @@
 //! (Vol. IV Ch. 2), and the coherence checks that validate a resolved value. The kernel
 //! calls these; a domain never writes another domain's facts (Appendix A, Ruling 9).
 
-use crate::fact::{Cardinality, FactType};
+use crate::fact::{Cardinality, FactType, SystemId};
 use crate::proposal::Change;
 use crate::spatial::SpatialProjector;
 use crate::system::System;
@@ -106,5 +106,15 @@ pub trait Domain {
     fn validate_many(&self, fact_type: FactType, values: &[Value]) -> Result<(), ValidationError> {
         let _ = (fact_type, values);
         Ok(())
+    }
+
+    /// Whether this owner accepts a proposal to `fact_type` from `system` (Amendment A-5,
+    /// *Owners may refuse writers*). An owner that restricts a fact to its own systems answers
+    /// `false` for any other proposer, and the kernel fails the tick, named. The default accepts
+    /// every proposer — most facts are open to anyone whose proposal the owner's composition
+    /// and validation then judge (Appendix A, Ruling 9).
+    fn accepts(&self, fact_type: FactType, system: SystemId) -> bool {
+        let _ = (fact_type, system);
+        true
     }
 }

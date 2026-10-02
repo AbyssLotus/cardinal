@@ -89,6 +89,18 @@ pub enum TickError {
     },
     /// A proposal targeted a fact type no enabled domain owns (Appendix A).
     Unowned(FactType),
+    /// The fact's owner does not accept writes from this system (Amendment A-5): it restricts
+    /// the fact to its own systems, and the proposer is not one of them.
+    Refused {
+        /// The system whose proposal was refused.
+        system: SystemId,
+        /// The restricted fact type it tried to write.
+        fact_type: FactType,
+    },
+    /// Two systems in one tick share an id (Amendment A-5). An id is how an owner recognises
+    /// its own systems and how random streams are keyed, so a duplicate could impersonate an
+    /// owner and would share another system's randomness.
+    DuplicateSystem(SystemId),
     /// Proposals against a fact could not be composed (Resolve stage — Vol. V Ch. 3 §3.1).
     Resolve(ResolveError),
     /// The resolved batch failed a domain coherence check (Validate stage — §3.1).
@@ -121,6 +133,13 @@ pub fn run_tick<S: RealityStore>(
         .map(|b| b.as_ref())
         .collect();
     due.sort_by_key(|s| s.id().name());
+    // Every registered system has its own id — checked over all systems, due or not, so a
+    // duplicate is caught the first tick it exists rather than the first tick both run.
+    let mut ids: Vec<SystemId> = systems.iter().map(|s| s.id()).collect();
+    ids.sort_by_key(|id| id.name());
+    if let Some(pair) = ids.windows(2).find(|w| w[0] == w[1]) {
+        return Err(TickError::DuplicateSystem(pair[0]));
+    }
 
     // 2. EVALUATE — hermetic: each system reads a view scoped to its declared read set, and
     //    may only propose to facts in its declared write set (Vol. V Ch. 3 §3.1, §3.5). The
@@ -170,6 +189,17 @@ pub fn run_tick<S: RealityStore>(
     let mut batch = CommitBatch::new(tick);
     for (key, group) in &grouped {
         let owner = owner_of(domains, key.fact_type).ok_or(TickError::Unowned(key.fact_type))?;
+        // Authority (Amendment A-5): an owner that restricts this fact to its own systems
+        // refuses everyone else's proposals, before any composition is attempted.
+        if let Some(p) = group
+            .iter()
+            .find(|p| !owner.accepts(key.fact_type, p.system))
+        {
+            return Err(TickError::Refused {
+                system: p.system,
+                fact_type: key.fact_type,
+            });
+        }
 
         // Deterministic within-group order before composing (Vol. V Ch. 3 §3.1).
         let mut props = group.clone();
