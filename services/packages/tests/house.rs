@@ -4,7 +4,8 @@
 
 use packages::{engine_version, load, parse_world, LoadedWorld};
 use physical::materials::{flammability_of, is_flammable, materials_of, structural_hardness};
-use physical::space::{distance, relative_position};
+use physical::nearby::within;
+use physical::space::{distance, relative_bearing, relative_position};
 
 const HOUSE: &str = include_str!("../../../worlds/house.world");
 
@@ -61,4 +62,21 @@ fn materials_load_and_compose_from_the_world_file() {
     // glass's own.
     assert!(!is_flammable(s, e(51)));
     assert_eq!(structural_hardness(s, e(51)), Some(5500));
+}
+
+#[test]
+fn people_face_somewhere_and_know_what_is_beside_them() {
+    let w = load_house();
+    let s = w.store();
+    // Dave stands 2 m north of Alice, facing south: she is straight ahead of him...
+    assert_eq!(relative_bearing(s, e(40), e(10)), Some(0));
+    // ...and Alice, facing east, has Dave on her left.
+    assert_eq!(relative_bearing(s, e(10), e(40)), Some(-9_000));
+    // Who and what is within 2.5 m of Alice, nearest first? The door (1.1 m), Dave (2 m), and
+    // the window (2.2 m) — not the bedroom or the house, which she is inside.
+    let near: Vec<(u64, i64)> = within(s, e(10), 250)
+        .iter()
+        .map(|(x, d)| (x.raw(), *d))
+        .collect();
+    assert_eq!(near, vec![(50, 111), (40, 200), (51, 223)]);
 }

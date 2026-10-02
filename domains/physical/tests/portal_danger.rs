@@ -11,9 +11,7 @@ use kernel::system::CommittedView;
 use kernel::tick::run_tick;
 use kernel::time::SimClock;
 use kernel::value::Value;
-use physical::schema::{
-    CONTAINED_IN, HAS_PORTAL, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE, POSITION_Z,
-};
+use physical::schema::{CONTAINED_IN, HAS_PORTAL, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE, POSITION};
 use physical::{PhysicalConfig, PhysicalDomain};
 
 const GROUND: u64 = 2;
@@ -33,7 +31,7 @@ fn seed(s: &mut MemoryStore, entity: u64, ft: FactType, v: Value) {
 fn portal(s: &mut MemoryStore, id: u64, host: u64, z: i64, pin: Option<i64>) {
     seed(s, host, HAS_PORTAL, Value::Entity(e(id)));
     seed(s, id, CONTAINED_IN, Value::Entity(e(host)));
-    seed(s, id, POSITION_Z, Value::Int(z));
+    seed(s, id, POSITION, Value::Vec3([0, 0, z]));
     if let Some(d) = pin {
         seed(s, id, PORTAL_DANGER_OVERRIDE, Value::Int(d));
     }

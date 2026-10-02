@@ -28,11 +28,17 @@
 //! region", "do these two overlap"). Proximity (Amendment A-2): what a container holds, what
 //! lies within a distance, and the nearest few — answered through the store's spatial index
 //! when one is installed ([`index::PhysicalProjector`] is this domain's placement rule), and by
-//! scanning otherwise, with identical results ([`nearby`]).
+//! scanning otherwise, with identical results ([`nearby`]). Bodies (Amendment A-3): one
+//! position fact per entity ([`schema::POSITION`], its base, in its container's frame), a size
+//! ([`schema::BODY_SIZE`]), a facing ([`schema::HEADING`]) that also turns the frame of whatever a
+//! container holds, and motion as a straight segment written when it starts and ends and
+//! derived in between ([`motion`]), so "where is it now", "how fast, which way", and "is it on my
+//! left" are all answerable without a write per tick.
 
 pub mod composition;
 pub mod index;
 pub mod materials;
+pub mod motion;
 pub mod nearby;
 pub mod regions;
 pub mod schema;
@@ -128,9 +134,12 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::WIND_TOWARD
             || fact_type == schema::ELEVATION
             || fact_type == schema::EXPOSURE
-            || fact_type == schema::POSITION_X
-            || fact_type == schema::POSITION_Y
-            || fact_type == schema::POSITION_Z
+            || fact_type == schema::POSITION
+            || fact_type == schema::BODY_SIZE
+            || fact_type == schema::HEADING
+            || fact_type == schema::MOTION_TARGET
+            || fact_type == schema::MOTION_START
+            || fact_type == schema::MOTION_END
             || fact_type == schema::CONTAINED_IN
             || fact_type == schema::IN_REGION
             || fact_type == schema::ADJACENT_TO
@@ -217,6 +226,8 @@ impl Domain for PhysicalDomain {
                 schema::MAX_WIND,
             )),
             Box::new(systems::PortalDanger::new(c.fall_danger_per_meter)),
+            // Closes finished motion segments: one write per arrival (Amendment A-3).
+            Box::new(motion::Settle),
         ]
     }
 
@@ -231,11 +242,19 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::HUMIDITY_ANOMALY
             || fact_type == schema::PRESSURE_ANOMALY
             || fact_type == schema::ELEVATION
-            || fact_type == schema::POSITION_X
-            || fact_type == schema::POSITION_Y
-            || fact_type == schema::POSITION_Z
         {
             composition::compose_additive(current, changes)
+        } else if fact_type == schema::MOTION_TARGET
+            || fact_type == schema::MOTION_START
+            || fact_type == schema::MOTION_END
+        {
+            composition::compose_segment_field(current, changes)
+        } else if fact_type == schema::POSITION {
+            composition::compose_vec3(current, changes, None)
+        } else if fact_type == schema::BODY_SIZE {
+            composition::compose_vec3(current, changes, Some((0, schema::MAX_SIZE)))
+        } else if fact_type == schema::HEADING {
+            composition::compose_heading(current, changes)
         } else if fact_type == schema::ILLUMINATION
             || fact_type == schema::HUMIDITY
             || fact_type == schema::EXPOSURE
@@ -274,6 +293,27 @@ impl Domain for PhysicalDomain {
     }
 
     fn validate(&self, fact_type: FactType, value: &Resolved) -> Result<(), ValidationError> {
+        if fact_type == schema::MOTION_START || fact_type == schema::MOTION_END {
+            // A segment is timed in ticks, and there is no tick before the world began.
+            match value {
+                Resolved::Write(Value::Int(tick)) if *tick < 0 => {
+                    return Err(ValidationError::new(
+                        "a motion segment cannot be timed before tick 0",
+                    ))
+                }
+                Resolved::Write(Value::Int(_)) | Resolved::Tombstone => {}
+                Resolved::Write(_) => {
+                    return Err(ValidationError::new("a segment is timed by a tick number"))
+                }
+            }
+        }
+        if fact_type == schema::MOTION_TARGET {
+            if let Resolved::Write(v) = value {
+                if v.as_vec3().is_none() {
+                    return Err(ValidationError::new("a motion target is a point"));
+                }
+            }
+        }
         if fact_type == schema::TEMPERATURE {
             if let Resolved::Write(Value::Int(centi_c)) = value {
                 if *centi_c < schema::ABSOLUTE_ZERO_CENTI_C {

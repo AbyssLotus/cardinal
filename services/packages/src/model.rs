@@ -47,6 +47,49 @@ pub struct WorldPackage {
     /// Overlapping region memberships beyond the containment hierarchy (Vol. III Ch. 1 §1.7),
     /// seeded as a cardinality-many `in_region` fact — one entry per location/region link.
     pub in_region: Vec<RegionMembershipSpec>,
+    /// Body sizes (Amendment A-3). An entity absent here is a point.
+    pub bodies: Vec<BodySpec>,
+    /// Facings (Amendment A-3). An entity absent here faces its frame's north.
+    pub facing: Vec<FacingSpec>,
+    /// Motion already under way when the world begins (Amendment A-3).
+    pub motion: Vec<MotionSpec>,
+}
+
+/// A body's size (Amendment A-3), in centimetres: it spans `half_width` to either side of its
+/// base, `half_depth` fore and aft, and `height` upward.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct BodySpec {
+    /// The body's raw id.
+    pub entity_id: u64,
+    /// Half its width (along its own x axis), in centimetres.
+    pub half_width: i64,
+    /// Half its depth (along its own y axis, front to back), in centimetres.
+    pub half_depth: i64,
+    /// Its height above its base, in centimetres.
+    pub height: i64,
+}
+
+/// A body's facing (Amendment A-3): a compass bearing in hundredths of a degree, clockwise
+/// from its frame's north.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct FacingSpec {
+    /// The body's raw id.
+    pub entity_id: u64,
+    /// Its heading, in hundredths of a degree (any value; it wraps).
+    pub heading: i64,
+}
+
+/// Motion under way at the world's start (Amendment A-3): the body is travelling in a straight
+/// line from its position toward `target` (its container's frame, centimetres) and arrives
+/// `seconds` of simulated time after the world begins.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MotionSpec {
+    /// The body's raw id.
+    pub entity_id: u64,
+    /// Where it is heading, in centimetres in its container's frame.
+    pub target: [i64; 3],
+    /// How long until it arrives, in seconds of simulated time.
+    pub seconds: u64,
 }
 
 /// A seeded region membership (Vol. III Ch. 1 §1.7): `location_id` lies within `region_id`,

@@ -6,9 +6,9 @@
 //! pure data — this reads declarations, it never executes them (Vol. IV Ch. 1, invariant 6).
 
 use crate::model::{
-    AdjacencySpec, ClockRules, ContainmentSpec, ExposureSpec, LivingRules, MadeOfSpec, Manifest,
-    MaterialProperty, MaterialSpec, OrganismSpec, PhysicalRules, PortalDangerSpec, PortalSpec,
-    PositionSpec, RegionMembershipSpec, RegionSpec, WorldPackage,
+    AdjacencySpec, BodySpec, ClockRules, ContainmentSpec, ExposureSpec, FacingSpec, LivingRules,
+    MadeOfSpec, Manifest, MaterialProperty, MaterialSpec, MotionSpec, OrganismSpec, PhysicalRules,
+    PortalDangerSpec, PortalSpec, PositionSpec, RegionMembershipSpec, RegionSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -49,8 +49,10 @@ impl fmt::Display for ParseError {
 /// (`region_id = temperature[, elevation]`), `[organisms]`
 /// (`organism_id = region_id, body_heat`), `[containment]` (`child_id = parent_id`),
 /// `[adjacency]`, `[exposure]`, `[positions]`, `[portals]`, `[portal_danger]`, `[materials]`
-/// (`material_id = property:value, …`), `[made_of]` (`object_id = material_id[, …]`), and
-/// `[in_region]` (`location_id = region_id[, …]`).
+/// (`material_id = property:value, …`), `[made_of]` (`object_id = material_id[, …]`),
+/// `[in_region]` (`location_id = region_id[, …]`), `[bodies]`
+/// (`entity_id = half_width, half_depth, height`), `[facing]` (`entity_id = degrees`), and
+/// `[motion]` (`entity_id = x, y, z, seconds`).
 /// Blank lines and `#` comments are ignored. A missing required field is an error — the
 /// loader never fabricates defaults (Vol. IV Ch. 2).
 pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
@@ -89,6 +91,9 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut materials: Vec<MaterialSpec> = Vec::new();
     let mut made_of: Vec<MadeOfSpec> = Vec::new();
     let mut in_region: Vec<RegionMembershipSpec> = Vec::new();
+    let mut bodies: Vec<BodySpec> = Vec::new();
+    let mut facing: Vec<FacingSpec> = Vec::new();
+    let mut motion: Vec<MotionSpec> = Vec::new();
 
     for (i, raw) in text.lines().enumerate() {
         let line_no = i + 1;
@@ -305,6 +310,39 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     });
                 }
             }
+            "bodies" => {
+                let entity_id: u64 = parse_num(key, line_no)?;
+                let [half_width, half_depth, height] =
+                    parse_ints::<3>(value, line_no, "half_width, half_depth, height")?;
+                if half_width < 0 || half_depth < 0 || height < 0 {
+                    return Err(ParseError::at(line_no, "a body's size cannot be negative"));
+                }
+                bodies.push(BodySpec {
+                    entity_id,
+                    half_width,
+                    half_depth,
+                    height,
+                });
+            }
+            "facing" => {
+                let entity_id: u64 = parse_num(key, line_no)?;
+                facing.push(FacingSpec {
+                    entity_id,
+                    heading: parse_degrees(value, line_no)?,
+                });
+            }
+            "motion" => {
+                let entity_id: u64 = parse_num(key, line_no)?;
+                let [x, y, z, seconds] = parse_ints::<4>(value, line_no, "x, y, z, seconds")?;
+                if seconds < 0 {
+                    return Err(ParseError::at(line_no, "arrival cannot be in the past"));
+                }
+                motion.push(MotionSpec {
+                    entity_id,
+                    target: [x, y, z],
+                    seconds: seconds as u64,
+                });
+            }
             "" => {
                 return Err(ParseError::at(
                     line_no,
@@ -406,7 +444,63 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         materials,
         made_of,
         in_region,
+        bodies,
+        facing,
+        motion,
     })
+}
+
+/// Parse exactly `N` comma-separated integers, naming the expected shape in any error.
+fn parse_ints<const N: usize>(
+    value: &str,
+    line_no: usize,
+    shape: &str,
+) -> Result<[i64; N], ParseError> {
+    let parts: Vec<&str> = value.split(',').collect();
+    if parts.len() != N {
+        return Err(ParseError::at(line_no, format!("expected `{shape}`")));
+    }
+    let mut out = [0i64; N];
+    for (slot, part) in out.iter_mut().zip(parts) {
+        *slot = parse_num(part, line_no)?;
+    }
+    Ok(out)
+}
+
+/// Parse a compass bearing in degrees — a whole number or up to two decimal places, possibly
+/// negative (`90`, `22.5`, `-45`) — into hundredths of a degree.
+fn parse_degrees(value: &str, line_no: usize) -> Result<i64, ParseError> {
+    let v = value.trim();
+    let bad = || {
+        ParseError::at(
+            line_no,
+            format!("expected degrees like 90 or 22.5, got {v:?}"),
+        )
+    };
+    let (negative, digits) = match v.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, v),
+    };
+    // A decimal point must have digits after it: "1." is a typo, not a bearing.
+    let (whole, frac) = match digits.split_once('.') {
+        Some((_, "")) => return Err(bad()),
+        Some((w, f)) => (w, f),
+        None => (digits, ""),
+    };
+    if whole.is_empty() || frac.len() > 2 || !frac.chars().all(|c| c.is_ascii_digit()) {
+        return Err(bad());
+    }
+    let whole: i64 = whole.parse().map_err(|_| bad())?;
+    let frac: i64 = if frac.is_empty() {
+        0
+    } else {
+        format!("{frac:0<2}").parse().map_err(|_| bad())?
+    };
+    let centi = whole
+        .checked_mul(100)
+        .and_then(|w| w.checked_add(frac))
+        .ok_or_else(bad)?;
+    Ok(if negative { -centi } else { centi })
 }
 
 /// Parse a material line's value: a comma-separated list of `property:value` pairs, e.g.
@@ -701,5 +795,41 @@ thermal_mass_reference = 1000
             "got {}",
             err.reason
         );
+    }
+
+    #[test]
+    fn bodies_facing_and_motion_parse() {
+        let text = format!(
+            "{HEADER}\
+[bodies]
+10 = 25, 15, 175      # a person: 50 cm wide, 30 cm deep, 1.75 m tall
+[facing]
+10 = 90
+11 = 22.5
+12 = -45
+[motion]
+10 = 1000, 0, 0, 30
+"
+        );
+        let pkg = parse_world(&text).expect("parses");
+        assert_eq!(
+            pkg.bodies,
+            vec![crate::model::BodySpec {
+                entity_id: 10,
+                half_width: 25,
+                half_depth: 15,
+                height: 175
+            }]
+        );
+        let headings: Vec<i64> = pkg.facing.iter().map(|f| f.heading).collect();
+        assert_eq!(headings, vec![9_000, 2_250, -4_500]);
+        assert_eq!(pkg.motion[0].target, [1000, 0, 0]);
+        assert_eq!(pkg.motion[0].seconds, 30);
+        for bad in ["10 = 1.234", "10 = east", "10 = 1."] {
+            let t = format!("{HEADER}[facing]\n{bad}\n");
+            assert!(parse_world(&t).is_err(), "{bad} must be rejected");
+        }
+        let neg = format!("{HEADER}[bodies]\n10 = -1, 1, 1\n");
+        assert!(parse_world(&neg).is_err(), "negative size");
     }
 }

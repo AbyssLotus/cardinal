@@ -77,3 +77,18 @@ thermal_mass_reference = 1700       # material heat capacity (J/kg-K) that halve
 1 = 700              # the house structure: timber
 50 = 700, 702        # the door: a timber panel with an iron lock band
 51 = 701             # the window: glass
+
+# Bodies and facing (Amendment A-3). Sizes are half-width, half-depth, height (cm); facings are
+# compass degrees, clockwise from the room's north. A position is where a body's base stands.
+[bodies]
+10 = 25, 15, 165     # alice
+40 = 25, 15, 180     # dave
+20 = 25, 15, 175     # bob
+30 = 25, 15, 170     # carol
+50 = 45, 5, 205      # the bedroom door: 90 cm wide, 2.05 m tall
+51 = 60, 5, 120      # the bedroom window: 1.2 m wide, 1.2 m tall
+
+[facing]
+10 = 90              # alice faces east
+40 = 180             # dave faces south, toward alice
+

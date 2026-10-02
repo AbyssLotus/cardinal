@@ -44,3 +44,24 @@ contract offered only per-fact reads and a by-type roster, so "who is within 10 
 scan of everyone against everyone: 375 ms for 1,000 agents and 3.8 s for 3,000 (audit §4.2),
 growing with the square of the agent count. A world of people in rooms needs that question
 answered thousands of times a tick.
+
+---
+
+## A-3 — Bodies, facing, and motion (2026-10)
+
+**Edits:** Vol. III Ch. 1 (new *Bodies, Facing, and Motion* section after §1.8).
+
+**Change.** Position is one three-component fact (the body's base, in its container's frame).
+Bodies may declare a size (half-width, half-depth, height) and a heading (compass bearing); a
+container's heading orients its contents' frame. Motion is a single straight segment (target,
+departure tick, arrival tick) from which position at any tick is derived; facts change only
+when motion changes, and speed and direction are derived queries. The kernel gains a
+three-component integer value so a position or target is one atomic fact.
+
+**Rationale.** The audit (§4.3) measured motion written as per-tick position facts: every
+mover wrote two or three facts and chronicle entries every tick, about 48 MB of chronicle per
+second for 50,000 movers at 10 Hz. Position split across three facts also made each move three
+writes that could, in principle, be proposed inconsistently. Without size there was no
+"does it fit" or "what is it on"; without facing, no "to your left". A text world needs all of
+these answered precisely — where the player stands, which way they face, what the sword is
+lying on.

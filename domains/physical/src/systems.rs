@@ -30,10 +30,11 @@
 
 use crate::materials::thermal_capacity_of;
 use crate::schema::{
-    ADJACENT_TO, ANOMALY_SCALE, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, HUMIDITY,
+    ADJACENT_TO, ANOMALY_SCALE, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, HEADING, HUMIDITY,
     HUMIDITY_ANOMALY, ILLUMINATION, MADE_OF, MATERIAL_THERMAL_CAPACITY, MAX_DANGER, MAX_PRESSURE,
-    PERCENT_FULL, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE, POSITION_Z, PRESSURE, PRESSURE_ANOMALY,
-    TEMPERATURE, TEMPERATURE_ANOMALY, WIND_SPEED, WIND_TOWARD,
+    MOTION_END, MOTION_START, MOTION_TARGET, PERCENT_FULL, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE,
+    POSITION, PRESSURE, PRESSURE_ANOMALY, TEMPERATURE, TEMPERATURE_ANOMALY, WIND_SPEED,
+    WIND_TOWARD,
 };
 use crate::space::height_above_ground;
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
@@ -68,7 +69,18 @@ const PRESSURE_READS: &[FactType] = &[TEMPERATURE, PRESSURE_ANOMALY, ELEVATION, 
 const PRESSURE_WRITES: &[FactType] = &[PRESSURE, PRESSURE_ANOMALY];
 const WIND_READS: &[FactType] = &[TEMPERATURE, ADJACENT_TO, PRESSURE];
 const WIND_WRITES: &[FactType] = &[WIND_SPEED, WIND_TOWARD];
-const DANGER_READS: &[FactType] = &[HAS_PORTAL, PORTAL_DANGER_OVERRIDE, CONTAINED_IN, POSITION_Z];
+// Danger reads a portal's height above the ground, composed up its containers — their
+// positions (live, so their motion facts too) and headings.
+const DANGER_READS: &[FactType] = &[
+    HAS_PORTAL,
+    PORTAL_DANGER_OVERRIDE,
+    CONTAINED_IN,
+    POSITION,
+    HEADING,
+    MOTION_TARGET,
+    MOTION_START,
+    MOTION_END,
+];
 const DANGER_WRITES: &[FactType] = &[PORTAL_DANGER];
 
 /// An integer triangle wave in `0..=amp` over a period of `period_ms`, evaluated at simulated

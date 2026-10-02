@@ -98,6 +98,56 @@ pub fn sin_cos(angle: i64) -> (i64, i64) {
     }
 }
 
+/// The direction of the vector `(x, y)`, in hundredths of a degree counter-clockwise from `+x`
+/// (the mathematical convention), in `0..36000`; `None` for the zero vector. Rounded to the
+/// nearest hundredth of a degree, and identical on every platform.
+///
+/// The inverse of [`sin_cos`], computed *from* it: the vector is folded into the first octant,
+/// where the angle `θ` with `tan θ = small / large` is found by binary search on
+/// `sin θ · large` against `cos θ · small` (thirteen steps cover 0°–45° in hundredths), then
+/// unfolded. Slower than a polynomial, but it can never disagree with the sine and cosine the
+/// rest of the engine rotates by.
+pub fn angle_of(x: i64, y: i64) -> Option<i64> {
+    if x == 0 && y == 0 {
+        return None;
+    }
+    let (ax, ay) = (x.unsigned_abs() as i128, y.unsigned_abs() as i128);
+    let (small, large, steep) = if ay <= ax {
+        (ay, ax, false)
+    } else {
+        (ax, ay, true)
+    };
+    // How far sin θ · large is from cos θ · small: zero at the exact angle.
+    let miss = |theta: i64| {
+        let (s, c) = sin_cos(theta);
+        s as i128 * large - c as i128 * small
+    };
+    // First θ in 0..=4500 whose tangent reaches small/large, then the nearer of it and the step
+    // before it.
+    let (mut lo, mut hi) = (0i64, 4_500i64);
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if miss(mid) < 0 {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    let theta = if lo > 0 && miss(lo - 1).abs() <= miss(lo).abs() {
+        lo - 1
+    } else {
+        lo
+    };
+    let first_quadrant = if steep { 9_000 - theta } else { theta };
+    let angle = match (x >= 0, y >= 0) {
+        (true, true) => first_quadrant,
+        (false, true) => 18_000 - first_quadrant,
+        (false, false) => 18_000 + first_quadrant,
+        (true, false) => 36_000 - first_quadrant,
+    };
+    Some(angle.rem_euclid(FULL_TURN))
+}
+
 /// Sine and cosine for an angle in `0..=4500` hundredths of a degree (the first octant), scaled
 /// by [`TRIG_ONE`].
 fn octant(centideg: i64) -> (i64, i64) {
@@ -180,6 +230,25 @@ mod tests {
         for n in 0..100 {
             assert_eq!(div_dither(n, 7, &mut a), div_dither(n, 7, &mut b));
         }
+    }
+
+    #[test]
+    fn angle_of_inverts_sin_cos() {
+        use super::angle_of;
+        assert_eq!(angle_of(0, 0), None);
+        assert_eq!(angle_of(5, 0), Some(0));
+        assert_eq!(angle_of(0, 5), Some(9_000));
+        assert_eq!(angle_of(-5, 0), Some(18_000));
+        assert_eq!(angle_of(0, -5), Some(27_000));
+        assert_eq!(angle_of(100, 100), Some(4_500));
+        assert_eq!(angle_of(-100, 100), Some(13_500));
+        // Round trip: the direction of (cos a, sin a), scaled, is a — everywhere on the circle.
+        for a in (0..36_000).step_by(73) {
+            let (s, c) = sin_cos(a);
+            assert_eq!(angle_of(c, s), Some(a), "angle {a}");
+        }
+        // A 3-4-5 triangle: atan(3/4) = 36.87°.
+        assert_eq!(angle_of(4_000, 3_000), Some(3_687));
     }
 
     #[test]

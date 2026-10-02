@@ -112,14 +112,14 @@ pub struct MemoryStore {
 }
 
 /// The canonical triple encoding fed to the state hasher: entity id (8 bytes LE), fact-type
-/// name, value (9 fixed bytes). The fixed-width head and tail make the variable-width name
-/// unambiguous (Vol. V Ch. 4 §4.2, canonicalisation).
+/// name, value (a tag byte and a fixed width per type). The fixed-width head and the tagged
+/// tail make the variable-width name unambiguous (Vol. V Ch. 4 §4.2, canonicalisation).
 fn triple_bytes(key: FactKey, value: &Value) -> Vec<u8> {
     let name = key.fact_type.name().as_bytes();
-    let mut buf = Vec::with_capacity(8 + name.len() + 9);
+    let mut buf = Vec::with_capacity(8 + name.len() + 25);
     buf.extend_from_slice(&key.entity.raw().to_le_bytes());
     buf.extend_from_slice(name);
-    buf.extend_from_slice(&value.canonical_bytes());
+    value.write_canonical(&mut buf);
     buf
 }
 

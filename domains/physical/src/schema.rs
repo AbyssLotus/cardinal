@@ -44,17 +44,47 @@ pub const IN_REGION: FactType = FactType::new("physical.space.in_region");
 /// §1.3, elevation). May be negative (below the datum). A spatial property of place.
 pub const ELEVATION: FactType = FactType::new("physical.space.elevation");
 
-/// An entity's local position within its immediate container, as fixed-point centimetres
-/// along each axis (Vol. III Ch. 1 §1.3, position). Space is representation-independent
-/// (§1.4) -- coordinates are one representation a world may choose; consumers ask spatial
-/// questions rather than depending on this storage (see `crate::space`). Positions compose up
-/// the containment hierarchy to give the relative position of any two loaded entities.
-/// Frames are assumed axis-aligned (no inter-frame rotation); orientation is a later fact.
-pub const POSITION_X: FactType = FactType::new("physical.space.position_x");
-/// Local position along the Y axis; see [`POSITION_X`].
-pub const POSITION_Y: FactType = FactType::new("physical.space.position_y");
-/// Local position along the Z axis (height); see [`POSITION_X`].
-pub const POSITION_Z: FactType = FactType::new("physical.space.position_z");
+/// An entity's position within its immediate container: a three-component value
+/// ([`Value::Vec3`](kernel::value::Value::Vec3)) of fixed-point centimetres `[x, y, z]` in the
+/// container's local frame — `+x` to the container's right (east, if it faces north), `+y`
+/// ahead (north), `+z` up (Vol. III Ch. 1 §1.3; Amendment A-3). It is where the entity's
+/// **base** sits: the point it stands or rests on. One fact, written atomically.
+///
+/// Space is representation-independent (§1.4) — coordinates are one representation a world may
+/// choose; consumers ask spatial questions (`crate::space`, `crate::nearby`) rather than reading
+/// this directly, not least because while an entity is in motion this fact holds where its
+/// current segment *began* ([`MOTION_TARGET`]). Positions compose up the containment hierarchy,
+/// rotated by each container's [`HEADING`], to give the relative position of any two entities
+/// in the same hierarchy. Absent means the container's origin.
+pub const POSITION: FactType = FactType::new("physical.space.position");
+
+/// A body's size, as a three-component value of centimetres `[half_width, half_depth, height]`
+/// (Amendment A-3): it spans `half_width` to either side of its base along its own x axis,
+/// `half_depth` fore and aft along its y axis, and `height` upward from its base. Turned by the
+/// body's [`HEADING`]. Absent means the body is a point. Size is what answers *does it fit*,
+/// *what does it overlap*, and *what is it resting on*.
+pub const BODY_SIZE: FactType = FactType::new("physical.body.size");
+
+/// A body's facing, in hundredths of a degree, as a compass bearing within its container's
+/// frame: 0 faces `+y` (north), 9000 faces `+x` (east), increasing clockwise; always in
+/// `0..36000` (Amendment A-3). A container's heading also orients the frame of everything in it
+/// — when a ship turns, its deck turns with it. Absent means 0. Pitch and roll are not yet
+/// represented.
+pub const HEADING: FactType = FactType::new("physical.body.heading");
+
+/// Where a moving body is heading: the end of its current straight segment, as a
+/// three-component value of centimetres in its container's frame (Amendment A-3). Its
+/// [`POSITION`] holds where the segment began. Present only while the body has a segment;
+/// cleared when it settles.
+pub const MOTION_TARGET: FactType = FactType::new("physical.motion.target");
+
+/// The tick a body's current segment began (it was at its [`POSITION`] then).
+pub const MOTION_START: FactType = FactType::new("physical.motion.start");
+
+/// The tick a body's current segment ends (it is at its [`MOTION_TARGET`] from then on).
+/// Between the two ticks its position is interpolated along the segment — derived, never
+/// stored, so nothing is written while it travels.
+pub const MOTION_END: FactType = FactType::new("physical.motion.end");
 
 /// The regions directly connected to this one in a topology (Vol. III Ch. 1 §1.5). A
 /// **cardinality-many** relationship: a region has several neighbours. Value is an entity
@@ -215,6 +245,10 @@ pub const MAX_DANGER: i64 = 10000;
 /// Ceiling for material density (kg/m³) — clamps the field well above any real or exotic
 /// material (osmium ≈ 22 600; room left for programmable matter, Vol. III Ch. 1 §1.9).
 pub const MAX_DENSITY: i64 = 1_000_000;
+
+/// Ceiling for a body size component, in centimetres (10 000 km) — clamps the field well above
+/// any body a world might declare, from a grain of sand to a planet's crust.
+pub const MAX_SIZE: i64 = 1_000_000_000;
 
 /// Ceiling for material specific heat capacity (J/(kg·K)) — clamps well above any real value
 /// (water ≈ 4184, hydrogen ≈ 14 300).

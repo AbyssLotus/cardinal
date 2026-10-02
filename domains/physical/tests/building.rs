@@ -32,8 +32,8 @@ use kernel::time::SimClock;
 use kernel::value::Value;
 use physical::regions::is_within;
 use physical::schema::{
-    CONTAINED_IN, HAS_PORTAL, LEADS_TO, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE, POSITION_X,
-    POSITION_Y, POSITION_Z,
+    CONTAINED_IN, HAS_PORTAL, HEADING, LEADS_TO, MOTION_END, MOTION_START, MOTION_TARGET,
+    PORTAL_DANGER, PORTAL_DANGER_OVERRIDE, POSITION,
 };
 use physical::space::{
     can_reach, distance, height_above_ground, portal_destination, portals_in, position_in, route,
@@ -81,9 +81,7 @@ fn seed(s: &mut MemoryStore, entity: u64, ft: FactType, v: Value) {
 /// Place `entity` inside `container` at local (x, y, z) centimetres.
 fn place(s: &mut MemoryStore, entity: u64, container: u64, x: i64, y: i64, z: i64) {
     seed(s, entity, CONTAINED_IN, Value::Entity(e(container)));
-    seed(s, entity, POSITION_X, Value::Int(x));
-    seed(s, entity, POSITION_Y, Value::Int(y));
-    seed(s, entity, POSITION_Z, Value::Int(z));
+    seed(s, entity, POSITION, Value::Vec3([x, y, z]));
 }
 
 /// A one-way portal located in `host` at (x, y, z) that leads to `dest`.
@@ -147,13 +145,15 @@ impl System for Walk {
             CONTAINED_IN,
             HAS_PORTAL,
             LEADS_TO,
-            POSITION_X,
-            POSITION_Y,
-            POSITION_Z,
+            POSITION,
+            HEADING,
+            MOTION_TARGET,
+            MOTION_START,
+            MOTION_END,
         ]
     }
     fn writes(&self) -> &'static [FactType] {
-        &[CONTAINED_IN, POSITION_X, POSITION_Y, POSITION_Z]
+        &[CONTAINED_IN, POSITION]
     }
     fn cadence(&self) -> Cadence {
         Cadence::EveryTick
@@ -179,17 +179,13 @@ impl System for Walk {
                 .into_iter()
                 .filter(|&p| portal_destination(view, p) == Some(here))
                 .min_by_key(|&p| (distance(view, through, p).unwrap_or(i64::MAX), p));
-            let coord = |axis| {
-                far_face
-                    .and_then(|p| view.read(FactKey::new(p, axis)))
-                    .and_then(|f| f.value.as_int())
-                    .unwrap_or(0)
-            };
+            let [x, y, _] = far_face
+                .and_then(|p| view.read(FactKey::new(p, POSITION)))
+                .and_then(|f| f.value.as_vec3())
+                .unwrap_or([0; 3]);
             let arrive = [
                 (CONTAINED_IN, Value::Entity(there)),
-                (POSITION_X, Value::Int(coord(POSITION_X))),
-                (POSITION_Y, Value::Int(coord(POSITION_Y))),
-                (POSITION_Z, Value::Int(0)), // on the floor, not on the sill
+                (POSITION, Value::Vec3([x, y, 0])), // on the floor, not on the sill
             ];
             for (fact_type, value) in arrive {
                 out.push(Proposal::new(

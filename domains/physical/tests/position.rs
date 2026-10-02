@@ -7,7 +7,7 @@ use kernel::fact::{Cause, Fact, FactKey, FactType, Provenance, SystemId};
 use kernel::identity::EntityId;
 use kernel::store::MemoryStore;
 use kernel::value::Value;
-use physical::schema::{CONTAINED_IN, POSITION_X, POSITION_Y, POSITION_Z};
+use physical::schema::{CONTAINED_IN, POSITION};
 use physical::space::{distance, position_in, relative_position};
 
 fn e(id: u64) -> EntityId {
@@ -25,9 +25,7 @@ fn seed(store: &mut MemoryStore, entity: u64, fact_type: FactType, v: Value) {
 /// Place `entity` inside `container` at local position (x, y, z) centimetres.
 fn place(store: &mut MemoryStore, entity: u64, container: u64, x: i64, y: i64, z: i64) {
     seed(store, entity, CONTAINED_IN, Value::Entity(e(container)));
-    seed(store, entity, POSITION_X, Value::Int(x));
-    seed(store, entity, POSITION_Y, Value::Int(y));
-    seed(store, entity, POSITION_Z, Value::Int(z));
+    seed(store, entity, POSITION, Value::Vec3([x, y, z]));
 }
 
 /// A small world: a city holding a house and a shed; the house holding a bedroom and a

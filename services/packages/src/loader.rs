@@ -26,10 +26,10 @@ use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use living::{LivingConfig, LivingDomain};
 use physical::schema::{
-    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, IN_REGION, LEADS_TO, MADE_OF,
-    MATERIAL_CONDUCTIVITY, MATERIAL_DENSITY, MATERIAL_FLAMMABILITY, MATERIAL_HARDNESS,
-    MATERIAL_THERMAL_CAPACITY, MATERIAL_TOXICITY, PORTAL_DANGER_OVERRIDE, POSITION_X, POSITION_Y,
-    POSITION_Z, TEMPERATURE,
+    ADJACENT_TO, BODY_SIZE, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, HEADING, IN_REGION,
+    LEADS_TO, MADE_OF, MATERIAL_CONDUCTIVITY, MATERIAL_DENSITY, MATERIAL_FLAMMABILITY,
+    MATERIAL_HARDNESS, MATERIAL_THERMAL_CAPACITY, MATERIAL_TOXICITY, MOTION_END, MOTION_START,
+    MOTION_TARGET, PORTAL_DANGER_OVERRIDE, POSITION, TEMPERATURE,
 };
 use physical::{PhysicalConfig, PhysicalDomain};
 use std::fmt;
@@ -213,14 +213,43 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         );
     }
 
-    // Seed local positions (Physical facts): where each entity sits within its container.
+    // Seed local positions (Physical facts): where each entity's base sits within its
+    // container — one three-component fact each (Amendment A-3).
     for p in &package.positions {
-        let e = EntityId::from_raw(p.entity_id);
-        store.seed(FactKey::new(e, POSITION_X), seeded(Value::Int(p.x)));
-        store.seed(FactKey::new(e, POSITION_Y), seeded(Value::Int(p.y)));
-        if let Some(z) = p.z {
-            store.seed(FactKey::new(e, POSITION_Z), seeded(Value::Int(z)));
-        }
+        store.seed(
+            FactKey::new(EntityId::from_raw(p.entity_id), POSITION),
+            seeded(Value::Vec3([p.x, p.y, p.z.unwrap_or(0)])),
+        );
+    }
+
+    // Seed bodies, facings, and motion under way (Physical facts, Amendment A-3). Motion is a
+    // segment from the body's seeded position, leaving at tick 0 and arriving after the given
+    // simulated time, rounded up to a whole tick.
+    for b in &package.bodies {
+        store.seed(
+            FactKey::new(EntityId::from_raw(b.entity_id), BODY_SIZE),
+            seeded(Value::Vec3([b.half_width, b.half_depth, b.height])),
+        );
+    }
+    for f in &package.facing {
+        store.seed(
+            FactKey::new(EntityId::from_raw(f.entity_id), HEADING),
+            seeded(Value::Int(f.heading.rem_euclid(36_000))),
+        );
+    }
+    for m in &package.motion {
+        let e = EntityId::from_raw(m.entity_id);
+        let tick_ms = package.clock.tick_ms;
+        let ticks = m.seconds.saturating_mul(1000).div_ceil(tick_ms);
+        store.seed(
+            FactKey::new(e, MOTION_TARGET),
+            seeded(Value::Vec3(m.target)),
+        );
+        store.seed(FactKey::new(e, MOTION_START), seeded(Value::Int(0)));
+        store.seed(
+            FactKey::new(e, MOTION_END),
+            seeded(Value::Int(ticks as i64)),
+        );
     }
 
     // Seed portals (Physical facts): each portal is an entity located in its host region
@@ -230,11 +259,10 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         let pid = EntityId::from_raw(portal.portal_id);
         let host = EntityId::from_raw(portal.host_region);
         store.seed(FactKey::new(pid, CONTAINED_IN), seeded(Value::Entity(host)));
-        store.seed(FactKey::new(pid, POSITION_X), seeded(Value::Int(portal.x)));
-        store.seed(FactKey::new(pid, POSITION_Y), seeded(Value::Int(portal.y)));
-        if let Some(z) = portal.z {
-            store.seed(FactKey::new(pid, POSITION_Z), seeded(Value::Int(z)));
-        }
+        store.seed(
+            FactKey::new(pid, POSITION),
+            seeded(Value::Vec3([portal.x, portal.y, portal.z.unwrap_or(0)])),
+        );
         store.seed(
             FactKey::new(pid, LEADS_TO),
             seeded(Value::Entity(EntityId::from_raw(portal.dest_region))),

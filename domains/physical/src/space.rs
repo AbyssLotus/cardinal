@@ -1,40 +1,93 @@
 //! Spatial queries over the containment hierarchy (Vol. III Ch. 1 §1.12, Querying Reality).
 //!
-//! Space is representation-independent (§1.4): a consumer asks a question -- how far apart,
-//! how high, where relative to, by which way -- and gets an answer without depending on how
-//! space is stored. Here
-//! positions are local coordinates within each entity's immediate container
-//! ([`crate::schema::POSITION_X`] etc.), composed up the containment hierarchy (via
-//! `kernel::hierarchy`) so any two loaded entities have a relative position in the frame of
-//! their lowest common region -- a bedroom, a house, or a whole city, whichever encloses both.
+//! Space is representation-independent (§1.4): a consumer asks a question — how far apart,
+//! how high, where relative to, which way, by which route — and gets an answer without
+//! depending on how space is stored. Here an entity's position is local to its immediate
+//! container ([`crate::schema::POSITION`]), and composes up the containment hierarchy (via
+//! `kernel::hierarchy`) so any two entities in one hierarchy have a relative position in the
+//! frame of their lowest common container — a bedroom, a house, or a whole city.
 //!
-//! Frames are assumed axis-aligned; rotation/orientation between frames is a later refinement.
+//! **Frames turn** (Amendment A-3). Each container's [`crate::schema::HEADING`] orients its
+//! own frame within its parent: a child's local `+y` points along the container's heading. So a
+//! position is lifted into the parent's frame by rotating it by the container's heading and
+//! adding the container's own position — [`lift`], the one function every query composes
+//! positions with, so every road computes the same centimetre. Rotations use the kernel's
+//! integer sine and cosine and round to the centimetre at each level.
+//!
+//! **Positions are live** (Amendment A-3). A body in motion is wherever its segment puts it at
+//! the view's tick ([`crate::motion`]); every query here sees that, with nothing written.
 
-use crate::schema::{CONTAINED_IN, HAS_PORTAL, LEADS_TO, POSITION_X, POSITION_Y, POSITION_Z};
-use kernel::fact::{FactKey, FactType};
+use crate::motion::position_at;
+use crate::schema::{CONTAINED_IN, HAS_PORTAL, HEADING, LEADS_TO};
+use kernel::fact::FactKey;
+use kernel::fixed::{div_round, isqrt, sin_cos, TRIG_ONE};
 use kernel::hierarchy::{ancestry, lowest_common_ancestor};
 use kernel::identity::EntityId;
 use kernel::system::CommittedView;
 use kernel::value::Value;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-const AXES: [FactType; 3] = [POSITION_X, POSITION_Y, POSITION_Z];
-
-/// An entity's local position within its immediate container. A missing axis reads as 0 --
-/// the container's origin.
+/// An entity's position within its immediate container at the view's tick — its base point,
+/// wherever its motion puts it now. A body with no position fact is at the container's origin.
 pub fn local_position(view: &dyn CommittedView, entity: EntityId) -> [i64; 3] {
-    let mut p = [0i64; 3];
-    for (i, axis) in AXES.iter().enumerate() {
-        p[i] = view
-            .read(FactKey::new(entity, *axis))
-            .and_then(|f| f.value.as_int())
-            .unwrap_or(0);
+    position_at(view, entity, view.tick())
+}
+
+/// An entity's facing within its container's frame, in hundredths of a degree clockwise from
+/// north (`0..36000`); 0 if it declares none.
+pub fn heading(view: &dyn CommittedView, entity: EntityId) -> i64 {
+    view.read(FactKey::new(entity, HEADING))
+        .and_then(|f| f.value.as_int())
+        .unwrap_or(0)
+        .rem_euclid(36_000)
+}
+
+/// Express `p`, given in a frame turned to compass `heading`, in the unturned parent frame. A
+/// frame facing east (9000) maps its `+y` (ahead) to the parent's `+x` (east), and its `+x`
+/// (right) to the parent's `−y` (south). Exact for heading 0; otherwise rounded to the
+/// centimetre.
+pub fn rotate(heading: i64, p: [i64; 3]) -> [i64; 3] {
+    if heading.rem_euclid(36_000) == 0 {
+        return p;
+    }
+    let (s, c) = sin_cos(heading);
+    let (s, c, one) = (s as i128, c as i128, TRIG_ONE as i128);
+    let (x, y) = (p[0] as i128, p[1] as i128);
+    [
+        div_round(x * c + y * s, one) as i64,
+        div_round(y * c - x * s, one) as i64,
+        p[2],
+    ]
+}
+
+/// The inverse of [`rotate`]: express `p`, given in the parent frame, in a frame turned to
+/// compass `heading`.
+pub fn unrotate(heading: i64, p: [i64; 3]) -> [i64; 3] {
+    rotate(-heading, p)
+}
+
+/// Lift `p` — a position in the frame of `frames[0]` — up through the frames listed, from the
+/// innermost outward, into the frame that contains the last of them. At each step the point is
+/// turned by that frame's heading and shifted by that frame's own position.
+///
+/// The single definition of composing positions: [`position_in`] and the indexed proximity
+/// search in `crate::nearby` both use it, in the same order, so both reach exactly the same
+/// centimetre — which is what lets the indexed answers equal the scanned ones.
+pub fn lift(p: [i64; 3], frames: &[([i64; 3], i64)]) -> [i64; 3] {
+    let mut p = p;
+    for &(origin, heading) in frames {
+        let turned = rotate(heading, p);
+        p = [
+            origin[0].saturating_add(turned[0]),
+            origin[1].saturating_add(turned[1]),
+            origin[2].saturating_add(turned[2]),
+        ];
     }
     p
 }
 
-/// `entity`'s position expressed in `ancestor`'s coordinate frame: the sum of local positions
-/// from `entity` up to (but not including) `ancestor`. `None` if `ancestor` does not contain
+/// `entity`'s position expressed in `ancestor`'s coordinate frame, lifted through every
+/// container between them (each turned by its heading). `None` if `ancestor` does not contain
 /// `entity`.
 ///
 /// Walks the kernel's cycle-safe [`ancestry`], so a malformed containment loop ends the walk
@@ -47,14 +100,14 @@ pub fn position_in(
 ) -> Option<[i64; 3]> {
     let chain = ancestry(view, entity, CONTAINED_IN);
     let stop = chain.iter().position(|e| *e == ancestor)?;
-    let mut sum = [0i64; 3];
-    for &link in &chain[..stop] {
-        let local = local_position(view, link);
-        for (s, l) in sum.iter_mut().zip(local) {
-            *s = s.saturating_add(l);
-        }
+    if stop == 0 {
+        return Some([0; 3]);
     }
-    Some(sum)
+    let frames: Vec<([i64; 3], i64)> = chain[1..stop]
+        .iter()
+        .map(|&f| (local_position(view, f), heading(view, f)))
+        .collect();
+    Some(lift(local_position(view, entity), &frames))
 }
 
 /// The outermost container of `entity` — the root of its containment hierarchy, whose frame
@@ -64,6 +117,21 @@ pub fn root_of(view: &dyn CommittedView, entity: EntityId) -> EntityId {
     *ancestry(view, entity, CONTAINED_IN)
         .last()
         .expect("ancestry always includes the entity itself")
+}
+
+/// `entity`'s facing in the frame of `ancestor`: its own heading plus that of every container
+/// between, since each container turns the frame of what it holds. `None` if `ancestor` does
+/// not contain `entity`.
+pub fn heading_in(view: &dyn CommittedView, entity: EntityId, ancestor: EntityId) -> Option<i64> {
+    let chain = ancestry(view, entity, CONTAINED_IN);
+    let stop = chain.iter().position(|e| *e == ancestor)?;
+    Some(
+        chain[..stop]
+            .iter()
+            .map(|&e| heading(view, e))
+            .sum::<i64>()
+            .rem_euclid(36_000),
+    )
 }
 
 /// The displacement from `from` to `to`, expressed in the frame of their lowest common
@@ -89,51 +157,44 @@ pub fn relative_position(
 pub fn distance(view: &dyn CommittedView, from: EntityId, to: EntityId) -> Option<i64> {
     let d = relative_position(view, from, to)?;
     let sq = (d[0] as i128).pow(2) + (d[1] as i128).pow(2) + (d[2] as i128).pow(2);
-    Some(isqrt(sq) as i64)
+    Some(isqrt(sq as u128) as i64)
+}
+
+/// The compass bearing from `from` to `to` (hundredths of a degree clockwise from north), in
+/// the frame of their lowest common container — "the well is to the north-east". `None` if they
+/// share no container or stand at the same spot.
+pub fn bearing_to(view: &dyn CommittedView, from: EntityId, to: EntityId) -> Option<i64> {
+    let d = relative_position(view, from, to)?;
+    crate::motion::compass(d[0], d[1])
+}
+
+/// Where `to` lies relative to the way `observer` is facing, in hundredths of a degree in
+/// `-17999..=18000`: 0 dead ahead, positive to the right (9000 is directly right), negative to
+/// the left, 18000 directly behind (Vol. III Ch. 1 §1.6, Relative Position). `None` if they
+/// share no container or stand at the same spot. This is what turns coordinates into "the door
+/// is on your left".
+pub fn relative_bearing(view: &dyn CommittedView, observer: EntityId, to: EntityId) -> Option<i64> {
+    let lca = lowest_common_ancestor(view, observer, to, CONTAINED_IN)?;
+    let bearing = bearing_to(view, observer, to)?;
+    let facing = heading_in(view, observer, lca)?;
+    let mut rel = (bearing - facing).rem_euclid(36_000);
+    if rel > 18_000 {
+        rel -= 36_000;
+    }
+    Some(rel)
 }
 
 /// How far `entity` is above the ground, in centimetres (Vol. III Ch. 1 §1.6, "Above" /
-/// "Below"): the sum of local Z from the entity up through each of its containers, stopping
-/// short of the outermost one, whose origin is the ground datum. Someone standing on a
-/// second-storey floor stacked 3 m up a house reads 300; someone in a cellar sunk 3 m reads
-/// −300 (below ground). An entity with no container is the ground frame itself and reads 0.
+/// "Below"): its height in the frame of its hierarchy's root, whose origin is the ground datum.
+/// Someone standing on a second-storey floor stacked 3 m up a house reads 300; someone in a
+/// cellar sunk 3 m reads −300 (below ground). An entity with no container is the ground frame
+/// itself and reads 0. Headings turn frames about the vertical, so they never change a height.
 ///
 /// This is height within the containment hierarchy, not terrain: [`crate::schema::ELEVATION`]
-/// says how high the ground itself stands above the world datum. Walks the chain with the
-/// kernel's cycle-safe [`ancestry`], so a malformed containment loop cannot hang the query.
+/// says how high the ground itself stands above the world datum.
 pub fn height_above_ground(view: &dyn CommittedView, entity: EntityId) -> i64 {
-    let chain = ancestry(view, entity, CONTAINED_IN);
-    // Every link except the last (the root, whose frame *is* the ground) contributes its local
-    // Z; a missing Z is 0, level with its container's floor.
-    chain[..chain.len() - 1]
-        .iter()
-        .map(|&e| {
-            view.read(FactKey::new(e, POSITION_Z))
-                .and_then(|f| f.value.as_int())
-                .unwrap_or(0)
-        })
-        .fold(0i64, i64::saturating_add)
-}
-
-/// Floor of the integer square root of a non-negative `i128`, by binary search.
-fn isqrt(n: i128) -> i128 {
-    if n < 2 {
-        return n.max(0);
-    }
-    let mut hi: i128 = 1;
-    while hi.saturating_mul(hi) <= n {
-        hi = hi.saturating_mul(2);
-    }
-    let mut lo: i128 = hi / 2;
-    while lo < hi {
-        let mid = lo + (hi - lo + 1) / 2;
-        if mid.saturating_mul(mid) <= n {
-            lo = mid;
-        } else {
-            hi = mid - 1;
-        }
-    }
-    lo
+    let root = root_of(view, entity);
+    position_in(view, entity, root).map_or(0, |p| p[2])
 }
 
 // ---- Connectivity: portals ---------------------------------------------------------------

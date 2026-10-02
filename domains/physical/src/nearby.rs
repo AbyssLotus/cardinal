@@ -21,8 +21,9 @@
 
 use crate::index::{container_of, occupied};
 use crate::schema::CONTAINED_IN;
-use crate::space::{position_in, root_of};
+use crate::space::{heading, lift, local_position, position_in, root_of, unrotate};
 use kernel::fixed::isqrt;
+use kernel::hierarchy::ancestry;
 use kernel::identity::EntityId;
 use kernel::spatial::{Aabb, SpatialQuery};
 use kernel::system::CommittedView;
@@ -66,15 +67,30 @@ fn distance(a: [i64; 3], b: [i64; 3]) -> i64 {
 
 /// Every entity within `radius` (centimetres, inclusive) of `center`, anywhere in `center`'s
 /// containment hierarchy, with its distance — sorted nearest first, ties by id. Excludes
-/// `center` itself. "Who is within earshot?"
+/// `center` itself and the containers it is inside: a person is *in* the bedroom, not near it.
+/// Distances are between base points at the view's tick, so a body walking past is found where
+/// it is now. "Who is within earshot?"
 pub fn within(view: &dyn CommittedView, center: EntityId, radius: i64) -> Vec<(EntityId, i64)> {
+    let inside: Vec<EntityId> = ancestry(view, center, CONTAINED_IN);
     let mut found = match view.spatial() {
         Some(index) => {
-            let Some((root, at)) = locate(view, index, center) else {
+            let root = root_of(view, center);
+            let Some(at) = position_in(view, center, root) else {
                 return Vec::new();
             };
             let mut out = Vec::new();
-            search(view, index, center, root, [0; 3], at, radius, &mut out);
+            let mut frames = Vec::new();
+            search(
+                view,
+                index,
+                center,
+                root,
+                &mut frames,
+                at,
+                at,
+                radius,
+                &mut out,
+            );
             out
         }
         None => {
@@ -92,43 +108,27 @@ pub fn within(view: &dyn CommittedView, center: EntityId, radius: i64) -> Vec<(E
                 .collect()
         }
     };
+    found.retain(|(e, _)| !inside.contains(e));
     found.sort_by_key(|&(e, d)| (d, e));
     found
 }
 
-/// The root of `entity`'s hierarchy and `entity`'s position in the root's frame, read from the
-/// index: a walk up the placements summing anchors — the same walk and the same sums as
-/// [`root_of`] and [`position_in`] over committed facts, because a settled placement's frame
-/// and anchor *are* the entity's container and local position. Falls back to the facts when the
-/// entity is not placed or is in motion. Stops at the first repeated entity, as the kernel's
-/// ancestry walk does, so a malformed containment cycle cannot hang it.
-fn locate(
-    view: &dyn CommittedView,
-    index: &dyn SpatialQuery,
-    entity: EntityId,
-) -> Option<(EntityId, [i64; 3])> {
-    let mut here = entity;
-    let mut at = [0i64; 3];
-    let mut seen: Vec<EntityId> = vec![entity];
-    while let Some(p) = index.placement(here) {
-        if !p.settled {
-            let root = root_of(view, entity);
-            return Some((root, position_in(view, entity, root)?));
-        }
-        if seen.contains(&p.frame) {
-            break;
-        }
-        for i in 0..3 {
-            at[i] = at[i].saturating_add(p.anchor[i]);
-        }
-        seen.push(p.frame);
-        here = p.frame;
-    }
-    Some((here, at))
-}
+/// Rounding slack, in centimetres per level of frame nesting, added to a query box when it is
+/// carried down into a turned frame. Turning a point rounds each coordinate by at most half a
+/// centimetre, once on the way down (the query centre) and once on the way up (the candidate),
+/// so a few centimetres per level guarantees the box still holds every true answer. The exact
+/// test afterwards is identical to the scanning road's, so the slack only ever admits
+/// candidates — never answers.
+const SLACK_PER_LEVEL: i64 = 4;
 
-/// The indexed road of [`within`]: measure the candidates in `frame` (whose origin sits at
-/// `origin` in the root's coordinates), then descend into every frame placed in it.
+/// The indexed road of [`within`]: measure the candidates in `frame`, then descend into every
+/// frame placed in it.
+///
+/// `frames` lists, innermost first, the `(position, heading)` of `frame` and each container
+/// above it up to (not including) the root — exactly what [`lift`] needs to carry a point in
+/// `frame` up to the root, by the same arithmetic [`position_in`] uses on the scanning road.
+/// `local_at` is the query centre expressed in `frame`'s coordinates (for choosing candidates);
+/// `at` is the same centre in the root's (for the exact test).
 ///
 /// Every placed entity lives in exactly one frame, and every frame that holds anything is a
 /// subframe of its own container, so descending from the root visits each candidate exactly
@@ -140,31 +140,58 @@ fn search(
     index: &dyn SpatialQuery,
     center: EntityId,
     frame: EntityId,
-    origin: [i64; 3],
+    frames: &mut Vec<([i64; 3], i64)>,
+    local_at: [i64; 3],
     at: [i64; 3],
     radius: i64,
     out: &mut Vec<(EntityId, i64)>,
 ) {
-    // The query sphere's bounding box, in this frame's local coordinates.
-    let local_at = [at[0] - origin[0], at[1] - origin[1], at[2] - origin[2]];
-    let query = Aabb::around(local_at, radius);
+    let slack = SLACK_PER_LEVEL * (frames.len() as i64 + 1);
+    let query = Aabb::around(local_at, radius.saturating_add(slack));
     for (e, placement) in index.candidates(frame, &query) {
         if e == center {
             continue;
         }
-        let a = placement.anchor;
-        let p = [origin[0] + a[0], origin[1] + a[1], origin[2] + a[2]];
-        let d = distance(at, p);
+        // A settled body is at its anchor; a moving one is wherever its segment puts it now.
+        let local = if placement.settled {
+            placement.anchor
+        } else {
+            local_position(view, e)
+        };
+        let d = distance(at, lift(local, frames));
         if d <= radius {
             out.push((e, d));
         }
     }
     for sub in index.subframes(frame) {
-        if let Some(placement) = index.placement(sub) {
-            let a = placement.anchor;
-            let sub_origin = [origin[0] + a[0], origin[1] + a[1], origin[2] + a[2]];
-            search(view, index, center, sub, sub_origin, at, radius, out);
-        }
+        let Some(placement) = index.placement(sub) else {
+            continue;
+        };
+        let origin = if placement.settled {
+            placement.anchor
+        } else {
+            local_position(view, sub)
+        };
+        let turn = heading(view, sub);
+        let shifted = [
+            local_at[0] - origin[0],
+            local_at[1] - origin[1],
+            local_at[2] - origin[2],
+        ];
+        // `frames` lists innermost first, so the subframe goes in front for the descent.
+        frames.insert(0, (origin, turn));
+        search(
+            view,
+            index,
+            center,
+            sub,
+            frames,
+            unrotate(turn, shifted),
+            at,
+            radius,
+            out,
+        );
+        frames.remove(0);
     }
 }
 

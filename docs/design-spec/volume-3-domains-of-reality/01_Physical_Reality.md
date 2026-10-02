@@ -541,6 +541,22 @@ Floodwaters temporarily contain roads.
 
 The Physical Reality domain should therefore treat containment as state rather than immutable structure.
 
+## Bodies, Facing, and Motion
+
+*Amendment A-3 (2026-10), see [AMENDMENTS.md](../AMENDMENTS.md).*
+
+Containment says *within what*; three further facts say *where, how big, which way, and going where* — enough to hold a person, an item, or a place's position meaningfully at any moment.
+
+**Position is one fact.** An entity's position is a single three-component value in its container's local frame: where its **base** sits (the point on which it stands or rests). One fact, written atomically — never three axes that could disagree.
+
+**Size.** A body may declare its extent: a half-width and a half-depth across its footprint, and a height above its base. A thing without a size is a point. Size is what lets space answer *does it fit*, *what does it overlap*, and *what is it standing on*.
+
+**Facing.** A body may declare a heading — a compass bearing, clockwise from its frame's north. Facing is what makes *ahead*, *to the left*, and *behind* answerable (§1.6, Relative Position). A container's heading orients the frame of everything inside it: when a ship turns, its deck turns with it, and the crew's positions *on the deck* do not change. Pitch and roll are not yet represented; they join when a world needs a tilted frame.
+
+**Motion is a segment, not a stream.** A moving body carries one straight segment: the target it is heading for, the tick it set out, and the tick it will arrive. Its position at any tick in between is *derived* — exactly, by every consumer, the same way — and nothing is written while it travels. Facts change only when motion changes: when a body sets out, changes course, or arrives. Its speed and its direction of travel are consequences of the segment, asked for, never stored. This keeps a world of walking people from writing every footstep into history, and lets anyone ask where a body *will* be.
+
+Consumers never interpolate for themselves; they ask Physical Reality where a body is at a tick (representation independence, §1.14). Who *decides* to move is never Physical Reality's concern (Appendix A, Ruling 4); how motion unfolds, and what stops it, is.
+
 ---
 
 # 1.9 Materials

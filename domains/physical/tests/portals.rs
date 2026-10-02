@@ -14,7 +14,7 @@ use kernel::system::{Cadence, CommittedView, System, TickContext};
 use kernel::tick::run_tick;
 use kernel::time::SimClock;
 use kernel::value::Value;
-use physical::schema::{CONTAINED_IN, HAS_PORTAL, LEADS_TO, POSITION_X, POSITION_Y};
+use physical::schema::{CONTAINED_IN, HAS_PORTAL, LEADS_TO, POSITION};
 use physical::space::{can_reach, destinations, portals_in, position_in, reachable_regions};
 use physical::{PhysicalConfig, PhysicalDomain};
 use std::collections::BTreeSet;
@@ -39,8 +39,7 @@ fn seed(store: &mut MemoryStore, entity: u64, ft: FactType, v: Value) {
 /// Add a portal `id` in `host`, leading to `dest`, at local spot (x, y).
 fn portal(store: &mut MemoryStore, id: u64, host: u64, dest: u64, x: i64, y: i64) {
     seed(store, id, CONTAINED_IN, Value::Entity(e(host))); // the portal is located in its host
-    seed(store, id, POSITION_X, Value::Int(x));
-    seed(store, id, POSITION_Y, Value::Int(y));
+    seed(store, id, POSITION, Value::Vec3([x, y, 0]));
     seed(store, id, LEADS_TO, Value::Entity(e(dest))); // ...and leads to its far side
     seed(store, host, HAS_PORTAL, Value::Entity(e(id))); // the region hosts it (many-valued)
 }

@@ -18,8 +18,12 @@ use kernel::system::{Cadence, CommittedView, System, TickContext};
 use kernel::tick::{run_tick, TickError};
 use kernel::time::SimClock;
 use kernel::value::Value;
+use physical::index::PLACEMENT_READS;
+use physical::motion::depart;
 use physical::nearby::{contents, in_box, nearest, within};
-use physical::schema::{CONTAINED_IN, POSITION_X, POSITION_Y, POSITION_Z};
+use physical::schema::{
+    BODY_SIZE, CONTAINED_IN, HEADING, MOTION_END, MOTION_START, MOTION_TARGET, POSITION,
+};
 use physical::{PhysicalConfig, PhysicalDomain};
 use std::sync::Arc;
 
@@ -82,11 +86,28 @@ fn world(g: &mut Gen) -> MemoryStore {
     let place = |s: &mut MemoryStore, g: &mut Gen, id: u64, frame: u64, spread: i64| {
         seed(s, id, CONTAINED_IN, Value::Entity(e(frame)));
         if g.next() % 5 != 0 {
-            seed(s, id, POSITION_X, Value::Int(g.range(-spread, spread)));
-            seed(s, id, POSITION_Y, Value::Int(g.range(-spread, spread)));
-            if g.next() % 2 == 0 {
-                seed(s, id, POSITION_Z, Value::Int(g.range(-500, 500)));
-            }
+            let z = if g.next() % 2 == 0 {
+                g.range(-500, 500)
+            } else {
+                0
+            };
+            let at = [g.range(-spread, spread), g.range(-spread, spread), z];
+            seed(s, id, POSITION, Value::Vec3(at));
+        }
+        // Amendment A-3 in the mix: some bodies have size, many face somewhere, and some are
+        // part-way along a journey that started at tick 0.
+        if g.next() % 3 == 0 {
+            let size = [g.range(0, 300), g.range(0, 300), g.range(0, 250)];
+            seed(s, id, BODY_SIZE, Value::Vec3(size));
+        }
+        if g.next() % 2 == 0 {
+            seed(s, id, HEADING, Value::Int(g.range(0, 35_999)));
+        }
+        if id >= THINGS.start && g.next() % 4 == 0 {
+            let to = [g.range(-spread, spread), g.range(-spread, spread), 0];
+            seed(s, id, MOTION_TARGET, Value::Vec3(to));
+            seed(s, id, MOTION_START, Value::Int(0));
+            seed(s, id, MOTION_END, Value::Int(g.range(1, 10)));
         }
     };
     for room in ROOMS {
@@ -194,23 +215,30 @@ fn an_index_installed_before_seeding_equals_one_built_after() {
     }
 }
 
-/// Each tick, shuffles twenty things: re-parents some to another room, nudges others, and takes
-/// a few out of the world entirely (tombstoning their containment).
+/// Each tick, shuffles twenty things: re-parents some to another room, sends others walking
+/// somewhere nearby (a motion segment), and takes a few out of the world entirely (tombstoning
+/// their containment).
 struct Shuffle;
 impl System for Shuffle {
     fn id(&self) -> SystemId {
         SystemId::new("test.shuffle")
     }
     fn reads(&self) -> &'static [FactType] {
-        &[]
+        PLACEMENT_READS
     }
     fn writes(&self) -> &'static [FactType] {
-        &[CONTAINED_IN, POSITION_X, POSITION_Y]
+        &[
+            CONTAINED_IN,
+            POSITION,
+            MOTION_TARGET,
+            MOTION_START,
+            MOTION_END,
+        ]
     }
     fn cadence(&self) -> Cadence {
         Cadence::EveryTick
     }
-    fn evaluate(&self, _view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let mut rng = ctx.rng(0);
         let mut out = Vec::new();
         let mut chosen = std::collections::BTreeSet::new();
@@ -235,14 +263,16 @@ impl System for Shuffle {
                 }
                 1 => out.push(change(CONTAINED_IN, Change::Tombstone)),
                 _ => {
-                    out.push(change(
-                        POSITION_X,
-                        Change::Delta(rng.below(2_001) as i64 - 1_000),
-                    ));
-                    out.push(change(
-                        POSITION_Y,
-                        Change::Delta(rng.below(2_001) as i64 - 1_000),
-                    ));
+                    let here = physical::space::local_position(view, e(thing));
+                    let to = [
+                        here[0] + rng.below(2_001) as i64 - 1_000,
+                        here[1] + rng.below(2_001) as i64 - 1_000,
+                        here[2],
+                    ];
+                    let clock = config().clock;
+                    for (key, c) in depart(view, e(thing), to, 140, &clock) {
+                        out.push(change(key.fact_type, c));
+                    }
                 }
             }
         }
@@ -317,7 +347,7 @@ fn reading_through_the_index_requires_declaring_what_it_mirrors() {
     let err = run_tick(&mut store, &domains, &systems, 1, 0, &mut Vec::new())
         .expect_err("the index is not a back door around the read set");
     assert!(
-        matches!(err, TickError::UndeclaredRead { fact_type, .. } if fact_type == POSITION_X),
+        matches!(err, TickError::UndeclaredRead { fact_type, .. } if fact_type == POSITION),
         "got {err:?}"
     );
 }
