@@ -42,6 +42,11 @@ Six clauses give it teeth:
 5. **Queries are the product.** Volume III Chapter 1's read-mostly principle: the store is optimized for *asking*, and the query surface (spatial, relational, historical) is part of the contract, not a bolt-on.
 6. **Snapshots are consistent.** Any snapshot is a whole committed tick — persistence, replay, and observers never see a torn world.
 
+**Spatial queries are served by a derived index** *(Amendment A-2)*. Clause 5's spatial surface is made concrete: a store may maintain a **spatial index** over committed reality, registered at bootstrap by the domain that owns space (Physical Reality, per Appendix A) as a *placement rule* — a pure function from an entity's own committed facts to where it sits (the frame it is placed in, and a bounding box in that frame's coordinates). The store re-places an entity whenever `apply()` commits a fact the rule watches, so the index is always the committed tick, never ahead of it and never behind. The index answers *candidate* questions — what might lie in this box of this frame, which frames sit inside this one — and the owning domain answers the exact question from the candidates. Two rules bind it:
+
+- **Conformance.** Every spatial query answered through the index returns exactly what the same query answers by scanning committed facts, in the same order. The index changes cost, never answers; a conformance suite holds every query to it.
+- **No opinions.** The index is a mirror of committed facts, rebuilt from them at will. Nothing writes it but `apply()`; no system may treat it as a second source of truth, and a system that reads through it must declare every fact type the placement rule watches in its read set (Chapter 3 §3.5).
+
 ---
 
 # 2.2 The Design Space
@@ -122,6 +127,7 @@ The current engine proves the contract's portability in one direction (a relatio
 
 - What is this fact's value, provenance, and history?
 - Which entities match this pattern in this region? (spatial index)
+- What is within this distance of this entity, across rooms and frames? What are the nearest *k*? What does this container hold? *(Amendment A-2)*
 - What relates to this entity, by which relationship facts? (graph adjacency)
 - What did this snapshot look like at tick T? (time travel)
 - Which tier holds this data, and what did promotion/demotion cost this tick?

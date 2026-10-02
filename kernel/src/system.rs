@@ -9,6 +9,7 @@ use crate::fact::{Fact, FactKey, FactType, SystemId};
 use crate::identity::EntityId;
 use crate::proposal::Proposal;
 use crate::rng::{Rng, SubstreamKey};
+use crate::spatial::SpatialQuery;
 use std::cell::Cell;
 
 /// How often a system runs, in simulation time (Vol. V Ch. 3 §3.2, Cadence).
@@ -50,6 +51,20 @@ pub trait CommittedView {
     /// instead of carrying an entity list of its own: reality is authoritative, and an
     /// entity created mid-simulation is simulated the tick its facts commit.
     fn entities_with(&self, fact_type: FactType) -> Vec<EntityId>;
+
+    /// The tick this view's committed state represents: 0 for the initial world, N once tick N
+    /// has committed. A system evaluating tick N reads a view at N−1 (Vol. V Ch. 2 §2.1,
+    /// clause 3). Quantities that change continuously between commits — a body in motion — are
+    /// evaluated at this tick.
+    fn tick(&self) -> u64;
+
+    /// The store's derived spatial index, if one is installed (Amendment A-2). `None` means
+    /// "no index": a caller answers by scanning committed facts instead, and must get the same
+    /// answer (the conformance rule). Through a system's scoped view this also requires the
+    /// system to have declared every fact type the index mirrors.
+    fn spatial(&self) -> Option<&dyn SpatialQuery> {
+        None
+    }
 }
 
 /// A committed view scoped to a system's declared read set (Vol. V Ch. 3 §3.1).
@@ -116,6 +131,22 @@ impl CommittedView for ScopedView<'_> {
         } else {
             Vec::new()
         }
+    }
+
+    fn tick(&self) -> u64 {
+        self.inner.tick()
+    }
+
+    fn spatial(&self) -> Option<&dyn SpatialQuery> {
+        // The index mirrors its watched facts, so reading it is reading them: every one must be
+        // in the declared read set, or the read is undeclared like any other (Vol. V Ch. 3
+        // §3.5). Check them all (recording the first violation) before handing it out.
+        let index = self.inner.spatial()?;
+        let mut declared = true;
+        for fact_type in index.watches() {
+            declared &= self.check(*fact_type);
+        }
+        declared.then_some(index)
     }
 }
 
@@ -206,6 +237,9 @@ mod tests {
                 .filter(|k| k.fact_type == fact_type)
                 .map(|k| k.entity)
                 .collect()
+        }
+        fn tick(&self) -> u64 {
+            0
         }
     }
 

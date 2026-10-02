@@ -799,6 +799,8 @@ Implementations are encouraged to organize spatial data in ways that accelerate 
 
 No particular indexing strategy is mandated.
 
+*Amendment A-2:* the reference implementation answers proximity through a store-maintained spatial index (Volume V Chapter 2 §2.1), one coordinate frame per container — a room, a ship, a region — so the contents of a moving container never need re-indexing when the container moves. Physical Reality registers the placement rule and owns the exact answers: **what lies within a distance of an entity** (across frames, measured in the frame of their common ancestor), **the nearest few**, **what a container holds**, and **what lies in a box of a frame**. Every answer is identical with or without the index.
+
 Future implementations may employ spatial trees, graphs, sparse fields, hierarchical partitions, procedural generators, distributed storage, or techniques not yet invented.
 
 The contract remains the same:

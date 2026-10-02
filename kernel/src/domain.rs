@@ -8,8 +8,10 @@
 
 use crate::fact::{Cardinality, FactType};
 use crate::proposal::Change;
+use crate::spatial::SpatialProjector;
 use crate::system::System;
 use crate::value::Value;
+use std::sync::Arc;
 
 /// The outcome of composing the proposals for one fact.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -67,6 +69,14 @@ pub trait Domain {
 
     /// The systems this domain contributes to the tick.
     fn systems(&self) -> Vec<Box<dyn System>>;
+
+    /// The placement rule for the store's spatial index, if this domain owns space
+    /// (Amendment A-2; Appendix A: positions and containment are Physical Reality's). Whatever
+    /// assembles a world installs it with `MemoryStore::install_spatial_index`. Defaults to
+    /// none: a domain that owns no space has no say in where things are.
+    fn spatial_projector(&self) -> Option<Arc<dyn SpatialProjector>> {
+        None
+    }
 
     /// Compose competing proposals against one owned fact into a single resolved outcome
     /// (Vol. V Ch. 3 §3.1, Resolve; Vol. IV Ch. 2). `current` is the committed value, if

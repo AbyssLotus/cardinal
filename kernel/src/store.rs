@@ -17,9 +17,11 @@
 use crate::fact::{Fact, FactKey, FactType, Provenance};
 use crate::hash::{StateHash, StateHasher};
 use crate::identity::EntityId;
+use crate::spatial::{SpatialIndex, SpatialProjector, SpatialQuery};
 use crate::system::CommittedView;
 use crate::value::Value;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 /// One resolved outcome for a single fact key, ready to commit (Vol. V Ch. 3 §3.1,
 /// stages 3-5). Produced by resolution; consumed only by [`RealityStore::apply`].
@@ -100,6 +102,13 @@ pub struct MemoryStore {
     // Running digest of committed state, updated per change so `state_hash` is O(1)
     // (Vol. V Ch. 4 §4.2). Provenance is excluded — the digest summarises committed values.
     hasher: StateHasher,
+    // The derived spatial index, when the domain that owns space has registered one
+    // (Amendment A-2). Re-placed for exactly the entities whose watched facts each seed or
+    // commit touched; never part of the digest, because it is a mirror, not reality.
+    spatial: Option<SpatialIndex>,
+    // The tick the committed state represents: 0 for the initial world, N after tick N's
+    // `apply`. Read through `CommittedView::tick` (Vol. V Ch. 2 §2.1, clause 3).
+    tick: u64,
 }
 
 /// The canonical triple encoding fed to the state hasher: entity id (8 bytes LE), fact-type
@@ -127,6 +136,50 @@ impl MemoryStore {
     /// path (Vol. V Ch. 2 §2.1). Values accumulate, so seeding a cardinality-many fact means
     /// calling this once per value.
     pub fn seed(&mut self, key: FactKey, fact: Fact) {
+        self.insert_value(key, fact);
+        if self.watched(key.fact_type) {
+            self.reproject([key.entity]);
+        }
+    }
+
+    /// Register the spatial index (Amendment A-2): build it from every entity that bears a
+    /// fact `projector` watches, and keep it current through every later seed and commit.
+    /// Called once at bootstrap, by whatever assembles the world, with the projector of the
+    /// domain that owns space. Installing again replaces the index.
+    pub fn install_spatial_index(&mut self, projector: Arc<dyn SpatialProjector>) {
+        let mut placed: BTreeSet<EntityId> = BTreeSet::new();
+        for fact_type in projector.watches() {
+            if let Some(entities) = self.by_type.get(fact_type) {
+                placed.extend(entities.iter().copied());
+            }
+        }
+        self.spatial = Some(SpatialIndex::new(projector));
+        self.reproject(placed);
+    }
+
+    /// Whether the installed spatial index (if any) mirrors `fact_type`.
+    fn watched(&self, fact_type: FactType) -> bool {
+        self.spatial
+            .as_ref()
+            .is_some_and(|ix| ix.projector().watches().contains(&fact_type))
+    }
+
+    /// Re-place `entities` in the spatial index from committed facts. The index is moved out
+    /// while the projector reads `self`, so the projector sees committed facts only — never the
+    /// half-updated index.
+    fn reproject(&mut self, entities: impl IntoIterator<Item = EntityId>) {
+        if let Some(mut index) = self.spatial.take() {
+            let projector = Arc::clone(index.projector());
+            for entity in entities {
+                index.update(entity, projector.place(self, entity));
+            }
+            self.spatial = Some(index);
+        }
+    }
+
+    /// Add one value at `key` — the shared insertion path of seeding and commit. Does not touch
+    /// the spatial index; callers re-place what they changed.
+    fn insert_value(&mut self, key: FactKey, fact: Fact) {
         let values = self.facts.entry(key).or_default();
         if values.insert(fact.value, fact.provenance).is_none() {
             // A genuinely new triple: fold it into the digest and the type index. Re-seeding
@@ -187,6 +240,14 @@ impl CommittedView for MemoryStore {
             .map(|entities| entities.iter().copied().collect())
             .unwrap_or_default()
     }
+
+    fn tick(&self) -> u64 {
+        self.tick
+    }
+
+    fn spatial(&self) -> Option<&dyn SpatialQuery> {
+        self.spatial.as_ref().map(|ix| ix as &dyn SpatialQuery)
+    }
 }
 
 impl RealityStore for MemoryStore {
@@ -207,16 +268,28 @@ impl RealityStore for MemoryStore {
     }
 
     fn apply(&mut self, batch: CommitBatch) {
+        // Entities whose watched facts this batch touches, re-placed once after the whole batch
+        // lands — so an entity whose three position axes all change is placed once, from its
+        // final facts.
+        let mut moved: BTreeSet<EntityId> = BTreeSet::new();
         for resolution in batch.resolutions {
+            let key = match &resolution {
+                Resolution::One { key, .. }
+                | Resolution::Many { key, .. }
+                | Resolution::Clear { key } => *key,
+            };
+            if self.watched(key.fact_type) {
+                moved.insert(key.entity);
+            }
             match resolution {
                 Resolution::One { key, fact } => {
                     self.clear_key(key);
-                    self.seed(key, fact);
+                    self.insert_value(key, fact);
                 }
                 Resolution::Many { key, facts } => {
                     self.clear_key(key);
                     for fact in facts {
-                        self.seed(key, fact);
+                        self.insert_value(key, fact);
                     }
                 }
                 Resolution::Clear { key } => {
@@ -224,6 +297,8 @@ impl RealityStore for MemoryStore {
                 }
             }
         }
+        self.tick = batch.tick;
+        self.reproject(moved);
     }
 
     fn state_hash(&self) -> StateHash {

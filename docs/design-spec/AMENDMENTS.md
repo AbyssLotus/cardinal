@@ -25,3 +25,22 @@ the shipped hourly ticks, temperature — an unbounded random walk — spread re
 at 15 °C to between −55 °C and +74 °C within a simulated year. A world that needs fine ticks
 (anything where people walk through rooms) could not keep its climate, and no world could keep
 it for long.
+
+---
+
+## A-2 — Spatial queries through a derived index (2026-10)
+
+**Edits:** Vol. V Ch. 2 §2.1 (spatial index under clause 5; conformance and no-opinions rules),
+§2.4 (common queries); Vol. III Ch. 1 §1.12 (Physical Reality's proximity queries).
+
+**Change.** The store may keep a spatial index, registered at bootstrap by Physical Reality
+as a placement rule (entity → frame + bounding box, from the entity's own facts) and
+maintained by `apply()`. The index answers candidate questions; Physical Reality answers
+exact ones. Indexed and scanned answers must be identical (conformance), and the index is
+never a second source of truth (no opinions; readers declare the watched facts).
+
+**Rationale.** Vol. V Ch. 2 invariant 8 made spatial queries contract surface but the
+contract offered only per-fact reads and a by-type roster, so "who is within 10 m" was a
+scan of everyone against everyone: 375 ms for 1,000 agents and 3.8 s for 3,000 (audit §4.2),
+growing with the square of the agent count. A world of people in rooms needs that question
+answered thousands of times a tick.

@@ -22,7 +22,7 @@ const AXES: [FactType; 3] = [POSITION_X, POSITION_Y, POSITION_Z];
 
 /// An entity's local position within its immediate container. A missing axis reads as 0 --
 /// the container's origin.
-fn local_position(view: &dyn CommittedView, entity: EntityId) -> [i64; 3] {
+pub fn local_position(view: &dyn CommittedView, entity: EntityId) -> [i64; 3] {
     let mut p = [0i64; 3];
     for (i, axis) in AXES.iter().enumerate() {
         p[i] = view
@@ -36,26 +36,34 @@ fn local_position(view: &dyn CommittedView, entity: EntityId) -> [i64; 3] {
 /// `entity`'s position expressed in `ancestor`'s coordinate frame: the sum of local positions
 /// from `entity` up to (but not including) `ancestor`. `None` if `ancestor` does not contain
 /// `entity`.
+///
+/// Walks the kernel's cycle-safe [`ancestry`], so a malformed containment loop ends the walk
+/// instead of hanging it (audit §7: the previous hand-rolled loop never returned when asked for
+/// an ancestor that was not on a cyclic chain).
 pub fn position_in(
     view: &dyn CommittedView,
     entity: EntityId,
     ancestor: EntityId,
 ) -> Option<[i64; 3]> {
+    let chain = ancestry(view, entity, CONTAINED_IN);
+    let stop = chain.iter().position(|e| *e == ancestor)?;
     let mut sum = [0i64; 3];
-    let mut here = entity;
-    loop {
-        if here == ancestor {
-            return Some(sum);
-        }
-        let local = local_position(view, here);
+    for &link in &chain[..stop] {
+        let local = local_position(view, link);
         for (s, l) in sum.iter_mut().zip(local) {
             *s = s.saturating_add(l);
         }
-        match view.read(FactKey::new(here, CONTAINED_IN)).map(|f| f.value) {
-            Some(Value::Entity(parent)) => here = parent,
-            _ => return None,
-        }
     }
+    Some(sum)
+}
+
+/// The outermost container of `entity` — the root of its containment hierarchy, whose frame
+/// every position in the hierarchy can be expressed in. An entity with no container is its
+/// own root.
+pub fn root_of(view: &dyn CommittedView, entity: EntityId) -> EntityId {
+    *ancestry(view, entity, CONTAINED_IN)
+        .last()
+        .expect("ancestry always includes the entity itself")
 }
 
 /// The displacement from `from` to `to`, expressed in the frame of their lowest common

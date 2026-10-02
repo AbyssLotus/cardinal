@@ -20,7 +20,9 @@
 //! owners in; [`tick`] runs the seven stages; [`hash`] is the determinism digest; [`rng`]
 //! the seeded streams; [`events`] the chronicle; [`identity`] permanent ids; [`time`] turns
 //! a world's clock rule into steps of simulated time (Vol. II Ch. 2, Amendment A-1); [`fixed`]
-//! is the deterministic integer arithmetic every domain shares (Vol. V Ch. 4 §4.1).
+//! is the deterministic integer arithmetic every domain shares (Vol. V Ch. 4 §4.1);
+//! [`spatial`] is the store's derived spatial index, filed by a placement rule the owner of
+//! space registers (Vol. V Ch. 2 §2.1, Amendment A-2).
 
 pub mod domain;
 pub mod events;
@@ -31,6 +33,7 @@ pub mod hierarchy;
 pub mod identity;
 pub mod proposal;
 pub mod rng;
+pub mod spatial;
 pub mod store;
 pub mod system;
 pub mod tick;

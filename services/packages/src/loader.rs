@@ -326,6 +326,15 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         }
     }
 
+    // 4. Install the spatial index (Vol. V Ch. 2 §2.1, Amendment A-2) from the placement rule
+    //    of the domain that owns space, now that initial reality is seeded: one full build,
+    //    after which every commit keeps it current.
+    for domain in &domains {
+        if let Some(projector) = domain.spatial_projector() {
+            store.install_spatial_index(projector);
+        }
+    }
+
     Ok(LoadedWorld {
         store,
         domains,

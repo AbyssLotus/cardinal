@@ -25,10 +25,15 @@
 //! hierarchy, an entity may belong to any number of overlapping, possibly discontiguous
 //! regions ([`schema::IN_REGION`], cardinality-many) -- a watershed, a climate zone, a fox's
 //! territory -- answered through [`regions`] ("what regions is this in", "what lies in this
-//! region", "do these two overlap").
+//! region", "do these two overlap"). Proximity (Amendment A-2): what a container holds, what
+//! lies within a distance, and the nearest few — answered through the store's spatial index
+//! when one is installed ([`index::PhysicalProjector`] is this domain's placement rule), and by
+//! scanning otherwise, with identical results ([`nearby`]).
 
 pub mod composition;
+pub mod index;
 pub mod materials;
+pub mod nearby;
 pub mod regions;
 pub mod schema;
 pub mod space;
@@ -37,9 +42,11 @@ pub mod systems;
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
 use kernel::fact::{Cardinality, FactType};
 use kernel::proposal::Change;
+use kernel::spatial::SpatialProjector;
 use kernel::system::System;
 use kernel::time::SimClock;
 use kernel::value::Value;
+use std::sync::Arc;
 
 /// The tunable rules the physical domain consumes, all sourced from the world package
 /// (Vol. IV Ch. 2 §2.2, invariant 5) — no climate, field, or wind number is hardcoded in
@@ -138,6 +145,12 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::MATERIAL_FLAMMABILITY
             || fact_type == schema::MATERIAL_CONDUCTIVITY
             || fact_type == schema::MATERIAL_TOXICITY
+    }
+
+    fn spatial_projector(&self) -> Option<Arc<dyn SpatialProjector>> {
+        // Space is Physical Reality's (Appendix A): this domain tells the store where things
+        // are, and the store keeps the index current (Amendment A-2).
+        Some(Arc::new(index::PhysicalProjector))
     }
 
     fn cardinality(&self, fact_type: FactType) -> Cardinality {
