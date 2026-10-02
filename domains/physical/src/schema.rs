@@ -10,9 +10,9 @@
 //! Both cardinalities are represented here. Cardinality-one facts (immediate containment,
 //! scalar fields) hold at most one value per entity; cardinality-many facts — a region's
 //! several neighbours in a topology ([`ADJACENT_TO`], §1.5) and the several portals a region
-//! hosts ([`HAS_PORTAL`], §1.5) — are set-valued, which the store and the owning
-//! [`crate::PhysicalDomain`]'s cardinality declaration support directly. A location's several
-//! overlapping regions (Vol. III Ch. 1 §1.7) will layer on the same set-valued foundation.
+//! hosts ([`HAS_PORTAL`], §1.5), and a location's several overlapping regions ([`IN_REGION`],
+//! §1.7) — are set-valued, which the store and the owning [`crate::PhysicalDomain`]'s
+//! cardinality declaration support directly.
 
 use kernel::fact::FactType;
 
@@ -23,6 +23,22 @@ use kernel::fact::FactType;
 /// containment (planet ⊃ continent ⊃ region ⊃ …) is walked by following this link upward;
 /// it is state, not immutable structure (§1.8, Dynamic Containment). Value is an entity ref.
 pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
+
+/// The regions an entity belongs to *beyond* its containment chain — its overlapping
+/// classifications (Vol. III Ch. 1 §1.7). A **cardinality-many** relationship: one farmhouse
+/// lies in a county (its container) and also in a watershed, a climate zone, and a fox's
+/// territory, none of which nest inside one another. Value is an entity ref to a region.
+///
+/// Membership means *lies wholly within*, and it is inherited: whatever an entity contains
+/// lies in that entity's regions too, and a region that is itself a member of a larger region
+/// passes that membership on (see [`crate::regions`]). Containment stays the single hierarchy
+/// that gives a location its coordinate frame (§1.8); this fact carries every other
+/// grouping, so "Cardinal intentionally avoids forcing locations into a single hierarchy"
+/// (§1.7) without a second frame to reconcile. A region need not be geometric or contiguous:
+/// an island nation is the islands that name it here (§1.7). Membership is state, not
+/// structure — a herd entering a territory is an Add, leaving it a Remove (§1.8, Dynamic
+/// Containment).
+pub const IN_REGION: FactType = FactType::new("physical.space.in_region");
 
 /// A location's elevation, as fixed-point centimetres above a world datum (Vol. III Ch. 1
 /// §1.3, elevation). May be negative (below the datum). A spatial property of place.

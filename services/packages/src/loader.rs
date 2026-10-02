@@ -25,7 +25,7 @@ use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use living::LivingDomain;
 use physical::schema::{
-    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, LEADS_TO, MADE_OF,
+    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, IN_REGION, LEADS_TO, MADE_OF,
     MATERIAL_CONDUCTIVITY, MATERIAL_DENSITY, MATERIAL_FLAMMABILITY, MATERIAL_HARDNESS,
     MATERIAL_THERMAL_CAPACITY, MATERIAL_TOXICITY, PORTAL_DANGER_OVERRIDE, POSITION_X, POSITION_Y,
     POSITION_Z, TEMPERATURE,
@@ -286,6 +286,17 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         store.seed(
             FactKey::new(EntityId::from_raw(link.object_id), MADE_OF),
             seeded(Value::Entity(EntityId::from_raw(link.material_id))),
+        );
+    }
+
+    // Seed overlapping region memberships (a cardinality-many Physical fact, Vol. III Ch. 1
+    // §1.7): each location is linked to every region it lies in beyond its container. The
+    // region entities need nothing else seeded -- a classification region is the places that
+    // name it, and with no temperature fact it is (correctly) not a place the weather runs on.
+    for m in &package.in_region {
+        store.seed(
+            FactKey::new(EntityId::from_raw(m.location_id), IN_REGION),
+            seeded(Value::Entity(EntityId::from_raw(m.region_id))),
         );
     }
 

@@ -19,6 +19,7 @@ use crate::schema::{
     MATERIAL_THERMAL_CAPACITY, MAX_DANGER, PERCENT_FULL, PORTAL_DANGER, PORTAL_DANGER_OVERRIDE,
     POSITION_Z, PRESSURE, TEMPERATURE, WIND_SPEED, WIND_TOWARD,
 };
+use crate::space::height_above_ground;
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::identity::EntityId;
 use kernel::proposal::{Change, Proposal};
@@ -550,33 +551,6 @@ impl System for WindSystem {
     }
 }
 
-/// The height of `entity` above the ground, in centimetres: the sum of local Z from the
-/// entity up through its containers (excluding the root frame, whose origin is the ground
-/// datum). A window on a stacked upper floor is high; a ground-floor door is at zero.
-fn absolute_height(view: &dyn CommittedView, entity: EntityId) -> i64 {
-    let mut total = 0i64;
-    let mut here = entity;
-    let mut guard = 0u32;
-    loop {
-        match view.read(FactKey::new(here, CONTAINED_IN)).map(|f| f.value) {
-            Some(Value::Entity(parent)) => {
-                total = total.saturating_add(
-                    view.read(FactKey::new(here, POSITION_Z))
-                        .and_then(|f| f.value.as_int())
-                        .unwrap_or(0),
-                );
-                here = parent;
-            }
-            _ => break,
-        }
-        guard += 1;
-        if guard > 1024 {
-            break;
-        }
-    }
-    total
-}
-
 /// Writes each portal's effective danger (Vol. III Ch. 1 §1.11). If the world pinned a fixed
 /// danger the system echoes it; otherwise it derives danger from the portal's height above
 /// the ground -- a fall -- leaving a slot for weather to raise it later. Enumerates every
@@ -625,7 +599,7 @@ impl System for PortalDanger {
                     Some(pinned) => pinned.clamp(0, MAX_DANGER),
                     // Derived: danger of the fall from this portal's height.
                     None => {
-                        let height = absolute_height(view, portal).max(0);
+                        let height = height_above_ground(view, portal).max(0);
                         let fall = height.saturating_mul(self.fall_danger_per_meter) / 100;
                         // TODO(weather): add a term from the host region's wind/precipitation.
                         fall.clamp(0, MAX_DANGER)

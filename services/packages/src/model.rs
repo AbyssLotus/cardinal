@@ -42,6 +42,21 @@ pub struct WorldPackage {
     /// Which materials each physical object is composed of (Vol. III Ch. 1 §1.9), seeded as a
     /// cardinality-many `made_of` fact — one entry per object/material link.
     pub made_of: Vec<MadeOfSpec>,
+    /// Overlapping region memberships beyond the containment hierarchy (Vol. III Ch. 1 §1.7),
+    /// seeded as a cardinality-many `in_region` fact — one entry per location/region link.
+    pub in_region: Vec<RegionMembershipSpec>,
+}
+
+/// A seeded region membership (Vol. III Ch. 1 §1.7): `location_id` lies within `region_id`,
+/// alongside — not instead of — its place in the containment hierarchy. One location may have
+/// many such links (a farmhouse in a watershed, a climate zone, and a territory at once). The
+/// region entity needs no facts of its own: a classification region is the places that name it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct RegionMembershipSpec {
+    /// The member location's (or region's) raw id.
+    pub location_id: u64,
+    /// The region it lies within (a region entity's raw id).
+    pub region_id: u64,
 }
 
 /// A property a material may expose (Vol. III Ch. 1 §1.9). Materials expose *characteristics*,

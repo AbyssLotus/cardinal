@@ -1,7 +1,8 @@
 //! Spatial queries over the containment hierarchy (Vol. III Ch. 1 §1.12, Querying Reality).
 //!
 //! Space is representation-independent (§1.4): a consumer asks a question -- how far apart,
-//! where relative to -- and gets an answer without depending on how space is stored. Here
+//! how high, where relative to, by which way -- and gets an answer without depending on how
+//! space is stored. Here
 //! positions are local coordinates within each entity's immediate container
 //! ([`crate::schema::POSITION_X`] etc.), composed up the containment hierarchy (via
 //! `kernel::hierarchy`) so any two loaded entities have a relative position in the frame of
@@ -11,11 +12,11 @@
 
 use crate::schema::{CONTAINED_IN, HAS_PORTAL, LEADS_TO, POSITION_X, POSITION_Y, POSITION_Z};
 use kernel::fact::{FactKey, FactType};
-use kernel::hierarchy::lowest_common_ancestor;
+use kernel::hierarchy::{ancestry, lowest_common_ancestor};
 use kernel::identity::EntityId;
 use kernel::system::CommittedView;
 use kernel::value::Value;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 const AXES: [FactType; 3] = [POSITION_X, POSITION_Y, POSITION_Z];
 
@@ -81,6 +82,29 @@ pub fn distance(view: &dyn CommittedView, from: EntityId, to: EntityId) -> Optio
     let d = relative_position(view, from, to)?;
     let sq = (d[0] as i128).pow(2) + (d[1] as i128).pow(2) + (d[2] as i128).pow(2);
     Some(isqrt(sq) as i64)
+}
+
+/// How far `entity` is above the ground, in centimetres (Vol. III Ch. 1 §1.6, "Above" /
+/// "Below"): the sum of local Z from the entity up through each of its containers, stopping
+/// short of the outermost one, whose origin is the ground datum. Someone standing on a
+/// second-storey floor stacked 3 m up a house reads 300; someone in a cellar sunk 3 m reads
+/// −300 (below ground). An entity with no container is the ground frame itself and reads 0.
+///
+/// This is height within the containment hierarchy, not terrain: [`crate::schema::ELEVATION`]
+/// says how high the ground itself stands above the world datum. Walks the chain with the
+/// kernel's cycle-safe [`ancestry`], so a malformed containment loop cannot hang the query.
+pub fn height_above_ground(view: &dyn CommittedView, entity: EntityId) -> i64 {
+    let chain = ancestry(view, entity, CONTAINED_IN);
+    // Every link except the last (the root, whose frame *is* the ground) contributes its local
+    // Z; a missing Z is 0, level with its container's floor.
+    chain[..chain.len() - 1]
+        .iter()
+        .map(|&e| {
+            view.read(FactKey::new(e, POSITION_Z))
+                .and_then(|f| f.value.as_int())
+                .unwrap_or(0)
+        })
+        .fold(0i64, i64::saturating_add)
 }
 
 /// Floor of the integer square root of a non-negative `i128`, by binary search.
@@ -167,4 +191,51 @@ pub fn reachable_regions(view: &dyn CommittedView, origin: EntityId) -> BTreeSet
 /// "Reachable"). `true` for a region and itself.
 pub fn can_reach(view: &dyn CommittedView, from: EntityId, to: EntityId) -> bool {
     reachable_regions(view, from).contains(&to)
+}
+
+/// The portals to step through, in order, to get from region `from` to region `to`
+/// (Vol. III Ch. 1 §1.6, "Reachable" -- and by which way). `Some(vec![])` when `from` is
+/// `to`; `None` when no chain of portals leads there (a sealed vault, or an upstairs window
+/// seen from the yard it only opens onto).
+///
+/// A breadth-first walk of the portal graph that remembers how each region was first reached,
+/// then reads the route back from `to`. It returns a route with the fewest steps; among
+/// equally short routes, the one through the lowest-numbered portals, because portals are
+/// visited in id order -- so the answer is deterministic (Vol. V Ch. 4 §4.1).
+///
+/// Fewest steps, not safest: from an upstairs room the shortest way out may be a window with
+/// a 4 m drop. Physical Reality reports the ways and their [`crate::schema::PORTAL_DANGER`];
+/// weighing one against the other is a decision, and decisions belong to the domains that
+/// make them (§1.3).
+pub fn route(view: &dyn CommittedView, from: EntityId, to: EntityId) -> Option<Vec<EntityId>> {
+    if from == to {
+        return Some(Vec::new());
+    }
+    // region -> (the region it was first reached from, the portal used)
+    let mut came_by: BTreeMap<EntityId, (EntityId, EntityId)> = BTreeMap::new();
+    let mut queue = VecDeque::from([from]);
+    while let Some(region) = queue.pop_front() {
+        for portal in portals_in(view, region) {
+            let Some(dest) = portal_destination(view, portal) else {
+                continue;
+            };
+            if dest == from || came_by.contains_key(&dest) {
+                continue;
+            }
+            came_by.insert(dest, (region, portal));
+            if dest == to {
+                let mut path = Vec::new();
+                let mut here = to;
+                while here != from {
+                    let (previous, via) = came_by[&here];
+                    path.push(via);
+                    here = previous;
+                }
+                path.reverse();
+                return Some(path);
+            }
+            queue.push_back(dest);
+        }
+    }
+    None
 }

@@ -8,7 +8,7 @@
 use crate::model::{
     AdjacencySpec, ContainmentSpec, ExposureSpec, LivingRules, MadeOfSpec, Manifest,
     MaterialProperty, MaterialSpec, OrganismSpec, PhysicalRules, PortalDangerSpec, PortalSpec,
-    PositionSpec, RegionSpec, WorldPackage,
+    PositionSpec, RegionMembershipSpec, RegionSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -48,7 +48,8 @@ impl fmt::Display for ParseError {
 /// (`region_id = temperature[, elevation]`), `[organisms]`
 /// (`organism_id = region_id, body_heat`), `[containment]` (`child_id = parent_id`),
 /// `[adjacency]`, `[exposure]`, `[positions]`, `[portals]`, `[portal_danger]`, `[materials]`
-/// (`material_id = property:value, …`), and `[made_of]` (`object_id = material_id[, …]`).
+/// (`material_id = property:value, …`), `[made_of]` (`object_id = material_id[, …]`), and
+/// `[in_region]` (`location_id = region_id[, …]`).
 /// Blank lines and `#` comments are ignored. A missing required field is an error — the
 /// loader never fabricates defaults (Vol. IV Ch. 2).
 pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
@@ -84,6 +85,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut portal_danger: Vec<PortalDangerSpec> = Vec::new();
     let mut materials: Vec<MaterialSpec> = Vec::new();
     let mut made_of: Vec<MadeOfSpec> = Vec::new();
+    let mut in_region: Vec<RegionMembershipSpec> = Vec::new();
 
     for (i, raw) in text.lines().enumerate() {
         let line_no = i + 1;
@@ -246,6 +248,25 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     });
                 }
             }
+            "in_region" => {
+                let location_id: u64 = parse_num(key, line_no)?;
+                for region in value.split(',') {
+                    let region_id: u64 = parse_num(region, line_no)?;
+                    // Lying within oneself says nothing and would only be a typo for another
+                    // id; refuse it here rather than seed a meaningless fact (the region queries
+                    // would tolerate it, but a package should not carry it).
+                    if region_id == location_id {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("entity {location_id} cannot be a region of itself"),
+                        ));
+                    }
+                    in_region.push(RegionMembershipSpec {
+                        location_id,
+                        region_id,
+                    });
+                }
+            }
             "" => {
                 return Err(ParseError::at(
                     line_no,
@@ -327,6 +348,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         portal_danger,
         materials,
         made_of,
+        in_region,
     })
 }
 
@@ -550,6 +572,40 @@ thermal_mass_reference = 1000
         assert_eq!(pkg.made_of.len(), 1);
         assert_eq!(pkg.made_of[0].object_id, 1);
         assert_eq!(pkg.made_of[0].material_id, 700);
+    }
+
+    #[test]
+    fn region_memberships_parse_one_link_per_region() {
+        let text = format!(
+            "{HEADER}\
+[in_region]
+3 = 900, 901     # the farmhouse lies in a climate zone and a watershed
+4 = 902
+"
+        );
+        let pkg = parse_world(&text).expect("parses");
+        let links: Vec<(u64, u64)> = pkg
+            .in_region
+            .iter()
+            .map(|m| (m.location_id, m.region_id))
+            .collect();
+        assert_eq!(links, vec![(3, 900), (3, 901), (4, 902)]);
+    }
+
+    #[test]
+    fn a_location_cannot_be_its_own_region() {
+        let text = format!(
+            "{HEADER}\
+[in_region]
+5 = 900, 5
+"
+        );
+        let err = parse_world(&text).expect_err("must reject self-membership");
+        assert!(
+            err.reason.contains("region of itself"),
+            "got: {}",
+            err.reason
+        );
     }
 
     #[test]

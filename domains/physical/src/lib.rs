@@ -21,11 +21,15 @@
 //! gradient across adjacent regions. Materials (§1.9): what objects are *made of*
 //! ([`schema::MADE_OF`], a cardinality-many composition) and the properties their materials
 //! expose ([`schema::MATERIAL_HARDNESS`], flammability, density, …), queried through
-//! [`materials`] by property, never by name. Overlapping regions (§1.7) remain to build on
-//! the multi-value foundation.
+//! [`materials`] by property, never by name. Regions (§1.7): beyond the one containment
+//! hierarchy, an entity may belong to any number of overlapping, possibly discontiguous
+//! regions ([`schema::IN_REGION`], cardinality-many) -- a watershed, a climate zone, a fox's
+//! territory -- answered through [`regions`] ("what regions is this in", "what lies in this
+//! region", "do these two overlap").
 
 pub mod composition;
 pub mod materials;
+pub mod regions;
 pub mod schema;
 pub mod space;
 pub mod systems;
@@ -110,6 +114,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::POSITION_Y
             || fact_type == schema::POSITION_Z
             || fact_type == schema::CONTAINED_IN
+            || fact_type == schema::IN_REGION
             || fact_type == schema::ADJACENT_TO
             || fact_type == schema::LEADS_TO
             || fact_type == schema::HAS_PORTAL
@@ -126,9 +131,11 @@ impl Domain for PhysicalDomain {
 
     fn cardinality(&self, fact_type: FactType) -> Cardinality {
         // Set-valued relations: a region has several neighbours and may host several portals
-        // (Vol. III Ch. 1 §1.5); an object may be a composite of several materials (§1.9).
+        // (Vol. III Ch. 1 §1.5); a location may lie in several overlapping regions (§1.7); an
+        // object may be a composite of several materials (§1.9).
         if fact_type == schema::ADJACENT_TO
             || fact_type == schema::HAS_PORTAL
+            || fact_type == schema::IN_REGION
             || fact_type == schema::MADE_OF
         {
             Cardinality::Many
@@ -251,11 +258,13 @@ impl Domain for PhysicalDomain {
 
     fn validate_many(&self, fact_type: FactType, values: &[Value]) -> Result<(), ValidationError> {
         // The set-valued relations are graphs over entities: every member of an adjacency or
-        // portal-host set (Vol. III Ch. 1 §1.5), or a material-composition set (§1.9), must be
-        // an entity reference, never a scalar. This is the coherence check the cardinality-one
-        // path gets from `compose`/`validate`, applied to the whole resolved set.
+        // portal-host set (Vol. III Ch. 1 §1.5), a region-membership set (§1.7), or a
+        // material-composition set (§1.9), must be an entity reference, never a scalar. This
+        // is the coherence check the cardinality-one path gets from `compose`/`validate`,
+        // applied to the whole resolved set.
         if fact_type == schema::ADJACENT_TO
             || fact_type == schema::HAS_PORTAL
+            || fact_type == schema::IN_REGION
             || fact_type == schema::MADE_OF
         {
             for v in values {
