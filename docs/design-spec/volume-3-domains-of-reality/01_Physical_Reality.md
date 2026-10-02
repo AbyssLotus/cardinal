@@ -746,6 +746,22 @@ Each contributes its own facts.
 
 Emergent behavior arises from their composition.
 
+## Constraints Made Concrete
+
+*Amendment A-4 (2026-10), see [AMENDMENTS.md](../AMENDMENTS.md).*
+
+Physical Reality's own constraints are facts about bodies and places, and every consumer asks about them the same way:
+
+- **Solid** bodies cannot be passed through or stood inside; **opaque** ones block sight. A glass pane is solid and not opaque; fog is a field, not a body.
+- An **enclosed** region is walled: movement and sight cross its boundary only through its portals. A field within a farm is not enclosed; a room is.
+- A portal may be **closed**. A closed portal lets nothing through; it lets sight through only if it is not opaque — a shut window can be seen through, a shut door cannot. An opening's two faces are **linked**, so whatever passes through one emerges at the other.
+- A body **fits** through a portal only if it is no wider and no taller than the opening.
+- **Ground** is where a place's floor is: a terrain surface where the place declares one (a heightfield in its own frame), and its frame's level floor where it does not. A body is **supported** by the ground or by the top of a solid body beneath it within a step's height.
+- A **mobile** body that is not supported falls, under the world's gravity, until it is. (Falling is kinematic — a body drops to its support in the time gravity takes — not a rigid-body simulation; Physics remains a consumer, §1.1.)
+- **Line of sight** between two bodies holds when the straight line from the observer's eye to the other's centre crosses no opaque body, no rising ground, and no enclosed boundary except through an opening that lets sight through.
+
+**Travel** obeys all of these. A body given somewhere to go — a place to enter or a thing to reach — is moved by Physical Reality: from region to region through openings it fits and that are open, and within a region around whatever is solid, at the speed it was asked to travel, one straight segment at a time. Two bodies cannot squeeze through one opening on the same tick; the one with the lower id goes first. When no way exists, the travel is reported blocked — a fact a decider can read and reconsider — rather than silently abandoned or impossibly completed.
+
 ---
 
 # Designer Note

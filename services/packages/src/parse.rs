@@ -6,9 +6,10 @@
 //! pure data — this reads declarations, it never executes them (Vol. IV Ch. 1, invariant 6).
 
 use crate::model::{
-    AdjacencySpec, BodySpec, ClockRules, ContainmentSpec, ExposureSpec, FacingSpec, LivingRules,
-    MadeOfSpec, Manifest, MaterialProperty, MaterialSpec, MotionSpec, OrganismSpec, PhysicalRules,
-    PortalDangerSpec, PortalSpec, PositionSpec, RegionMembershipSpec, RegionSpec, WorldPackage,
+    AdjacencySpec, BodySpec, ClockRules, ContainmentSpec, ExposureSpec, FacingSpec, Flag, FlagSpec,
+    LivingRules, MadeOfSpec, Manifest, MaterialProperty, MaterialSpec, MotionSpec, OrganismSpec,
+    PhysicalRules, PortalDangerSpec, PortalSpec, PositionSpec, RegionMembershipSpec, RegionSpec,
+    TerrainSpec, TravelSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -52,7 +53,10 @@ impl fmt::Display for ParseError {
 /// (`material_id = property:value, …`), `[made_of]` (`object_id = material_id[, …]`),
 /// `[in_region]` (`location_id = region_id[, …]`), `[bodies]`
 /// (`entity_id = half_width, half_depth, height`), `[facing]` (`entity_id = degrees`), and
-/// `[motion]` (`entity_id = x, y, z, seconds`).
+/// `[motion]` (`entity_id = x, y, z, seconds`), `[flags]` (`entity_id = flag[, …]`, flags
+/// `solid`, `opaque`, `enclosed`, `mobile`, `closed`), `[portal_pairs]` (`portal = portal`),
+/// `[terrain]` (`region_id = spacing, columns, h h h …` row-major), and `[travel]`
+/// (`entity_id = target_id, speed`).
 /// Blank lines and `#` comments are ignored. A missing required field is an error — the
 /// loader never fabricates defaults (Vol. IV Ch. 2).
 pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
@@ -76,6 +80,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut wind_gradient_divisor: Option<i64> = None;
     let mut fall_danger_per_meter: Option<i64> = None;
     let mut thermal_mass_reference: Option<i64> = None;
+    let mut gravity_cm_s2: Option<i64> = None;
+    let mut step_height_cm: Option<i64> = None;
+    let mut max_slope_percent: Option<i64> = None;
+    let mut nav_cell_cm: Option<i64> = None;
     let mut metabolism_step_seconds: Option<u64> = None;
     let mut set_point: Option<i64> = None;
     let mut warm_response_seconds: Option<u64> = None;
@@ -94,6 +102,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut bodies: Vec<BodySpec> = Vec::new();
     let mut facing: Vec<FacingSpec> = Vec::new();
     let mut motion: Vec<MotionSpec> = Vec::new();
+    let mut flags: Vec<FlagSpec> = Vec::new();
+    let mut portal_pairs: Vec<(u64, u64)> = Vec::new();
+    let mut terrain: Vec<TerrainSpec> = Vec::new();
+    let mut travel: Vec<TravelSpec> = Vec::new();
 
     for (i, raw) in text.lines().enumerate() {
         let line_no = i + 1;
@@ -194,6 +206,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "thermal_mass_reference" => {
                     thermal_mass_reference = Some(parse_num(value, line_no)?)
                 }
+                "gravity_cm_s2" => gravity_cm_s2 = Some(parse_num(value, line_no)?),
+                "step_height_cm" => step_height_cm = Some(parse_num(value, line_no)?),
+                "max_slope_percent" => max_slope_percent = Some(parse_num(value, line_no)?),
+                "nav_cell_cm" => nav_cell_cm = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -343,6 +359,85 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     seconds: seconds as u64,
                 });
             }
+            "flags" => {
+                let entity_id: u64 = parse_num(key, line_no)?;
+                let mut list = Vec::new();
+                for name in value.split(',') {
+                    list.push(match name.trim() {
+                        "solid" => Flag::Solid,
+                        "opaque" => Flag::Opaque,
+                        "enclosed" => Flag::Enclosed,
+                        "mobile" => Flag::Mobile,
+                        "closed" => Flag::Closed,
+                        other => {
+                            return Err(ParseError::at(
+                                line_no,
+                                format!(
+                                "unknown flag {other:?} (solid, opaque, enclosed, mobile, closed)"
+                            ),
+                            ))
+                        }
+                    });
+                }
+                flags.push(FlagSpec {
+                    entity_id,
+                    flags: list,
+                });
+            }
+            "portal_pairs" => {
+                let a: u64 = parse_num(key, line_no)?;
+                let b: u64 = parse_num(value, line_no)?;
+                portal_pairs.push((a, b));
+            }
+            "terrain" => {
+                let region_id: u64 = parse_num(key, line_no)?;
+                let mut parts = value.splitn(3, ',');
+                let mut next = |what: &str| {
+                    parts.next().ok_or_else(|| {
+                        ParseError::at(
+                            line_no,
+                            format!("expected `spacing, columns, heights…` ({what})"),
+                        )
+                    })
+                };
+                let spacing: i64 = parse_num(next("spacing")?, line_no)?;
+                let columns: usize = parse_num(next("columns")?, line_no)?;
+                let heights = next("heights")?
+                    .split_whitespace()
+                    .map(|h| parse_num(h, line_no))
+                    .collect::<Result<Vec<i64>, _>>()?;
+                if spacing <= 0
+                    || columns == 0
+                    || heights.is_empty()
+                    || heights.len() % columns != 0
+                {
+                    return Err(ParseError::at(
+                        line_no,
+                        "terrain needs a positive spacing and whole rows of heights",
+                    ));
+                }
+                terrain.push(TerrainSpec {
+                    region_id,
+                    spacing,
+                    columns,
+                    heights,
+                });
+            }
+            "travel" => {
+                let entity_id: u64 = parse_num(key, line_no)?;
+                let [target, speed_cm_s] = parse_ints::<2>(value, line_no, "target, speed")?;
+                if target < 0 || speed_cm_s <= 0 {
+                    return Err(ParseError::at(
+                        line_no,
+                        "travel needs a target id and a positive speed",
+                    ));
+                }
+                travel.push(TravelSpec {
+                    entity_id,
+                    target: target as u64,
+                    speed_cm_s,
+                });
+            }
             "" => {
                 return Err(ParseError::at(
                     line_no,
@@ -403,6 +498,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             thermal_mass_reference,
             "rules.physical.thermal_mass_reference",
         )?,
+        gravity_cm_s2: require(gravity_cm_s2, "rules.physical.gravity_cm_s2")?,
+        step_height_cm: require(step_height_cm, "rules.physical.step_height_cm")?,
+        max_slope_percent: require(max_slope_percent, "rules.physical.max_slope_percent")?,
+        nav_cell_cm: require(nav_cell_cm, "rules.physical.nav_cell_cm")?,
     };
     let living_rules = match (
         metabolism_step_seconds,
@@ -447,6 +546,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         bodies,
         facing,
         motion,
+        flags,
+        portal_pairs,
+        terrain,
+        travel,
     })
 }
 
@@ -672,7 +775,7 @@ fn require<T>(opt: Option<T>, what: &str) -> Result<T, ParseError> {
 #[cfg(test)]
 mod tests {
     use super::parse_world;
-    use crate::model::MaterialProperty;
+    use crate::model::{Flag, MaterialProperty};
 
     const HEADER: &str = "\
 [manifest]
@@ -697,6 +800,10 @@ pressure_variability = 60
 wind_gradient_divisor = 10
 fall_danger_per_meter = 1500
 thermal_mass_reference = 1000
+gravity_cm_s2 = 981
+step_height_cm = 40
+max_slope_percent = 100
+nav_cell_cm = 50
 [regions]
 1 = 1500
 ";
@@ -831,5 +938,35 @@ thermal_mass_reference = 1000
         }
         let neg = format!("{HEADER}[bodies]\n10 = -1, 1, 1\n");
         assert!(parse_world(&neg).is_err(), "negative size");
+    }
+
+    #[test]
+    fn constraints_terrain_and_travel_parse() {
+        let text = format!(
+            "{HEADER}\
+[flags]
+5 = enclosed
+30 = solid, opaque
+1000 = closed, opaque
+10 = mobile
+[portal_pairs]
+1000 = 1001
+[terrain]
+1 = 500, 3, 0 10 20  5 15 25
+[travel]
+10 = 2, 140
+"
+        );
+        let pkg = parse_world(&text).expect("parses");
+        assert_eq!(pkg.flags.len(), 4);
+        assert_eq!(pkg.flags[1].flags, vec![Flag::Solid, Flag::Opaque]);
+        assert_eq!(pkg.portal_pairs, vec![(1000, 1001)]);
+        assert_eq!(pkg.terrain[0].heights, vec![0, 10, 20, 5, 15, 25]);
+        assert_eq!(pkg.terrain[0].columns, 3);
+        assert_eq!(pkg.travel[0].target, 2);
+        let ragged = format!("{HEADER}[terrain]\n1 = 500, 3, 0 10 20 5\n");
+        assert!(parse_world(&ragged).is_err(), "rows must be whole");
+        let unknown = format!("{HEADER}[flags]\n1 = sticky\n");
+        assert!(parse_world(&unknown).is_err());
     }
 }

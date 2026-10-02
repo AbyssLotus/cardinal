@@ -110,6 +110,28 @@ pub fn position_in(
     Some(lift(local_position(view, entity), &frames))
 }
 
+/// The inverse of [`position_in`] for a point: express `p`, given in `ancestor`'s frame, in the
+/// frame of `frame` (which `ancestor` contains), stepping down through every container between —
+/// shifting by each one's position and turning back by its heading. `None` if `ancestor` does
+/// not contain `frame`. Rounds to the centimetre at each turned level, like [`lift`].
+pub fn lower(
+    view: &dyn CommittedView,
+    p: [i64; 3],
+    frame: EntityId,
+    ancestor: EntityId,
+) -> Option<[i64; 3]> {
+    let chain = ancestry(view, frame, CONTAINED_IN);
+    let stop = chain.iter().position(|e| *e == ancestor)?;
+    let mut p = p;
+    // chain[..stop] runs from `frame` outward; descend from the outermost of them inward.
+    for &f in chain[..stop].iter().rev() {
+        let origin = local_position(view, f);
+        let shifted = [p[0] - origin[0], p[1] - origin[1], p[2] - origin[2]];
+        p = unrotate(heading(view, f), shifted);
+    }
+    Some(p)
+}
+
 /// The outermost container of `entity` — the root of its containment hierarchy, whose frame
 /// every position in the hierarchy can be expressed in. An entity with no container is its
 /// own root.
@@ -277,6 +299,18 @@ pub fn can_reach(view: &dyn CommittedView, from: EntityId, to: EntityId) -> bool
 /// weighing one against the other is a decision, and decisions belong to the domains that
 /// make them (§1.3).
 pub fn route(view: &dyn CommittedView, from: EntityId, to: EntityId) -> Option<Vec<EntityId>> {
+    route_where(view, from, to, |_| true)
+}
+
+/// As [`route`], through only the portals `usable` accepts — open ones, ones a given body fits
+/// through (Amendment A-4). The same breadth-first walk and the same lowest-id tie-break, so the
+/// answer is as deterministic as [`route`]'s.
+pub fn route_where(
+    view: &dyn CommittedView,
+    from: EntityId,
+    to: EntityId,
+    usable: impl Fn(EntityId) -> bool,
+) -> Option<Vec<EntityId>> {
     if from == to {
         return Some(Vec::new());
     }
@@ -285,6 +319,9 @@ pub fn route(view: &dyn CommittedView, from: EntityId, to: EntityId) -> Option<V
     let mut queue = VecDeque::from([from]);
     while let Some(region) = queue.pop_front() {
         for portal in portals_in(view, region) {
+            if !usable(portal) {
+                continue;
+            }
             let Some(dest) = portal_destination(view, portal) else {
                 continue;
             };

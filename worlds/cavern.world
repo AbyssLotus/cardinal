@@ -28,6 +28,10 @@ pressure_variability = 60               # typical departure: 6 hPa
 wind_gradient_divisor = 10
 fall_danger_per_meter = 1500        # danger points per metre of fall height
 thermal_mass_reference = 1500       # material heat capacity (J/kg-K) that halves the swing
+gravity_cm_s2 = 981                 # 9.81 m/s2
+step_height_cm = 40                 # a stair riser; anything taller is walked around
+max_slope_percent = 100             # 45 degrees: the steepest ground walked over
+nav_cell_cm = 50                    # how finely a walker finds its way around obstacles
 
 [regions]
 # region_id = temperature[, elevation]

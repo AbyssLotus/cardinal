@@ -42,8 +42,12 @@ pub mod motion;
 pub mod nearby;
 pub mod regions;
 pub mod schema;
+pub mod shape;
+pub mod sight;
 pub mod space;
 pub mod systems;
+pub mod terrain;
+pub mod travel;
 
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
 use kernel::fact::{Cardinality, FactType};
@@ -96,6 +100,29 @@ pub struct PhysicalConfig {
     /// (Vol. III Ch. 1 §1.9). Larger means thermal mass matters less; a region built of no
     /// thermal-mass material is undamped, exactly as before materials existed.
     pub thermal_mass_reference: i64,
+    /// Gravitational acceleration, in centimetres per second squared (Amendment A-4).
+    pub gravity_cm_s2: i64,
+    /// The highest a body steps up without climbing, in centimetres: a body stands on a solid
+    /// top no higher than this above its base, and walks around anything taller.
+    pub step_height_cm: i64,
+    /// The steepest ground a body walks over, as a percentage grade (100 is 45°).
+    pub max_slope_percent: i64,
+    /// The cell size of a travel planning grid, in centimetres — how finely a walker finds its
+    /// way around obstacles.
+    pub nav_cell_cm: i64,
+}
+
+impl PhysicalConfig {
+    /// The movement rules gravity and travel share, drawn from this configuration.
+    pub const fn move_rules(&self) -> travel::MoveRules {
+        travel::MoveRules {
+            clock: self.clock,
+            gravity_cm_s2: self.gravity_cm_s2,
+            step_height_cm: self.step_height_cm,
+            max_slope_percent: self.max_slope_percent,
+            nav_cell_cm: self.nav_cell_cm,
+        }
+    }
 }
 
 /// The Physical Reality domain, plugged into the kernel (Appendix A owner of the stage).
@@ -140,6 +167,18 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::MOTION_TARGET
             || fact_type == schema::MOTION_START
             || fact_type == schema::MOTION_END
+            || fact_type == schema::SOLID
+            || fact_type == schema::OPAQUE
+            || fact_type == schema::ENCLOSED
+            || fact_type == schema::PORTAL_OPEN
+            || fact_type == schema::PORTAL_FAR_SIDE
+            || fact_type == schema::MOBILE
+            || fact_type == schema::TERRAIN_SPACING
+            || fact_type == schema::TERRAIN_SAMPLE
+            || fact_type == schema::TRAVEL_TO
+            || fact_type == schema::TRAVEL_SPEED
+            || fact_type == schema::TRAVEL_BLOCKED
+            || fact_type == schema::FALL_HEIGHT
             || fact_type == schema::CONTAINED_IN
             || fact_type == schema::IN_REGION
             || fact_type == schema::ADJACENT_TO
@@ -170,6 +209,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::HAS_PORTAL
             || fact_type == schema::IN_REGION
             || fact_type == schema::MADE_OF
+            || fact_type == schema::TERRAIN_SAMPLE
         {
             Cardinality::Many
         } else {
@@ -228,6 +268,9 @@ impl Domain for PhysicalDomain {
             Box::new(systems::PortalDanger::new(c.fall_danger_per_meter)),
             // Closes finished motion segments: one write per arrival (Amendment A-3).
             Box::new(motion::Settle),
+            // Drops what nothing holds up, and carries out travel intents (Amendment A-4).
+            Box::new(travel::Gravity::new(c.move_rules())),
+            Box::new(travel::Travel::new(c.move_rules())),
         ]
     }
 
@@ -242,8 +285,21 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::HUMIDITY_ANOMALY
             || fact_type == schema::PRESSURE_ANOMALY
             || fact_type == schema::ELEVATION
+            || fact_type == schema::FALL_HEIGHT
         {
             composition::compose_additive(current, changes)
+        } else if fact_type == schema::SOLID
+            || fact_type == schema::OPAQUE
+            || fact_type == schema::ENCLOSED
+            || fact_type == schema::PORTAL_OPEN
+            || fact_type == schema::MOBILE
+            || fact_type == schema::TRAVEL_BLOCKED
+        {
+            composition::compose_bool(current, changes)
+        } else if fact_type == schema::TERRAIN_SPACING {
+            composition::compose_bounded(current, changes, 1, schema::MAX_SIZE)
+        } else if fact_type == schema::TRAVEL_SPEED {
+            composition::compose_bounded(current, changes, 0, schema::MAX_SPEED)
         } else if fact_type == schema::MOTION_TARGET
             || fact_type == schema::MOTION_START
             || fact_type == schema::MOTION_END
@@ -283,6 +339,8 @@ impl Domain for PhysicalDomain {
         } else if fact_type == schema::CONTAINED_IN
             || fact_type == schema::WIND_TOWARD
             || fact_type == schema::LEADS_TO
+            || fact_type == schema::PORTAL_FAR_SIDE
+            || fact_type == schema::TRAVEL_TO
         {
             composition::compose_entity_ref(current, changes)
         } else {
@@ -325,6 +383,8 @@ impl Domain for PhysicalDomain {
         } else if fact_type == schema::CONTAINED_IN
             || fact_type == schema::WIND_TOWARD
             || fact_type == schema::LEADS_TO
+            || fact_type == schema::PORTAL_FAR_SIDE
+            || fact_type == schema::TRAVEL_TO
         {
             if let Resolved::Write(v) = value {
                 if !matches!(v, Value::Entity(_)) {
@@ -352,6 +412,26 @@ impl Domain for PhysicalDomain {
                 if !matches!(v, Value::Entity(_)) {
                     return Err(ValidationError::new(
                         "a relation set may hold only entity references",
+                    ));
+                }
+            }
+        }
+        // A heightfield is a set of [column, row, height] samples; a grid has no negative
+        // columns or rows, and one place holds one height (Amendment A-4).
+        if fact_type == schema::TERRAIN_SAMPLE {
+            let mut cells = std::collections::BTreeSet::new();
+            for v in values {
+                let Some([c, r, _]) = v.as_vec3() else {
+                    return Err(ValidationError::new(
+                        "a terrain sample is [column, row, height]",
+                    ));
+                };
+                if c < 0 || r < 0 {
+                    return Err(ValidationError::new("terrain columns and rows start at 0"));
+                }
+                if !cells.insert((c, r)) {
+                    return Err(ValidationError::new(
+                        "two terrain heights for one grid point",
                     ));
                 }
             }

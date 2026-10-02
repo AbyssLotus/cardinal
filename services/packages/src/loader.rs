@@ -12,7 +12,7 @@
 //! store by their published ids, and the loader simply enables both and seeds their facts,
 //! including the physical containment links that place organisms in regions.
 
-use crate::model::{MaterialProperty, WorldPackage};
+use crate::model::{Flag, MaterialProperty, WorldPackage};
 use crate::version::Version;
 use kernel::domain::Domain;
 use kernel::events::ChronicleEntry;
@@ -26,10 +26,11 @@ use kernel::value::Value;
 use living::schema::BODY_HEAT;
 use living::{LivingConfig, LivingDomain};
 use physical::schema::{
-    ADJACENT_TO, BODY_SIZE, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, HEADING, IN_REGION,
-    LEADS_TO, MADE_OF, MATERIAL_CONDUCTIVITY, MATERIAL_DENSITY, MATERIAL_FLAMMABILITY,
-    MATERIAL_HARDNESS, MATERIAL_THERMAL_CAPACITY, MATERIAL_TOXICITY, MOTION_END, MOTION_START,
-    MOTION_TARGET, PORTAL_DANGER_OVERRIDE, POSITION, TEMPERATURE,
+    ADJACENT_TO, BODY_SIZE, CONTAINED_IN, ELEVATION, ENCLOSED, EXPOSURE, HAS_PORTAL, HEADING,
+    IN_REGION, LEADS_TO, MADE_OF, MATERIAL_CONDUCTIVITY, MATERIAL_DENSITY, MATERIAL_FLAMMABILITY,
+    MATERIAL_HARDNESS, MATERIAL_THERMAL_CAPACITY, MATERIAL_TOXICITY, MOBILE, MOTION_END,
+    MOTION_START, MOTION_TARGET, OPAQUE, PORTAL_DANGER_OVERRIDE, PORTAL_FAR_SIDE, PORTAL_OPEN,
+    POSITION, SOLID, TEMPERATURE, TERRAIN_SAMPLE, TERRAIN_SPACING, TRAVEL_SPEED, TRAVEL_TO,
 };
 use physical::{PhysicalConfig, PhysicalDomain};
 use std::fmt;
@@ -179,6 +180,10 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         wind_gradient_divisor: r.wind_gradient_divisor,
         fall_danger_per_meter: r.fall_danger_per_meter,
         thermal_mass_reference: r.thermal_mass_reference,
+        gravity_cm_s2: r.gravity_cm_s2,
+        step_height_cm: r.step_height_cm,
+        max_slope_percent: r.max_slope_percent,
+        nav_cell_cm: r.nav_cell_cm,
     };
     let physical = PhysicalDomain::new(config);
     systems.extend(physical.systems());
@@ -319,6 +324,52 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         store.seed(
             FactKey::new(EntityId::from_raw(link.object_id), MADE_OF),
             seeded(Value::Entity(EntityId::from_raw(link.material_id))),
+        );
+    }
+
+    // Seed constraint flags, linked opening faces, terrain, and travel intents (Physical facts,
+    // Amendment A-4; Ruling 13).
+    for spec in &package.flags {
+        let e = EntityId::from_raw(spec.entity_id);
+        for flag in &spec.flags {
+            let (fact, value) = match flag {
+                Flag::Solid => (SOLID, true),
+                Flag::Opaque => (OPAQUE, true),
+                Flag::Enclosed => (ENCLOSED, true),
+                Flag::Mobile => (MOBILE, true),
+                Flag::Closed => (PORTAL_OPEN, false),
+            };
+            store.seed(FactKey::new(e, fact), seeded(Value::Bool(value)));
+        }
+    }
+    for &(a, b) in &package.portal_pairs {
+        let (a, b) = (EntityId::from_raw(a), EntityId::from_raw(b));
+        store.seed(FactKey::new(a, PORTAL_FAR_SIDE), seeded(Value::Entity(b)));
+        store.seed(FactKey::new(b, PORTAL_FAR_SIDE), seeded(Value::Entity(a)));
+    }
+    for t in &package.terrain {
+        let region = EntityId::from_raw(t.region_id);
+        store.seed(
+            FactKey::new(region, TERRAIN_SPACING),
+            seeded(Value::Int(t.spacing)),
+        );
+        for (i, h) in t.heights.iter().enumerate() {
+            let (column, row) = ((i % t.columns) as i64, (i / t.columns) as i64);
+            store.seed(
+                FactKey::new(region, TERRAIN_SAMPLE),
+                seeded(Value::Vec3([column, row, *h])),
+            );
+        }
+    }
+    for t in &package.travel {
+        let e = EntityId::from_raw(t.entity_id);
+        store.seed(
+            FactKey::new(e, TRAVEL_TO),
+            seeded(Value::Entity(EntityId::from_raw(t.target))),
+        );
+        store.seed(
+            FactKey::new(e, TRAVEL_SPEED),
+            seeded(Value::Int(t.speed_cm_s)),
         );
     }
 

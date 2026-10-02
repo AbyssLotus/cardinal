@@ -38,6 +38,10 @@ fn config() -> PhysicalConfig {
         // The swing halves at capacity == reference; stone's 3000 is 3x this, so the heavy
         // region keeps only reference/(reference+capacity) = 1000/4000 = 1/4 of the swing.
         thermal_mass_reference: 1000,
+        gravity_cm_s2: 981,
+        step_height_cm: 40,
+        max_slope_percent: 100,
+        nav_cell_cm: 50,
     }
 }
 

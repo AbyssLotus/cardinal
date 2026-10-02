@@ -241,6 +241,16 @@ impl CommittedView for MemoryStore {
             .unwrap_or_default()
     }
 
+    fn read_range(&self, key: FactKey, lo: &Value, hi: &Value) -> Vec<Fact> {
+        if lo > hi {
+            return Vec::new();
+        }
+        self.facts
+            .get(&key)
+            .map(|m| m.range(*lo..=*hi).map(|(v, p)| Fact::new(*v, *p)).collect())
+            .unwrap_or_default()
+    }
+
     fn tick(&self) -> u64 {
         self.tick
     }
@@ -389,6 +399,24 @@ mod tests {
         });
         store.apply(batch);
         assert_eq!(store.entities_with(HEAT), vec![e2]);
+    }
+
+    #[test]
+    fn read_range_returns_the_slice_in_order() {
+        let e1 = EntityId::from_raw(1);
+        let mut store = MemoryStore::new();
+        for v in [5, 1, 9, 3, 7] {
+            store.seed(FactKey::new(e1, NEIGHBOUR), fact(v));
+        }
+        let got: Vec<i64> = store
+            .read_range(FactKey::new(e1, NEIGHBOUR), &Value::Int(3), &Value::Int(7))
+            .into_iter()
+            .map(|f| f.value.as_int().unwrap())
+            .collect();
+        assert_eq!(got, vec![3, 5, 7]);
+        assert!(store
+            .read_range(FactKey::new(e1, NEIGHBOUR), &Value::Int(8), &Value::Int(2))
+            .is_empty());
     }
 
     #[test]

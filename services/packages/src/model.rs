@@ -53,6 +53,64 @@ pub struct WorldPackage {
     pub facing: Vec<FacingSpec>,
     /// Motion already under way when the world begins (Amendment A-3).
     pub motion: Vec<MotionSpec>,
+    /// Per-entity constraint flags (Amendment A-4).
+    pub flags: Vec<FlagSpec>,
+    /// Linked faces of openings (Amendment A-4), each seeded in both directions.
+    pub portal_pairs: Vec<(u64, u64)>,
+    /// Terrain heightfields (Amendment A-4).
+    pub terrain: Vec<TerrainSpec>,
+    /// Travel intents under way when the world begins (Ruling 13).
+    pub travel: Vec<TravelSpec>,
+}
+
+/// A constraint flag a world may set on an entity (Amendment A-4).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Flag {
+    /// Nothing passes through it.
+    Solid,
+    /// Blocks sight (on a portal: when closed).
+    Opaque,
+    /// A walled region, crossed only through its portals.
+    Enclosed,
+    /// A free body: falls when unsupported, can travel.
+    Mobile,
+    /// A portal that starts closed.
+    Closed,
+}
+
+/// The flags one entity carries.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct FlagSpec {
+    /// The entity's raw id.
+    pub entity_id: u64,
+    /// Its flags, as declared.
+    pub flags: Vec<Flag>,
+}
+
+/// A region's terrain (Amendment A-4): `heights` row by row, `columns` to a row, samples
+/// `spacing` centimetres apart in the region's frame, sample `[0, 0]` at its origin.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TerrainSpec {
+    /// The region's raw id.
+    pub region_id: u64,
+    /// Distance between neighbouring samples, in centimetres.
+    pub spacing: i64,
+    /// Samples per row.
+    pub columns: usize,
+    /// Heights in centimetres, row-major.
+    pub heights: Vec<i64>,
+}
+
+/// A travel intent under way at the world's start (Ruling 13): the body is heading for
+/// `target` at `speed_cm_s`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct TravelSpec {
+    /// The traveller's raw id.
+    pub entity_id: u64,
+    /// Where it is going: a place to enter or a thing to reach.
+    pub target: u64,
+    /// Its speed, in centimetres per second.
+    pub speed_cm_s: i64,
 }
 
 /// A body's size (Amendment A-3), in centimetres: it spans `half_width` to either side of its
@@ -200,6 +258,14 @@ pub struct PhysicalRules {
     /// Material thermal capacity (J/(kg·K)) at which a region's temperature swing is halved
     /// (Vol. III Ch. 1 §1.9). Governs how strongly thermal mass resists the day/night swing.
     pub thermal_mass_reference: i64,
+    /// Gravitational acceleration, in centimetres per second squared.
+    pub gravity_cm_s2: i64,
+    /// The highest a body steps up without climbing, in centimetres.
+    pub step_height_cm: i64,
+    /// The steepest ground a body walks over, as a percentage grade.
+    pub max_slope_percent: i64,
+    /// The cell size of a travel planning grid, in centimetres.
+    pub nav_cell_cm: i64,
 }
 
 /// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2), as time constants

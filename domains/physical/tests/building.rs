@@ -1,43 +1,44 @@
-//! Getting into a building and moving around inside it (Vol. III Ch. 1 §1.5 connectivity,
-//! §1.6 "Above" / "Below" / "Reachable", §1.7-1.8 regions and containment, §1.11 danger).
+//! A house, a yard, and things that move between them — under the world's own rules
+//! (Vol. III Ch. 1 §1.5–1.11; Amendments A-3, A-4; Appendix A, Ruling 13).
 //!
 //! ```text
-//!   site (100) -- the ground frame: z = 0 is ground level
-//!   ├── yard (1)                         cat (10), courier (11), raccoon (12) start here
-//!   └── house (2)
-//!       ├── upstairs     (5)  z = +300   bedroom window (1011) -> yard: a way OUT, 4 m up
-//!       ├── ground floor (4)  z =    0   front door, window, stairs up, cellar stairs
-//!       └── cellar       (3)  z = -300   cellar entrance (bulkhead) to the yard
+//!   site (100) — the ground frame: z = 0 is ground level
+//!   ├── yard (1)                          open ground; a shed (40) stands in it
+//!   └── house (2), at site (1000, 0)
+//!       ├── upstairs     (5)  z = +300    bedroom window (1011): west wall, glass, shut
+//!       ├── ground floor (4)  z =    0    front door (north), low window (west), stairs
+//!       └── cellar       (3)  z = -300    bulkhead to the yard (east)
 //!
-//!   From the yard:  front door (1001) -> ground floor
-//!                   window     (1003) -> ground floor   (sill 1 m up)
-//!                   bulkhead   (1005) -> cellar
+//!   Every room is enclosed, 10 m × 10 m, 2.8 m high: walls everywhere but its openings.
+//!   Front door:  yard 1001 ↔ ground 1002   90 cm wide, 2.05 m tall
+//!   Low window:  yard 1003 ↔ ground 1004   40 cm wide, 30 cm off the floor
+//!   Bulkhead:    yard 1005 ↔ cellar 1006   1 m wide, 1.2 m tall
+//!   Stairs:      ground 1007 ↔ upstairs 1008;  ground 1009 ↔ cellar 1010
 //! ```
 //!
-//! Every opening is a pair of one-way portals, one on each face, exactly as a world file
-//! declares them. The engine has no movement system yet -- nothing in Physical Reality decides
-//! to walk (that is a decision, §1.3) -- so [`Walk`] below stands in for whoever would: it
-//! proposes a containment change through the ordinary tick, and the tests then ask the engine's
-//! own queries what became of the walker.
+//! Nothing here moves a body directly. Each test only says where things *want* to go
+//! ([`TRAVEL_TO`]) — as a player's command or an NPC's choice would — and the physical domain's
+//! own systems carry it out: routing through openings that are open and that the body fits and
+//! can reach, walking around what is solid, dropping what nothing holds up. The tests then ask
+//! the engine's queries what became of everyone.
 
 use kernel::domain::Domain;
-use kernel::events::ChronicleEntry;
 use kernel::fact::{Cause, Fact, FactKey, FactType, Provenance, SystemId};
 use kernel::identity::EntityId;
 use kernel::proposal::{Change, Proposal};
-use kernel::store::MemoryStore;
+use kernel::store::{MemoryStore, RealityStore};
 use kernel::system::{Cadence, CommittedView, System, TickContext};
 use kernel::tick::run_tick;
 use kernel::time::SimClock;
 use kernel::value::Value;
 use physical::regions::is_within;
 use physical::schema::{
-    CONTAINED_IN, HAS_PORTAL, HEADING, LEADS_TO, MOTION_END, MOTION_START, MOTION_TARGET,
-    PORTAL_DANGER, PORTAL_DANGER_OVERRIDE, POSITION,
+    BODY_SIZE, CONTAINED_IN, ENCLOSED, FALL_HEIGHT, HAS_PORTAL, HEADING, LEADS_TO, MOBILE, OPAQUE,
+    PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION, SOLID, TRAVEL_BLOCKED, TRAVEL_SPEED, TRAVEL_TO,
 };
-use physical::space::{
-    can_reach, distance, height_above_ground, portal_destination, portals_in, position_in, route,
-};
+use physical::shape::body_box;
+use physical::sight::line_of_sight;
+use physical::space::{height_above_ground, local_position, position_in};
 use physical::{PhysicalConfig, PhysicalDomain};
 
 // Places.
@@ -47,30 +48,38 @@ const HOUSE: u64 = 2;
 const CELLAR: u64 = 3;
 const GROUND: u64 = 4;
 const UPSTAIRS: u64 = 5;
-// Things that move.
-const CAT: u64 = 10;
-const COURIER: u64 = 11;
-const RACCOON: u64 = 12;
-// Openings: (outside face, inside face) pairs, plus the stairs and the upstairs window.
-const FRONT_DOOR_OUT: u64 = 1001;
-const FRONT_DOOR_IN: u64 = 1002;
+// Openings.
+const DOOR_OUT: u64 = 1001;
+const DOOR_IN: u64 = 1002;
 const WINDOW_OUT: u64 = 1003;
 const WINDOW_IN: u64 = 1004;
 const BULKHEAD_OUT: u64 = 1005;
 const BULKHEAD_IN: u64 = 1006;
 const STAIRS_UP: u64 = 1007;
 const STAIRS_DOWN: u64 = 1008;
-const CELLAR_STAIRS_DOWN: u64 = 1009;
-const CELLAR_STAIRS_UP: u64 = 1010;
+const CELLAR_DOWN: u64 = 1009;
+const CELLAR_UP: u64 = 1010;
 const BEDROOM_WINDOW: u64 = 1011;
+const BEDROOM_WINDOW_OUT: u64 = 1012;
+// Bodies.
+const CAT: u64 = 10;
+const COURIER: u64 = 11;
+const RACCOON: u64 = 12;
+const SECOND_COURIER: u64 = 13;
+const ARCHER: u64 = 20;
+const WARDROBE: u64 = 30;
+const SHED: u64 = 40;
+const ROOFER: u64 = 41;
+const STONE: u64 = 42;
+const LOOKOUT: u64 = 50;
 
 fn e(id: u64) -> EntityId {
     EntityId::from_raw(id)
 }
 
-fn seed(s: &mut MemoryStore, entity: u64, ft: FactType, v: Value) {
+fn seed(s: &mut MemoryStore, id: u64, ft: FactType, v: Value) {
     s.seed(
-        FactKey::new(e(entity), ft),
+        FactKey::new(e(id), ft),
         Fact::new(
             v,
             Provenance::new(SystemId::new("worldgen"), 0, Cause::new("seed")),
@@ -78,136 +87,193 @@ fn seed(s: &mut MemoryStore, entity: u64, ft: FactType, v: Value) {
     );
 }
 
-/// Place `entity` inside `container` at local (x, y, z) centimetres.
-fn place(s: &mut MemoryStore, entity: u64, container: u64, x: i64, y: i64, z: i64) {
-    seed(s, entity, CONTAINED_IN, Value::Entity(e(container)));
-    seed(s, entity, POSITION, Value::Vec3([x, y, z]));
+fn put(s: &mut MemoryStore, id: u64, frame: u64, at: [i64; 3]) {
+    seed(s, id, CONTAINED_IN, Value::Entity(e(frame)));
+    seed(s, id, POSITION, Value::Vec3(at));
 }
 
-/// A one-way portal located in `host` at (x, y, z) that leads to `dest`.
-fn portal(s: &mut MemoryStore, id: u64, host: u64, dest: u64, x: i64, y: i64, z: i64) {
-    place(s, id, host, x, y, z);
+fn sized(s: &mut MemoryStore, id: u64, size: [i64; 3], heading: i64) {
+    seed(s, id, BODY_SIZE, Value::Vec3(size));
+    seed(s, id, HEADING, Value::Int(heading));
+}
+
+fn flag(s: &mut MemoryStore, id: u64, fact: FactType) {
+    seed(s, id, fact, Value::Bool(true));
+}
+
+/// One face of an opening: a portal in `host`, leading to `dest`, at `at`, of `size`, turned to
+/// `heading` so its width runs along its wall.
+fn face(
+    s: &mut MemoryStore,
+    id: u64,
+    host: u64,
+    dest: u64,
+    at: [i64; 3],
+    size: [i64; 3],
+    heading: i64,
+) {
+    put(s, id, host, at);
+    sized(s, id, size, heading);
     seed(s, id, LEADS_TO, Value::Entity(e(dest)));
     seed(s, host, HAS_PORTAL, Value::Entity(e(id)));
 }
 
-/// The house in the module diagram, with the cat, courier, and raccoon out in the yard.
+/// Both faces of an opening, linked, so whatever passes through one emerges at the other.
+fn pair(s: &mut MemoryStore, a: u64, b: u64) {
+    seed(s, a, PORTAL_FAR_SIDE, Value::Entity(e(b)));
+    seed(s, b, PORTAL_FAR_SIDE, Value::Entity(e(a)));
+}
+
+/// A free-moving person-sized body.
+fn person(s: &mut MemoryStore, id: u64, frame: u64, at: [i64; 3]) {
+    put(s, id, frame, at);
+    sized(s, id, [25, 15, 175], 0);
+    flag(s, id, MOBILE);
+}
+
 fn house() -> MemoryStore {
     let mut s = MemoryStore::new();
-    place(&mut s, YARD, SITE, 0, 0, 0);
-    place(&mut s, HOUSE, SITE, 1000, 0, 0);
-    place(&mut s, CELLAR, HOUSE, 0, 0, -300);
-    place(&mut s, GROUND, HOUSE, 0, 0, 0);
-    place(&mut s, UPSTAIRS, HOUSE, 0, 0, 300);
-
-    portal(&mut s, FRONT_DOOR_OUT, YARD, GROUND, 1000, 500, 0);
-    portal(&mut s, FRONT_DOOR_IN, GROUND, YARD, 0, 500, 0);
-    portal(&mut s, WINDOW_OUT, YARD, GROUND, 1000, 200, 100);
-    portal(&mut s, WINDOW_IN, GROUND, YARD, 0, 200, 100);
-    portal(&mut s, BULKHEAD_OUT, YARD, CELLAR, 1000, 800, 0);
-    portal(&mut s, BULKHEAD_IN, CELLAR, YARD, 0, 800, 0);
-    portal(&mut s, STAIRS_UP, GROUND, UPSTAIRS, 600, 100, 0);
-    portal(&mut s, STAIRS_DOWN, UPSTAIRS, GROUND, 600, 100, 0);
-    portal(&mut s, CELLAR_STAIRS_DOWN, GROUND, CELLAR, 300, 100, 0);
-    portal(&mut s, CELLAR_STAIRS_UP, CELLAR, GROUND, 300, 100, 0);
-    portal(&mut s, BEDROOM_WINDOW, UPSTAIRS, YARD, 0, 200, 100);
-
-    // Stairs are pinned harmless, as a world file does in [portal_danger]. Derived danger is
-    // height above ground (§1.11), which cannot tell a staircase from a sheer drop: the top of
-    // these stairs is 3 m up and would otherwise rate like a 3 m fall.
-    for stairs in [STAIRS_UP, STAIRS_DOWN, CELLAR_STAIRS_DOWN, CELLAR_STAIRS_UP] {
-        seed(&mut s, stairs, PORTAL_DANGER_OVERRIDE, Value::Int(0));
+    put(&mut s, YARD, SITE, [0, 0, 0]);
+    put(&mut s, HOUSE, SITE, [1000, 0, 0]);
+    for (room, z) in [(CELLAR, -300), (GROUND, 0), (UPSTAIRS, 300)] {
+        put(&mut s, room, HOUSE, [0, 0, z]);
+        sized(&mut s, room, [500, 500, 280], 0);
+        flag(&mut s, room, ENCLOSED);
     }
 
-    place(&mut s, CAT, YARD, 500, 200, 0);
-    place(&mut s, COURIER, YARD, 900, 500, 0);
-    place(&mut s, RACCOON, YARD, 900, 800, 0);
+    // The front door, in the north wall; a door is opaque when shut.
+    let door = [45, 10, 205];
+    face(&mut s, DOOR_OUT, YARD, GROUND, [1000, 500, 0], door, 0);
+    face(&mut s, DOOR_IN, GROUND, YARD, [0, 500, 0], door, 0);
+    pair(&mut s, DOOR_OUT, DOOR_IN);
+    flag(&mut s, DOOR_OUT, OPAQUE);
+    flag(&mut s, DOOR_IN, OPAQUE);
+    // A low window in the west wall: 40 cm wide, its sill 30 cm off the floor, glass.
+    let window = [20, 10, 50];
+    face(
+        &mut s,
+        WINDOW_OUT,
+        YARD,
+        GROUND,
+        [500, 0, 30],
+        window,
+        9_000,
+    );
+    face(
+        &mut s,
+        WINDOW_IN,
+        GROUND,
+        YARD,
+        [-500, 0, 30],
+        window,
+        9_000,
+    );
+    pair(&mut s, WINDOW_OUT, WINDOW_IN);
+    // The bulkhead down to the cellar, east wall.
+    let bulkhead = [50, 10, 120];
+    face(
+        &mut s,
+        BULKHEAD_OUT,
+        YARD,
+        CELLAR,
+        [1500, 0, 0],
+        bulkhead,
+        9_000,
+    );
+    face(
+        &mut s,
+        BULKHEAD_IN,
+        CELLAR,
+        YARD,
+        [500, 0, 0],
+        bulkhead,
+        9_000,
+    );
+    pair(&mut s, BULKHEAD_OUT, BULKHEAD_IN);
+    // Stairs.
+    let stairs = [50, 50, 220];
+    face(
+        &mut s,
+        STAIRS_UP,
+        GROUND,
+        UPSTAIRS,
+        [400, -400, 0],
+        stairs,
+        0,
+    );
+    face(
+        &mut s,
+        STAIRS_DOWN,
+        UPSTAIRS,
+        GROUND,
+        [400, -400, 0],
+        stairs,
+        0,
+    );
+    pair(&mut s, STAIRS_UP, STAIRS_DOWN);
+    face(
+        &mut s,
+        CELLAR_DOWN,
+        GROUND,
+        CELLAR,
+        [-400, -400, 0],
+        stairs,
+        0,
+    );
+    face(
+        &mut s,
+        CELLAR_UP,
+        CELLAR,
+        GROUND,
+        [-400, -400, 0],
+        stairs,
+        0,
+    );
+    pair(&mut s, CELLAR_DOWN, CELLAR_UP);
+    // The bedroom window: west wall upstairs, 80 cm wide, sill 80 cm up, glass, shut. Its yard
+    // face hangs 3.8 m above the ground.
+    let bedroom_window = [40, 10, 100];
+    face(
+        &mut s,
+        BEDROOM_WINDOW,
+        UPSTAIRS,
+        YARD,
+        [-500, 0, 80],
+        bedroom_window,
+        9_000,
+    );
+    face(
+        &mut s,
+        BEDROOM_WINDOW_OUT,
+        YARD,
+        UPSTAIRS,
+        [500, 0, 380],
+        bedroom_window,
+        9_000,
+    );
+    pair(&mut s, BEDROOM_WINDOW, BEDROOM_WINDOW_OUT);
+    for w in [BEDROOM_WINDOW, BEDROOM_WINDOW_OUT] {
+        seed(&mut s, w, PORTAL_OPEN, Value::Bool(false));
+    }
+
+    // Who and what is about. (Each test places the courier itself: seeding is world
+    // generation, and seeding a second container would give it two, not move it.)
+    put(&mut s, CAT, YARD, [600, 300, 0]);
+    sized(&mut s, CAT, [10, 20, 35], 0);
+    flag(&mut s, CAT, MOBILE);
+    put(&mut s, RACCOON, CELLAR, [0, 0, 0]);
+    sized(&mut s, RACCOON, [12, 25, 40], 0);
+    flag(&mut s, RACCOON, MOBILE);
+    person(&mut s, ARCHER, UPSTAIRS, [-430, 0, 0]);
+    seed(&mut s, ARCHER, HEADING, Value::Int(27_000)); // facing west, out of the window
     s
 }
 
-/// Stands in for a mover the engine does not have yet: each `(entity, portal)` pair steps
-/// through that portal -- but only if the portal is in the room the entity is actually in.
-/// The walker arrives on the floor just inside the far face of the opening, or at the room's
-/// origin if the opening has none.
-///
-/// The model does not link an opening's two faces -- a door is two independent one-way portals
-/// -- so "the far face" is found spatially: of the destination's portals that lead back to
-/// where the walker came from, the one nearest the portal just used. A ground floor with both a
-/// door and a window onto the yard has two candidates, and only distance tells them apart.
-struct Walk(Vec<(u64, u64)>);
-
-impl System for Walk {
-    fn id(&self) -> SystemId {
-        SystemId::new("test.walk")
-    }
-    fn reads(&self) -> &'static [FactType] {
-        &[
-            CONTAINED_IN,
-            HAS_PORTAL,
-            LEADS_TO,
-            POSITION,
-            HEADING,
-            MOTION_TARGET,
-            MOTION_START,
-            MOTION_END,
-        ]
-    }
-    fn writes(&self) -> &'static [FactType] {
-        &[CONTAINED_IN, POSITION]
-    }
-    fn cadence(&self) -> Cadence {
-        Cadence::EveryTick
-    }
-    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
-        let mut out = Vec::new();
-        for &(walker, through) in &self.0 {
-            let (walker, through) = (e(walker), e(through));
-            let Some(Value::Entity(here)) = view
-                .read(FactKey::new(walker, CONTAINED_IN))
-                .map(|f| f.value)
-            else {
-                continue;
-            };
-            // You can only use an opening that is in the room you are standing in.
-            if !portals_in(view, here).contains(&through) {
-                continue;
-            }
-            let Some(there) = portal_destination(view, through) else {
-                continue;
-            };
-            let far_face = portals_in(view, there)
-                .into_iter()
-                .filter(|&p| portal_destination(view, p) == Some(here))
-                .min_by_key(|&p| (distance(view, through, p).unwrap_or(i64::MAX), p));
-            let [x, y, _] = far_face
-                .and_then(|p| view.read(FactKey::new(p, POSITION)))
-                .and_then(|f| f.value.as_vec3())
-                .unwrap_or([0; 3]);
-            let arrive = [
-                (CONTAINED_IN, Value::Entity(there)),
-                (POSITION, Value::Vec3([x, y, 0])), // on the floor, not on the sill
-            ];
-            for (fact_type, value) in arrive {
-                out.push(Proposal::new(
-                    self.id(),
-                    FactKey::new(walker, fact_type),
-                    ctx.basis_tick(),
-                    Change::Set(value),
-                    Cause::new("step_through"),
-                ));
-            }
-        }
-        out
-    }
-}
-
-/// Run tick `n`: the physical domain's own systems (which keep portal danger current) plus
-/// the given steps.
-fn walk(s: &mut MemoryStore, n: u64, steps: &[(u64, u64)]) {
-    let domain = PhysicalDomain::new(PhysicalConfig {
-        clock: SimClock::new(3_600_000),
+fn config() -> PhysicalConfig {
+    PhysicalConfig {
+        clock: SimClock::new(1_000),
         day_length_seconds: 86_400,
-        environment_step_seconds: 3600,
+        environment_step_seconds: 3_600,
         diurnal_amplitude_centi_c: 400,
         temperature_variability_centi_c: 300,
         weather_persistence_seconds: 21_600,
@@ -220,157 +286,417 @@ fn walk(s: &mut MemoryStore, n: u64, steps: &[(u64, u64)]) {
         wind_gradient_divisor: 10,
         fall_danger_per_meter: 1500,
         thermal_mass_reference: 1000,
-    });
-    let domains: [&dyn Domain; 1] = [&domain];
-    let mut systems = domain.systems();
-    systems.push(Box::new(Walk(steps.to_vec())));
-    let mut chronicle: Vec<ChronicleEntry> = Vec::new();
-    run_tick(s, &domains, &systems, n, 0, &mut chronicle).expect("tick commits");
+        gravity_cm_s2: 981,
+        step_height_cm: 40,
+        max_slope_percent: 100,
+        nav_cell_cm: 50,
+    }
 }
 
-fn room_of(s: &MemoryStore, entity: u64) -> u64 {
-    match s
-        .read(FactKey::new(e(entity), CONTAINED_IN))
-        .map(|f| f.value)
-    {
-        Some(Value::Entity(room)) => room.raw(),
-        other => panic!("{entity} has no room: {other:?}"),
+/// A decider standing in for a player or an NPC: on the given tick, it asks bodies to travel
+/// and opens doors. It never moves anything itself (Ruling 13).
+struct Decide {
+    at: u64,
+    go: Vec<(u64, u64, i64)>, // (body, destination, speed cm/s)
+    open: Vec<u64>,           // portals to open
+}
+
+impl System for Decide {
+    fn id(&self) -> SystemId {
+        SystemId::new("test.decide")
+    }
+    fn reads(&self) -> &'static [FactType] {
+        &[]
+    }
+    fn writes(&self) -> &'static [FactType] {
+        &[TRAVEL_TO, TRAVEL_SPEED, PORTAL_OPEN]
+    }
+    fn cadence(&self) -> Cadence {
+        Cadence::EveryTick
+    }
+    fn evaluate(&self, _view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+        if ctx.tick() != self.at {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        let mut push = |id: u64, fact: FactType, v: Value| {
+            out.push(Proposal::new(
+                self.id(),
+                FactKey::new(e(id), fact),
+                ctx.basis_tick(),
+                Change::Set(v),
+                Cause::new("decided"),
+            ));
+        };
+        for &(body, dest, speed) in &self.go {
+            push(body, TRAVEL_TO, Value::Entity(e(dest)));
+            push(body, TRAVEL_SPEED, Value::Int(speed));
+        }
+        for &p in &self.open {
+            push(p, PORTAL_OPEN, Value::Bool(true));
+        }
+        out
+    }
+}
+
+/// A running world: the house's committed state, the physical domain, and its spatial index.
+struct World {
+    store: MemoryStore,
+    domain: PhysicalDomain,
+    tick: u64,
+}
+
+impl World {
+    fn new(store: MemoryStore) -> Self {
+        let domain = PhysicalDomain::new(config());
+        let mut store = store;
+        store.install_spatial_index(domain.spatial_projector().unwrap());
+        Self {
+            store,
+            domain,
+            tick: 0,
+        }
+    }
+
+    /// Advance `ticks` one-second ticks, with `decide` (if any) acting on the first of them.
+    fn run(&mut self, ticks: u64, decide: Option<Decide>) {
+        let domains: [&dyn Domain; 1] = [&self.domain];
+        let mut systems = self.domain.systems();
+        if let Some(mut d) = decide {
+            d.at = self.tick + 1;
+            systems.push(Box::new(d));
+        }
+        for _ in 0..ticks {
+            self.tick += 1;
+            run_tick(
+                &mut self.store,
+                &domains,
+                &systems,
+                self.tick,
+                7,
+                &mut Vec::new(),
+            )
+            .expect("the tick commits");
+        }
+    }
+
+    /// The same world with no spatial index: every query takes the scanning road.
+    fn unindexed(store: MemoryStore) -> Self {
+        Self {
+            store,
+            domain: PhysicalDomain::new(config()),
+            tick: 0,
+        }
+    }
+
+    fn room_of(&self, id: u64) -> u64 {
+        match self
+            .store
+            .read(FactKey::new(e(id), CONTAINED_IN))
+            .map(|f| f.value)
+        {
+            Some(Value::Entity(r)) => r.raw(),
+            other => panic!("{id} is nowhere: {other:?}"),
+        }
+    }
+
+    fn flag(&self, id: u64, fact: FactType) -> bool {
+        matches!(
+            self.store.read(FactKey::new(e(id), fact)).map(|f| f.value),
+            Some(Value::Bool(true))
+        )
+    }
+
+    fn travelling(&self, id: u64) -> bool {
+        self.store.read(FactKey::new(e(id), TRAVEL_TO)).is_some()
+    }
+}
+
+fn go(body: u64, dest: u64, speed: i64) -> Decide {
+    Decide {
+        at: 0,
+        go: vec![(body, dest, speed)],
+        open: vec![],
     }
 }
 
 #[test]
-fn something_can_enter_through_the_door_the_window_and_the_cellar_entrance() {
+fn with_the_door_shut_the_cat_comes_in_the_window_and_lands_under_it() {
     let mut s = house();
-    // The yard's ways in are exactly the three openings, each leading somewhere in the house.
-    assert_eq!(
-        portals_in(&s, e(YARD)),
-        vec![e(FRONT_DOOR_OUT), e(WINDOW_OUT), e(BULKHEAD_OUT)]
+    person(&mut s, COURIER, YARD, [900, 800, 0]);
+    for d in [DOOR_OUT, DOOR_IN] {
+        seed(&mut s, d, PORTAL_OPEN, Value::Bool(false));
+    }
+    let mut w = World::new(s);
+    w.run(
+        12,
+        Some(Decide {
+            at: 0,
+            go: vec![(CAT, GROUND, 300), (COURIER, GROUND, 140)],
+            open: vec![],
+        }),
     );
-    for opening in [FRONT_DOOR_OUT, WINDOW_OUT, BULKHEAD_OUT] {
-        let inside = portal_destination(&s, e(opening)).unwrap();
-        assert!(
-            is_within(&s, inside, e(HOUSE)),
-            "{opening} leads into the house"
-        );
-    }
+    // The cat — small enough, and the sill low enough to hop — came in through the window,
+    // dropped the 30 cm from the sill, and is on the floor right under it, done travelling.
+    assert_eq!(w.room_of(CAT), GROUND);
+    assert_eq!(local_position(&w.store, e(CAT)), [-500, 0, 0]);
+    let fell = w.store.read(FactKey::new(e(CAT), FALL_HEIGHT)).unwrap();
+    assert_eq!(fell.value, Value::Int(30));
+    assert!(!w.travelling(CAT), "arrived");
+    // The courier is too broad for that window and the door is shut: still outside, and the
+    // world says so.
+    assert_eq!(w.room_of(COURIER), YARD);
+    assert!(w.flag(COURIER, TRAVEL_BLOCKED));
+    assert!(
+        w.travelling(COURIER),
+        "the intent stands, waiting for a way"
+    );
 
-    // Nobody is inside yet.
-    for who in [CAT, COURIER, RACCOON] {
-        assert!(!is_within(&s, e(who), e(HOUSE)));
-    }
+    // Someone opens the door. The courier goes in by it, and is no longer blocked.
+    w.run(
+        8,
+        Some(Decide {
+            at: 0,
+            go: vec![],
+            open: vec![DOOR_OUT, DOOR_IN],
+        }),
+    );
+    assert_eq!(w.room_of(COURIER), GROUND);
+    assert!(is_within(&w.store, e(COURIER), e(HOUSE)));
+    assert!(!w.flag(COURIER, TRAVEL_BLOCKED));
+    assert!(!w.travelling(COURIER));
+    assert_eq!(
+        local_position(&w.store, e(COURIER)),
+        [0, 500, 0],
+        "on the doormat"
+    );
+}
 
-    // One tick: the cat through the window, the courier through the door, the raccoon down
-    // the cellar entrance.
-    walk(
-        &mut s,
+#[test]
+fn two_people_cannot_squeeze_through_one_doorway_at_once() {
+    let mut s = house();
+    // Both are standing right at the door.
+    person(&mut s, COURIER, YARD, [1000, 500, 0]);
+    person(&mut s, SECOND_COURIER, YARD, [1000, 500, 0]);
+    let mut w = World::new(s);
+    w.run(
         1,
-        &[
-            (CAT, WINDOW_OUT),
-            (COURIER, FRONT_DOOR_OUT),
-            (RACCOON, BULKHEAD_OUT),
-        ],
+        Some(Decide {
+            at: 0,
+            go: vec![(COURIER, GROUND, 140), (SECOND_COURIER, GROUND, 140)],
+            open: vec![],
+        }),
     );
-
-    // All three are now recognised as inside the building -- and in which room.
-    for who in [CAT, COURIER, RACCOON] {
-        assert!(is_within(&s, e(who), e(HOUSE)), "{who} is inside");
-    }
-    assert_eq!(room_of(&s, CAT), GROUND);
-    assert_eq!(room_of(&s, COURIER), GROUND);
-    assert_eq!(room_of(&s, RACCOON), CELLAR);
-
-    // Each landed just inside the opening it used: the cat under the window, the courier on
-    // the doormat, the raccoon at the foot of the bulkhead -- in house coordinates.
-    assert_eq!(position_in(&s, e(CAT), e(HOUSE)), Some([0, 200, 0]));
-    assert_eq!(position_in(&s, e(COURIER), e(HOUSE)), Some([0, 500, 0]));
-    assert_eq!(position_in(&s, e(RACCOON), e(HOUSE)), Some([0, 800, -300]));
+    // Same tick, same opening: the lower id goes first...
+    assert_eq!(w.room_of(COURIER), YARD, "deciding takes the first tick");
+    w.run(1, None);
+    assert_eq!(w.room_of(COURIER), GROUND);
+    assert_eq!(
+        w.room_of(SECOND_COURIER),
+        YARD,
+        "...and the other waits its turn"
+    );
+    w.run(1, None);
+    assert_eq!(w.room_of(SECOND_COURIER), GROUND);
 }
 
 #[test]
-fn an_opening_only_works_from_the_room_it_is_in() {
+fn someone_who_walks_off_the_shed_roof_falls() {
     let mut s = house();
-    // From the yard the cat cannot take the stairs, and cannot climb in the bedroom window:
-    // that window opens from the bedroom onto the yard, not the other way.
-    walk(&mut s, 1, &[(CAT, STAIRS_UP), (CAT, BEDROOM_WINDOW)]);
-    assert_eq!(room_of(&s, CAT), YARD);
-    assert!(!is_within(&s, e(CAT), e(HOUSE)));
-    // Upstairs is still reachable from the yard -- just not directly.
-    assert!(can_reach(&s, e(YARD), e(UPSTAIRS)));
+    // A 2.5 m shed in the yard, someone standing on its roof, and a stone 4 m to the north.
+    put(&mut s, SHED, YARD, [300, -800, 0]);
+    sized(&mut s, SHED, [150, 100, 250], 0);
+    flag(&mut s, SHED, SOLID);
+    person(&mut s, ROOFER, YARD, [300, -800, 250]);
+    put(&mut s, STONE, YARD, [300, -400, 0]);
+    let mut w = World::new(s);
+    assert_eq!(height_above_ground(&w.store, e(ROOFER)), 250, "on the roof");
+    w.run(1, Some(go(ROOFER, STONE, 140)));
+    w.run(8, None);
+    // It walked level off the edge, fell the shed's height, and finished beside the stone.
+    let fell = w.store.read(FactKey::new(e(ROOFER), FALL_HEIGHT)).unwrap();
+    assert_eq!(fell.value, Value::Int(250));
     assert_eq!(
-        route(&s, e(YARD), e(UPSTAIRS)),
-        Some(vec![e(FRONT_DOOR_OUT), e(STAIRS_UP)])
+        height_above_ground(&w.store, e(ROOFER)),
+        0,
+        "on the ground now"
     );
+    assert!(!w.travelling(ROOFER));
+    let at = local_position(&w.store, e(ROOFER));
+    assert!((at[1] - -400).abs() <= 30, "beside the stone: {at:?}");
+}
+
+#[test]
+fn the_archer_at_the_window_sees_the_yard_but_not_the_cellar_or_downstairs() {
+    let mut s = house();
+    person(&mut s, LOOKOUT, YARD, [100, 0, 0]);
+    seed(&mut s, LOOKOUT, MOBILE, Value::Bool(false)); // stands still
+    person(&mut s, COURIER, GROUND, [0, 0, 0]);
+    let w = World::new(s);
+    // Through the bedroom window — shut, but glass — down into the yard.
+    assert!(line_of_sight(&w.store, e(ARCHER), e(LOOKOUT)));
+    assert!(line_of_sight(&w.store, e(LOOKOUT), e(ARCHER)), "and back");
+    // Not through the floor to the room below, nor down to the cellar.
+    assert!(!line_of_sight(&w.store, e(ARCHER), e(COURIER)));
+    assert!(!line_of_sight(&w.store, e(ARCHER), e(RACCOON)));
+    // Draw the curtains (make the shut window opaque) and the yard is gone too.
+    let mut s = house();
+    person(&mut s, LOOKOUT, YARD, [100, 0, 0]);
+    flag(&mut s, BEDROOM_WINDOW, OPAQUE);
+    let w = World::new(s);
+    assert!(!line_of_sight(&w.store, e(ARCHER), e(LOOKOUT)));
+}
+
+#[test]
+fn a_solid_opaque_thing_in_between_blocks_the_view() {
+    let mut s = house();
+    person(&mut s, LOOKOUT, YARD, [100, 0, 0]);
+    seed(&mut s, LOOKOUT, MOBILE, Value::Bool(false));
+    let w = World::new(s.clone());
+    assert!(line_of_sight(&w.store, e(ARCHER), e(LOOKOUT)));
+    // A hay wagon pulls up between the house and the lookout.
+    put(&mut s, 60, YARD, [300, 0, 0]);
+    sized(&mut s, 60, [100, 200, 300], 0);
+    flag(&mut s, 60, SOLID);
+    flag(&mut s, 60, OPAQUE);
+    let w = World::new(s);
+    assert!(!line_of_sight(&w.store, e(ARCHER), e(LOOKOUT)));
+}
+
+#[test]
+fn a_wardrobe_does_not_fit_through_any_way_in() {
+    let mut s = house();
+    person(&mut s, COURIER, YARD, [900, 800, 0]);
+    put(&mut s, WARDROBE, YARD, [1100, 900, 0]);
+    sized(&mut s, WARDROBE, [60, 30, 200], 0);
+    flag(&mut s, WARDROBE, MOBILE);
+    let mut w = World::new(s);
+    w.run(1, Some(go(WARDROBE, GROUND, 100)));
+    w.run(3, None);
+    // 1.2 m wide: wider than the door (90 cm), the window, and the bulkhead (1 m).
+    assert_eq!(w.room_of(WARDROBE), YARD);
+    assert!(w.flag(WARDROBE, TRAVEL_BLOCKED));
+    // The courier, 50 cm wide, is not blocked by the same door.
+    let mut w2 = World::new(w.store.clone());
+    w2.tick = w.tick;
+    w2.run(1, Some(go(COURIER, GROUND, 140)));
+    w2.run(6, None);
+    assert_eq!(w2.room_of(COURIER), GROUND);
 }
 
 #[test]
 fn someone_can_go_upstairs_and_the_engine_knows_how_high_they_are() {
     let mut s = house();
-    assert_eq!(
-        height_above_ground(&s, e(COURIER)),
-        0,
-        "standing in the yard"
-    );
-
-    // Follow the engine's own route from the yard to upstairs, one opening per tick.
-    let steps = route(&s, e(YARD), e(UPSTAIRS)).unwrap();
-    for (n, step) in steps.iter().enumerate() {
-        walk(&mut s, n as u64 + 1, &[(COURIER, step.raw())]);
-    }
-
-    assert_eq!(room_of(&s, COURIER), UPSTAIRS);
+    person(&mut s, COURIER, GROUND, [0, 300, 0]);
+    let mut w = World::new(s);
+    w.run(1, Some(go(COURIER, UPSTAIRS, 140)));
+    w.run(10, None);
+    assert_eq!(w.room_of(COURIER), UPSTAIRS);
     assert!(
-        is_within(&s, e(COURIER), e(HOUSE)),
+        is_within(&w.store, e(COURIER), e(HOUSE)),
         "still inside the building"
     );
-    // Upstairs is stacked 3 m up the house, so the courier is 3 m above the ground...
-    assert_eq!(height_above_ground(&s, e(COURIER)), 300);
-    // ...standing at the top of the stairs, which in house coordinates is (600, 100, 300).
-    assert_eq!(position_in(&s, e(COURIER), e(HOUSE)), Some([600, 100, 300]));
+    assert_eq!(height_above_ground(&w.store, e(COURIER)), 300);
+    // At the top of the stairs, which in house coordinates is (400, −400, 300).
+    assert_eq!(
+        position_in(&w.store, e(COURIER), e(HOUSE)),
+        Some([400, -400, 300])
+    );
+    assert!(!w.travelling(COURIER));
+}
 
-    // And the raccoon, once in the cellar, is 3 m *below* ground.
-    walk(&mut s, 3, &[(RACCOON, BULKHEAD_OUT)]);
-    assert_eq!(height_above_ground(&s, e(RACCOON)), -300);
+#[test]
+fn a_walker_goes_around_the_table_not_through_it() {
+    let mut s = house();
+    // A 2 m × 3 m table, waist high, in the middle of the ground floor; a lamp beyond it.
+    put(&mut s, 61, GROUND, [0, 0, 0]);
+    sized(&mut s, 61, [100, 150, 80], 0);
+    flag(&mut s, 61, SOLID);
+    put(&mut s, 62, GROUND, [300, 0, 0]);
+    person(&mut s, COURIER, GROUND, [-300, 0, 0]);
+    let mut w = World::new(s);
+    let table = body_box(&w.store, e(61)).unwrap();
+    w.run(1, Some(go(COURIER, 62, 140)));
+    let mut ticks = 0;
+    while w.travelling(COURIER) && ticks < 40 {
+        w.run(1, None);
+        ticks += 1;
+        // Never inside the table's footprint (grown by the walker's own half-width).
+        let at = local_position(&w.store, e(COURIER));
+        assert!(
+            !table.footprint_contains(at, 24),
+            "tick {ticks}: walked into the table at {at:?}"
+        );
+    }
+    assert!(!w.travelling(COURIER), "arrived within 40 s");
+    let at = local_position(&w.store, e(COURIER));
+    assert!(
+        (at[0] - 300).abs() <= 30 && at[1].abs() <= 30,
+        "beside the lamp: {at:?}"
+    );
 }
 
 #[test]
 fn leaving_the_building_is_recognised_too() {
     let mut s = house();
-    walk(&mut s, 1, &[(COURIER, FRONT_DOOR_OUT)]);
-    assert!(is_within(&s, e(COURIER), e(HOUSE)));
-    walk(&mut s, 2, &[(COURIER, FRONT_DOOR_IN)]);
-    assert!(!is_within(&s, e(COURIER), e(HOUSE)));
-    assert_eq!(room_of(&s, COURIER), YARD);
-    // Back on the yard side of the front door, in yard coordinates.
-    assert_eq!(position_in(&s, e(COURIER), e(YARD)), Some([1000, 500, 0]));
+    person(&mut s, COURIER, GROUND, [0, 300, 0]);
+    let mut w = World::new(s);
+    w.run(1, Some(go(COURIER, YARD, 140)));
+    w.run(5, None);
+    assert_eq!(w.room_of(COURIER), YARD);
+    assert!(!is_within(&w.store, e(COURIER), e(HOUSE)));
+    // Out by the front door, on the yard side of it.
+    assert_eq!(local_position(&w.store, e(COURIER)), [1000, 500, 0]);
 }
 
 #[test]
-fn the_quickest_way_down_from_upstairs_is_the_dangerous_one() {
-    let mut s = house();
-    walk(&mut s, 1, &[]); // one tick so the danger system writes each portal's danger
-
-    // Shortest route from the bedroom to the yard is the window -- one step instead of two...
-    assert_eq!(
-        route(&s, e(UPSTAIRS), e(YARD)),
-        Some(vec![e(BEDROOM_WINDOW)])
-    );
-    // ...but its sill is 4 m above the ground (3 m floor + 1 m sill), and the engine rates
-    // the drop accordingly, while the stairs and the front door are harmless.
-    assert_eq!(height_above_ground(&s, e(BEDROOM_WINDOW)), 400);
-    let danger = |p: u64| {
-        s.read(FactKey::new(e(p), PORTAL_DANGER))
-            .and_then(|f| f.value.as_int())
-            .unwrap()
+fn the_spatial_index_changes_nothing_that_happens() {
+    // Amendment A-2's conformance rule, end to end: travel, gravity, support, and sight all ask
+    // spatial questions; with or without the index, the world must come out bit-identical.
+    let scene = || {
+        let mut s = house();
+        person(&mut s, COURIER, YARD, [900, 800, 0]);
+        person(&mut s, ROOFER, YARD, [300, -800, 250]);
+        put(&mut s, SHED, YARD, [300, -800, 0]);
+        sized(&mut s, SHED, [150, 100, 250], 0);
+        flag(&mut s, SHED, SOLID);
+        put(&mut s, 61, GROUND, [0, 0, 0]);
+        sized(&mut s, 61, [100, 150, 80], 0);
+        flag(&mut s, 61, SOLID);
+        s
     };
-    assert_eq!(danger(BEDROOM_WINDOW), 6000); // 4 m x 1500 per metre
-    assert_eq!(danger(STAIRS_DOWN), 0);
-    assert_eq!(danger(FRONT_DOOR_IN), 0);
-}
-
-#[test]
-fn a_lone_entity_is_its_own_ground() {
-    // No container: the entity is the ground frame, so its height is 0 by definition.
-    let s = house();
-    assert_eq!(height_above_ground(&s, e(SITE)), 0);
-    assert_eq!(route(&s, e(YARD), e(YARD)), Some(vec![]));
+    let orders = || Decide {
+        at: 0,
+        go: vec![
+            (CAT, UPSTAIRS, 300),
+            (COURIER, CELLAR, 140),
+            (ROOFER, GROUND, 140),
+            (RACCOON, YARD, 200),
+        ],
+        open: vec![],
+    };
+    let mut indexed = World::new(scene());
+    let mut scanned = World::unindexed(scene());
+    assert!(scanned.store.spatial().is_none());
+    for w in [&mut indexed, &mut scanned] {
+        w.run(1, Some(orders()));
+        w.run(40, None);
+    }
+    assert_eq!(indexed.store.state_hash(), scanned.store.state_hash());
+    // And they really went somewhere.
+    assert_eq!(indexed.room_of(COURIER), CELLAR);
+    assert_eq!(indexed.room_of(ROOFER), GROUND);
+    assert_eq!(indexed.room_of(RACCOON), YARD);
+    for (a, b) in [
+        (ARCHER, CAT),
+        (COURIER, RACCOON),
+        (ROOFER, CAT),
+        (CAT, RACCOON),
+    ] {
+        assert_eq!(
+            line_of_sight(&indexed.store, e(a), e(b)),
+            line_of_sight(&scanned.store, e(a), e(b)),
+            "sight {a} -> {b}"
+        );
+    }
 }

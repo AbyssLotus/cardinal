@@ -56,6 +56,10 @@ fn config(tick_seconds: u64, step_seconds: u64) -> PhysicalConfig {
         wind_gradient_divisor: 10,
         fall_danger_per_meter: 1500,
         thermal_mass_reference: 1000,
+        gravity_cm_s2: 981,
+        step_height_cm: 40,
+        max_slope_percent: 100,
+        nav_cell_cm: 50,
     }
 }
 

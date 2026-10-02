@@ -19,7 +19,7 @@
 //! Interpolation is integer arithmetic on `i128` with round-half-away-from-zero, so every
 //! consumer, on every platform, computes the same centimetre (Vol. V Ch. 4 §4.1).
 
-use crate::schema::{MOTION_END, MOTION_START, MOTION_TARGET, POSITION};
+use crate::schema::{MOTION_END, MOTION_START, MOTION_TARGET, POSITION, TRAVEL_TO};
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::fixed::{angle_of, div_round, isqrt};
 use kernel::identity::EntityId;
@@ -216,7 +216,7 @@ pub fn halt(view: &dyn CommittedView, entity: EntityId) -> Vec<(FactKey, Change)
     ]
 }
 
-const SETTLE_READS: &[FactType] = &[POSITION, MOTION_TARGET, MOTION_START, MOTION_END];
+const SETTLE_READS: &[FactType] = &[POSITION, MOTION_TARGET, MOTION_START, MOTION_END, TRAVEL_TO];
 const SETTLE_WRITES: &[FactType] = &[POSITION, MOTION_TARGET, MOTION_START, MOTION_END];
 
 /// Closes finished segments: once a body has arrived, its position becomes the target and the
@@ -248,6 +248,9 @@ impl System for Settle {
         view.entities_with(MOTION_END)
             .into_iter()
             .filter(|e| tick_fact(view, *e, MOTION_END).is_some_and(|end| end <= now))
+            // A traveller's legs are closed by travel itself as it plans the next one or passes
+            // through an opening (Amendment A-4); settling them here would race it.
+            .filter(|e| view.read(FactKey::new(*e, TRAVEL_TO)).is_none())
             .filter(|e| segment(view, *e).is_some_and(|leg| leg.end <= now))
             .flat_map(|e| halt(view, e))
             .map(|(key, change)| {

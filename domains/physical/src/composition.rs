@@ -226,6 +226,41 @@ pub fn compose_segment_field(
     }
 }
 
+/// Resolve a boolean flag — solid, opaque, enclosed, open, mobile, blocked (Amendment A-4): a
+/// `Set`/`Create` names the value, sets that agree merge, sets that disagree conflict (two
+/// systems opening and shutting one door on one tick is a contradiction), a `Tombstone` clears
+/// it, and nothing else applies.
+pub fn compose_bool(current: Option<Value>, changes: &[Change]) -> Result<Resolved, ResolveError> {
+    let mut set: Option<bool> = None;
+    let mut tombstone = false;
+    for change in changes {
+        match change {
+            Change::Set(Value::Bool(b)) | Change::Create(Value::Bool(b)) => match set {
+                Some(existing) if existing != *b => {
+                    return Err(ResolveError::new(
+                        "a flag set both true and false on one tick",
+                    ))
+                }
+                _ => set = Some(*b),
+            },
+            Change::Tombstone => tombstone = true,
+            _ => {
+                return Err(ResolveError::new(
+                    "a flag takes only a true/false set or a clear",
+                ))
+            }
+        }
+    }
+    match (set, tombstone) {
+        (Some(_), true) => Err(ResolveError::new("a flag both set and cleared on one tick")),
+        (Some(b), false) => Ok(Resolved::Write(Value::Bool(b))),
+        (None, true) => Ok(Resolved::Tombstone),
+        (None, false) => current
+            .map(Resolved::Write)
+            .ok_or(ResolveError::new("flag resolved with no value")),
+    }
+}
+
 /// Resolve a compass heading (hundredths of a degree): sets and turns compose like
 /// [`compose_additive`] — a body may be turned by several deltas in one tick — and the result
 /// wraps into `0..36000`, so turning past north comes back round rather than overflowing.

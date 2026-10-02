@@ -10,6 +10,7 @@ use crate::identity::EntityId;
 use crate::proposal::Proposal;
 use crate::rng::{Rng, SubstreamKey};
 use crate::spatial::SpatialQuery;
+use crate::value::Value;
 use std::cell::Cell;
 
 /// How often a system runs, in simulation time (Vol. V Ch. 3 §3.2, Cadence).
@@ -51,6 +52,18 @@ pub trait CommittedView {
     /// instead of carrying an entity list of its own: reality is authoritative, and an
     /// entity created mid-simulation is simulated the tick its facts commit.
     fn entities_with(&self, fact_type: FactType) -> Vec<EntityId>;
+
+    /// The values of a cardinality-many fact that lie between `lo` and `hi` (inclusive, in the
+    /// values' total order), sorted — a slice of a large set without reading all of it. A
+    /// heightfield stored as a set of `[column, row, height]` samples answers "the sample at
+    /// column 3, row 7" this way. The default filters [`CommittedView::read_all`]; stores
+    /// override it with a range walk.
+    fn read_range(&self, key: FactKey, lo: &Value, hi: &Value) -> Vec<Fact> {
+        self.read_all(key)
+            .into_iter()
+            .filter(|f| &f.value >= lo && &f.value <= hi)
+            .collect()
+    }
 
     /// The tick this view's committed state represents: 0 for the initial world, N once tick N
     /// has committed. A system evaluating tick N reads a view at N−1 (Vol. V Ch. 2 §2.1,
@@ -128,6 +141,14 @@ impl CommittedView for ScopedView<'_> {
     fn entities_with(&self, fact_type: FactType) -> Vec<EntityId> {
         if self.check(fact_type) {
             self.inner.entities_with(fact_type)
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn read_range(&self, key: FactKey, lo: &Value, hi: &Value) -> Vec<Fact> {
+        if self.check(key.fact_type) {
+            self.inner.read_range(key, lo, hi)
         } else {
             Vec::new()
         }

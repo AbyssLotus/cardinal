@@ -65,3 +65,24 @@ writes that could, in principle, be proposed inconsistently. Without size there 
 "does it fit" or "what is it on"; without facing, no "to your left". A text world needs all of
 these answered precisely — where the player stands, which way they face, what the sword is
 lying on.
+
+---
+
+## A-4 — Constraints, ground, sight, and travel (2026-10)
+
+**Edits:** Vol. III Ch. 1 §1.11 (new *Constraints Made Concrete* section); Appendix A
+(new Ruling 13 — Travel).
+
+**Change.** Bodies may be solid (block movement) and opaque (block sight); regions may be
+enclosed (crossed only through portals); portals may be closed and have linked faces; a body
+fits a portal only if no wider and no taller than it. Ground is a place's terrain heightfield
+or its level floor; mobile bodies without support fall, kinematically, under the world's
+gravity. Line of sight is a defined query. Travel is an intent a decider proposes and Physical
+Reality carries out — routing through open, fitting portals and around solid bodies — with
+blocked travel reported as a fact (Ruling 13).
+
+**Rationale.** §1.11 listed what constraints *are* ("walls block vision", "closed doors prevent
+movement") without making any of them a fact or a query, and nothing moved bodies at all: the
+3D-readiness audit's building test had to use a stand-in walker that could teleport anywhere.
+A world that responds to its own actions needs the world itself — not each decider — to say
+whether a way is open, what can be seen, and what happens when a body steps off a ledge.

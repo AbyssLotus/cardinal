@@ -458,3 +458,60 @@ A standalone crate depended on `kernel` and `physical` by path and drove `run_ti
 
 The crate was not committed. Adding it as a permanent benchmark is how Vol. V Ch. 8's
 performance budgets would be enforced.
+
+---
+
+## Results: Phases 1–4 implemented (2026-10-01)
+
+Phases 1–4 were built the same day this audit was written, each preceded by its spec
+amendment (A-1 to A-4, recorded in `docs/design-spec/AMENDMENTS.md`) and checked against the
+gates above. Same machine and method as §4 unless noted.
+
+### Gates
+
+| Phase | Gate | Result |
+|---|---|---|
+| 1 · Time with units | Same day/night swing at 1 h, 1 min, 1 s ticks | **Met.** 4.00 °C open, 2.00 °C half-sheltered, at all three (`time_units.rs`) |
+| 1 | Weather spread independent of tick length | **Met.** The declared 3.00 °C measured within ±15% at hourly and per-minute ticks |
+| 1 | A decade stays within a declared climate band | **Met.** Never more than 6 spreads from normal over ten simulated years. One year, 500 regions: spread 2.97 °C, range 7.2–23.5 °C (was −54.9 to +73.6 °C) |
+| 2 · Spatial index | 10k agents, all-pairs 10 m, under 10 ms | **Met.** 9.07 ms (1k agents: 0.47 ms, against 271 ms scanning), with identical answers, held by a conformance suite |
+| 3 · Bodies in space | 100k movers, 5% changing course per tick, under 10 ms and 10k chronicle entries per tick | **Missed.** 47.5 ms and 20,094 entries. Per-tick writing of the same movers costs 136 ms and 100,000 entries. 10k movers: 2.4 ms and about 2,000 entries |
+| 4 · Ground, walls, sight | The building scenario with real movement | **Met.** Cat in through the window and down to the floor under it; shut door blocks the courier until opened; one body per opening per tick; a walk off a shed roof falls 2.5 m; the archer sees the yard through the glass, not the room below or the cellar (`building.rs`) |
+
+The Phase 3 miss is the fact store's per-fact cost: each new segment is four facts, each a
+B-tree insertion with provenance and a chronicle entry. That is Phase 5's hybrid hot tier, not a
+reason to cut corners now. The 10k-mover case, a large town for a text world, is comfortably
+inside a one-second tick.
+
+### Also built and tested
+
+- **Terrain.** Heightfields, slopes, bodies landing on hillsides, a ridge hiding one valley from
+  the next, and a walker routing round a cliff too steep to climb (`terrain.rs`).
+- **Fit and reach.** A wardrobe too wide for every opening is reported blocked. A body cannot
+  climb into an opening higher above the floor than it is tall.
+- **Walking around obstacles.** Grid planning around solid furniture (A*, deterministic).
+- **Facing.** "On your left" via `relative_bearing`; a container's heading turns its contents
+  (a ship turning turns its deck).
+- **A world file using all of it.** `worlds/cottage.world`: a villager walks home up a
+  hillside, through a door, round a table, and up a ladder, driven only by a `[travel]` intent.
+- **The index is invisible.** The same multi-body scenario run with and without the spatial
+  index ends in a bit-identical state hash.
+
+### Known limits, in order of importance for a text world
+
+1. **Nothing creates entities at runtime** (P8). Dropping a new item, a birth, or building
+   something still needs a deterministic id allocator.
+2. **Moving bodies do not collide with each other.** Only openings are exclusive; two people can
+   share a spot in open floor.
+3. **Routes take the fewest openings, not the safest.** Fit and reach rules stop absurd routes,
+   but a body that fits and can reach will use a dangerous window over two safe doors.
+   `PORTAL_DANGER` is available to a decider that cares.
+4. **Legs are walked through.** Gravity acts between legs, so a body walking off a ledge
+   finishes that leg level, then falls.
+5. **Proximity search visits every container in the hierarchy.** It does not skip far-away
+   rooms by their bounds, so its cost grows with the number of rooms as well as the number of
+   bodies.
+6. **Sight is geometric only.** Light level and distance are for the information layer to weigh.
+   An opening without a declared size cannot be seen through.
+7. **Pitch and roll are not represented**; only heading.
+8. **Persistence, residency, parallelism, and the presentation stream remain Phases 5–6.**

@@ -129,6 +129,68 @@ pub const PORTAL_DANGER_OVERRIDE: FactType = FactType::new("physical.space.porta
 /// darkness. A location with no exposure fact is treated as fully exposed.
 pub const EXPOSURE: FactType = FactType::new("physical.space.exposure");
 
+// ---- Constraints, ground, and travel (Vol. III Ch. 1 §1.11; Amendment A-4) --------------
+
+/// Whether a body is **solid**: nothing may pass through it or stand inside it (Vol. III Ch. 1
+/// §1.11, "Solid objects cannot occupy the same space"). Boolean; absent means not solid. A
+/// solid body with a size is an obstacle to travel, and its top is something to stand on.
+pub const SOLID: FactType = FactType::new("physical.body.solid");
+
+/// Whether a body is **opaque**: it blocks sight (§1.11, "Walls block vision"). Boolean; absent
+/// means transparent. Independent of [`SOLID`]: a glass pane is solid and not opaque. On a
+/// portal it means "opaque when closed" — a shut door hides, a shut window does not.
+pub const OPAQUE: FactType = FactType::new("physical.body.opaque");
+
+/// Whether a region is **enclosed**: walled, so movement and sight cross its boundary only
+/// through its portals (Amendment A-4). Boolean; absent means open — a field within a farm,
+/// a glade within a forest.
+pub const ENCLOSED: FactType = FactType::new("physical.space.enclosed");
+
+/// Whether a portal is open (§1.11, "Closed doors prevent movement"). Boolean; absent means
+/// open. A closed portal passes nothing, and passes sight only if it is not [`OPAQUE`].
+pub const PORTAL_OPEN: FactType = FactType::new("physical.space.portal_open");
+
+/// The other face of the same opening: the portal on the far side that whatever passes through
+/// this one emerges from (Amendment A-4). An entity reference; absent means the far side is
+/// found by nearness (the destination's portal back, closest to this one).
+pub const PORTAL_FAR_SIDE: FactType = FactType::new("physical.space.portal_far_side");
+
+/// Whether a body is **mobile**: a free body that falls when unsupported and can travel
+/// (Amendment A-4). Boolean; absent means fixed in place — a room, a wall, a tree, a portal.
+pub const MOBILE: FactType = FactType::new("physical.body.mobile");
+
+/// A region's terrain grid spacing, in centimetres: the distance between neighbouring height
+/// samples along each axis of the region's frame (Amendment A-4). Present only on a region with
+/// terrain; together with [`TERRAIN_SAMPLE`] it is a heightfield whose sample `[column, row]`
+/// stands at `(column × spacing, row × spacing)` in the region's frame.
+pub const TERRAIN_SPACING: FactType = FactType::new("physical.terrain.spacing");
+
+/// A region's terrain heights: a **cardinality-many** set of three-component samples
+/// `[column, row, height]` (height in centimetres in the region's frame). Ground between samples
+/// is interpolated; where a region has no sample, its ground is its frame's level floor. Stored
+/// as a set so each sample is its own fact — terrain can be dug or raised one sample at a time —
+/// and read by value range, never whole (`CommittedView::read_range`).
+pub const TERRAIN_SAMPLE: FactType = FactType::new("physical.terrain.sample");
+
+/// Where a body has been asked to go (Appendix A, Ruling 13): an entity reference — a region to
+/// enter, or a thing to reach. Proposed by whatever decides (a player's action, an NPC's
+/// choice); carried out by Physical Reality's travel system, which clears it on arrival.
+pub const TRAVEL_TO: FactType = FactType::new("physical.travel.to");
+
+/// How fast a body has been asked to travel, in centimetres per simulated second (Ruling 13).
+pub const TRAVEL_SPEED: FactType = FactType::new("physical.travel.speed");
+
+/// Whether a body's travel is currently **blocked**: no open way it fits through leads where
+/// it was asked to go (Ruling 13). Boolean, written by the travel system — set when the way
+/// closes, cleared when it opens — so a decider can notice and reconsider. Absent means not
+/// blocked.
+pub const TRAVEL_BLOCKED: FactType = FactType::new("physical.travel.blocked");
+
+/// How far a body fell in its most recent fall, in centimetres (Amendment A-4): written when the
+/// fall begins, so a consumer — Living Systems judging an injury (Appendix A, Ruling 9) — can
+/// read what gravity did without Physical Reality deciding what it meant.
+pub const FALL_HEIGHT: FactType = FactType::new("physical.body.fall_height");
+
 // ---- Environmental state (facets of one shared environment, Vol. III Ch. 1 §1.10) ------
 
 /// Ambient temperature of a location, as fixed-point centidegrees Celsius. Owned by Physical
@@ -249,6 +311,10 @@ pub const MAX_DENSITY: i64 = 1_000_000;
 /// Ceiling for a body size component, in centimetres (10 000 km) — clamps the field well above
 /// any body a world might declare, from a grain of sand to a planet's crust.
 pub const MAX_SIZE: i64 = 1_000_000_000;
+
+/// Ceiling for a travel speed, in centimetres per second (10 km/s) — well above anything a world
+/// moves by walking, riding, or sailing.
+pub const MAX_SPEED: i64 = 1_000_000;
 
 /// Ceiling for material specific heat capacity (J/(kg·K)) — clamps well above any real value
 /// (water ≈ 4184, hydrogen ≈ 14 300).
