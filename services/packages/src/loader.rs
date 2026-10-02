@@ -12,7 +12,7 @@
 //! store by their published ids, and the loader simply enables both and seeds their facts,
 //! including the physical containment links that place organisms in regions.
 
-use crate::model::{MaterialProperty, WorldPackage};
+use crate::model::{Flag, MaterialProperty, WorldPackage};
 use crate::version::Version;
 use kernel::domain::Domain;
 use kernel::events::ChronicleEntry;
@@ -21,14 +21,16 @@ use kernel::identity::EntityId;
 use kernel::store::MemoryStore;
 use kernel::system::System;
 use kernel::tick::{run_tick, TickError};
+use kernel::time::SimClock;
 use kernel::value::Value;
 use living::schema::BODY_HEAT;
-use living::LivingDomain;
+use living::{LivingConfig, LivingDomain};
 use physical::schema::{
-    ADJACENT_TO, CONTAINED_IN, ELEVATION, EXPOSURE, HAS_PORTAL, LEADS_TO, MADE_OF,
-    MATERIAL_CONDUCTIVITY, MATERIAL_DENSITY, MATERIAL_FLAMMABILITY, MATERIAL_HARDNESS,
-    MATERIAL_THERMAL_CAPACITY, MATERIAL_TOXICITY, PORTAL_DANGER_OVERRIDE, POSITION_X, POSITION_Y,
-    POSITION_Z, TEMPERATURE,
+    ADJACENT_TO, BODY_SIZE, CONTAINED_IN, ELEVATION, ENCLOSED, EXPOSURE, HAS_PORTAL, HEADING,
+    IN_REGION, LEADS_TO, MADE_OF, MATERIAL_CONDUCTIVITY, MATERIAL_DENSITY, MATERIAL_FLAMMABILITY,
+    MATERIAL_HARDNESS, MATERIAL_THERMAL_CAPACITY, MATERIAL_TOXICITY, MOBILE, MOTION_END,
+    MOTION_START, MOTION_TARGET, OPAQUE, PORTAL_DANGER_OVERRIDE, PORTAL_FAR_SIDE, PORTAL_OPEN,
+    POSITION, SOLID, TEMPERATURE, TERRAIN_SAMPLE, TERRAIN_SPACING, TRAVEL_SPEED, TRAVEL_TO,
 };
 use physical::{PhysicalConfig, PhysicalDomain};
 use std::fmt;
@@ -50,6 +52,9 @@ pub enum LoadError {
     LivingRulesMissing,
     /// A selected domain has no implementation wired into the loader yet.
     UnsupportedDomain(String),
+    /// The package failed validation (Vol. IV Ch. 7 §7.1): every problem found, each naming its
+    /// layer, subject, and rule. Nothing is seeded from an invalid package.
+    Invalid(Vec<crate::validate::Problem>),
 }
 
 impl fmt::Display for LoadError {
@@ -67,6 +72,13 @@ impl fmt::Display for LoadError {
             }
             LoadError::UnsupportedDomain(d) => {
                 write!(f, "selected domain `{d}` is not implemented yet")
+            }
+            LoadError::Invalid(problems) => {
+                write!(f, "package is invalid ({} problems)", problems.len())?;
+                for p in problems {
+                    write!(f, "\n  {p}")?;
+                }
+                Ok(())
             }
         }
     }
@@ -114,6 +126,63 @@ impl LoadedWorld {
             chronicle,
         )
     }
+
+    /// Attach a front-door system to the running world: a decider standing in for a player or a
+    /// mind, which proposes intents — where to go, what to open, which way to face (Appendix A,
+    /// Ruling 13). It runs beside the world's own systems under the same law: declared reads and
+    /// writes, a unique id, and owners' authority over what it may write (Amendment A-5).
+    pub fn attach(&mut self, system: Box<dyn System>) {
+        self.systems.push(system);
+    }
+
+    /// The enabled domains, for read-only inspection.
+    pub fn domains(&self) -> &[Box<dyn Domain>] {
+        &self.domains
+    }
+}
+
+/// The Living Systems configuration a package declares, exactly as [`load`] configures the
+/// domain — or `None` if the package has no `[rules.living]`. Exposed, like
+/// [`physical_config`], so a harness can run living alone against a loaded world's store.
+pub fn living_config(package: &WorldPackage) -> Option<LivingConfig> {
+    let rules = package.living_rules?;
+    Some(LivingConfig {
+        clock: SimClock::new(package.clock.tick_ms),
+        metabolism_step_seconds: rules.metabolism_step_seconds,
+        set_point_centi_c: rules.set_point_centi_c,
+        warm_response_seconds: rules.warm_response_seconds,
+        cold_response_seconds: rules.cold_response_seconds,
+    })
+}
+
+/// The Physical Reality configuration a package declares: its clock and every physical rule,
+/// exactly as [`load`] configures the domain. Exposed so a harness can run one physical system
+/// in isolation against a loaded world's store.
+pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
+    let r = &package.physical_rules;
+    PhysicalConfig {
+        clock: SimClock::new(package.clock.tick_ms),
+        day_length_seconds: package.clock.day_seconds,
+        environment_step_seconds: r.environment_step_seconds,
+        diurnal_amplitude_centi_c: r.diurnal_amplitude_centi_c,
+        temperature_variability_centi_c: r.temperature_variability_centi_c,
+        weather_persistence_seconds: r.weather_persistence_seconds,
+        illumination_peak: r.illumination_peak,
+        humidity_baseline: r.humidity_baseline,
+        humidity_variability: r.humidity_variability,
+        pressure_sea_level: r.pressure_sea_level,
+        pressure_elevation_factor: r.pressure_elevation_factor,
+        pressure_variability: r.pressure_variability,
+        wind_gradient_divisor: r.wind_gradient_divisor,
+        fall_danger_per_meter: r.fall_danger_per_meter,
+        thermal_mass_reference: r.thermal_mass_reference,
+        gravity_cm_s2: r.gravity_cm_s2,
+        step_height_cm: r.step_height_cm,
+        max_slope_percent: r.max_slope_percent,
+        nav_cell_cm: r.nav_cell_cm,
+        reach_cm: r.reach_cm,
+        indoor_coupling_seconds: r.indoor_coupling_seconds,
+    }
 }
 
 /// The engine version this build presents to packages (from the crate version).
@@ -135,6 +204,13 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             ),
             engine,
         });
+    }
+
+    // 1b. Validate the package before anything is seeded (Vol. IV Ch. 7 §7.1): references
+    //     resolve, nothing is declared twice, containment is a hierarchy.
+    let problems = crate::validate::validate(package);
+    if !problems.is_empty() {
+        return Err(LoadError::Invalid(problems));
     }
 
     // 2. Domain selection: Physical Reality is mandatory; unknown domains are refused rather
@@ -159,22 +235,8 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     // 3a. Physical Reality: configured from package rules (invariant 5). The domain needs no
     //     region list — its systems discover regions from the seeded temperature facts below
     //     (Vol. V Ch. 2 §2.1, clause 5).
-    let config = PhysicalConfig {
-        ticks_per_day: package.physical_rules.ticks_per_day,
-        diurnal_amplitude_centi_c: package.physical_rules.diurnal_amplitude_centi_c,
-        weather_max_swing_centi_c: package.physical_rules.weather_max_swing_centi_c,
-        illumination_peak: package.physical_rules.illumination_peak,
-        humidity_baseline: package.physical_rules.humidity_baseline,
-        humidity_swing: package.physical_rules.humidity_swing,
-        humidity_drying_divisor: package.physical_rules.humidity_drying_divisor,
-        pressure_sea_level: package.physical_rules.pressure_sea_level,
-        pressure_elevation_factor: package.physical_rules.pressure_elevation_factor,
-        pressure_weather_swing: package.physical_rules.pressure_weather_swing,
-        pressure_settle_divisor: package.physical_rules.pressure_settle_divisor,
-        wind_gradient_divisor: package.physical_rules.wind_gradient_divisor,
-        fall_danger_per_meter: package.physical_rules.fall_danger_per_meter,
-        thermal_mass_reference: package.physical_rules.thermal_mass_reference,
-    };
+    // Both domains step in simulated time on the world's clock (Vol. II Ch. 2, Amendment A-1).
+    let config = physical_config(package);
     let physical = PhysicalDomain::new(config);
     systems.extend(physical.systems());
     domains.push(Box::new(physical));
@@ -201,6 +263,16 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             seeded(Value::Entity(EntityId::from_raw(o.region_id))),
         );
     }
+    // Places that only hold other places (a continent, a town): their own containment link, if
+    // they lie within something.
+    for &(place, within) in &package.places {
+        if let Some(parent) = within {
+            store.seed(
+                FactKey::new(EntityId::from_raw(place), CONTAINED_IN),
+                seeded(Value::Entity(EntityId::from_raw(parent))),
+            );
+        }
+    }
     for c in &package.containment {
         store.seed(
             FactKey::new(EntityId::from_raw(c.child_id), CONTAINED_IN),
@@ -208,14 +280,43 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         );
     }
 
-    // Seed local positions (Physical facts): where each entity sits within its container.
+    // Seed local positions (Physical facts): where each entity's base sits within its
+    // container — one three-component fact each (Amendment A-3).
     for p in &package.positions {
-        let e = EntityId::from_raw(p.entity_id);
-        store.seed(FactKey::new(e, POSITION_X), seeded(Value::Int(p.x)));
-        store.seed(FactKey::new(e, POSITION_Y), seeded(Value::Int(p.y)));
-        if let Some(z) = p.z {
-            store.seed(FactKey::new(e, POSITION_Z), seeded(Value::Int(z)));
-        }
+        store.seed(
+            FactKey::new(EntityId::from_raw(p.entity_id), POSITION),
+            seeded(Value::Vec3([p.x, p.y, p.z.unwrap_or(0)])),
+        );
+    }
+
+    // Seed bodies, facings, and motion under way (Physical facts, Amendment A-3). Motion is a
+    // segment from the body's seeded position, leaving at tick 0 and arriving after the given
+    // simulated time, rounded up to a whole tick.
+    for b in &package.bodies {
+        store.seed(
+            FactKey::new(EntityId::from_raw(b.entity_id), BODY_SIZE),
+            seeded(Value::Vec3([b.half_width, b.half_depth, b.height])),
+        );
+    }
+    for f in &package.facing {
+        store.seed(
+            FactKey::new(EntityId::from_raw(f.entity_id), HEADING),
+            seeded(Value::Int(f.heading.rem_euclid(36_000))),
+        );
+    }
+    for m in &package.motion {
+        let e = EntityId::from_raw(m.entity_id);
+        let tick_ms = package.clock.tick_ms;
+        let ticks = m.seconds.saturating_mul(1000).div_ceil(tick_ms);
+        store.seed(
+            FactKey::new(e, MOTION_TARGET),
+            seeded(Value::Vec3(m.target)),
+        );
+        store.seed(FactKey::new(e, MOTION_START), seeded(Value::Int(0)));
+        store.seed(
+            FactKey::new(e, MOTION_END),
+            seeded(Value::Int(ticks as i64)),
+        );
     }
 
     // Seed portals (Physical facts): each portal is an entity located in its host region
@@ -225,11 +326,10 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         let pid = EntityId::from_raw(portal.portal_id);
         let host = EntityId::from_raw(portal.host_region);
         store.seed(FactKey::new(pid, CONTAINED_IN), seeded(Value::Entity(host)));
-        store.seed(FactKey::new(pid, POSITION_X), seeded(Value::Int(portal.x)));
-        store.seed(FactKey::new(pid, POSITION_Y), seeded(Value::Int(portal.y)));
-        if let Some(z) = portal.z {
-            store.seed(FactKey::new(pid, POSITION_Z), seeded(Value::Int(z)));
-        }
+        store.seed(
+            FactKey::new(pid, POSITION),
+            seeded(Value::Vec3([portal.x, portal.y, portal.z.unwrap_or(0)])),
+        );
         store.seed(
             FactKey::new(pid, LEADS_TO),
             seeded(Value::Entity(EntityId::from_raw(portal.dest_region))),
@@ -289,15 +389,68 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         );
     }
 
+    // Seed constraint flags, linked opening faces, terrain, and travel intents (Physical facts,
+    // Amendment A-4; Ruling 13).
+    for spec in &package.flags {
+        let e = EntityId::from_raw(spec.entity_id);
+        for flag in &spec.flags {
+            let (fact, value) = match flag {
+                Flag::Solid => (SOLID, true),
+                Flag::Opaque => (OPAQUE, true),
+                Flag::Enclosed => (ENCLOSED, true),
+                Flag::Mobile => (MOBILE, true),
+                Flag::Closed => (PORTAL_OPEN, false),
+            };
+            store.seed(FactKey::new(e, fact), seeded(Value::Bool(value)));
+        }
+    }
+    for &(a, b) in &package.portal_pairs {
+        let (a, b) = (EntityId::from_raw(a), EntityId::from_raw(b));
+        store.seed(FactKey::new(a, PORTAL_FAR_SIDE), seeded(Value::Entity(b)));
+        store.seed(FactKey::new(b, PORTAL_FAR_SIDE), seeded(Value::Entity(a)));
+    }
+    for t in &package.terrain {
+        let region = EntityId::from_raw(t.region_id);
+        store.seed(
+            FactKey::new(region, TERRAIN_SPACING),
+            seeded(Value::Int(t.spacing)),
+        );
+        for (i, h) in t.heights.iter().enumerate() {
+            let (column, row) = ((i % t.columns) as i64, (i / t.columns) as i64);
+            store.seed(
+                FactKey::new(region, TERRAIN_SAMPLE),
+                seeded(Value::Vec3([column, row, *h])),
+            );
+        }
+    }
+    for t in &package.travel {
+        let e = EntityId::from_raw(t.entity_id);
+        store.seed(
+            FactKey::new(e, TRAVEL_TO),
+            seeded(Value::Entity(EntityId::from_raw(t.target))),
+        );
+        store.seed(
+            FactKey::new(e, TRAVEL_SPEED),
+            seeded(Value::Int(t.speed_cm_s)),
+        );
+    }
+
+    // Seed overlapping region memberships (a cardinality-many Physical fact, Vol. III Ch. 1
+    // §1.7): each location is linked to every region it lies in beyond its container. The
+    // region entities need nothing else seeded -- a classification region is the places that
+    // name it, and with no temperature fact it is (correctly) not a place the weather runs on.
+    for m in &package.in_region {
+        store.seed(
+            FactKey::new(EntityId::from_raw(m.location_id), IN_REGION),
+            seeded(Value::Entity(EntityId::from_raw(m.region_id))),
+        );
+    }
+
     // 3b. Living Systems (optional): configured from package rules. Living reads organism
     //     containment and region temperature by id — no wiring between domains is needed.
     if has_living {
-        let rules = package.living_rules.ok_or(LoadError::LivingRulesMissing)?;
-        let living = LivingDomain::new(
-            rules.set_point_centi_c,
-            rules.warm_response,
-            rules.cold_response,
-        );
+        let living =
+            LivingDomain::new(living_config(package).ok_or(LoadError::LivingRulesMissing)?);
         systems.extend(living.systems());
         domains.push(Box::new(living));
         for o in &package.organisms {
@@ -305,6 +458,15 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 FactKey::new(EntityId::from_raw(o.id), BODY_HEAT),
                 seeded(Value::Int(o.body_heat_centi_c)),
             );
+        }
+    }
+
+    // 4. Install the spatial index (Vol. V Ch. 2 §2.1, Amendment A-2) from the placement rule
+    //    of the domain that owns space, now that initial reality is seeded: one full build,
+    //    after which every commit keeps it current.
+    for domain in &domains {
+        if let Some(projector) = domain.spatial_projector() {
+            store.install_spatial_index(projector);
         }
     }
 

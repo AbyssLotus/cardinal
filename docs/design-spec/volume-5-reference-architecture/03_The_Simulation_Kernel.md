@@ -64,6 +64,8 @@ The `cause` field is where chronicle honesty is manufactured: a proposal must na
 
 ---
 
+
+**Owners may refuse writers** *(Amendment A-5)*. An owning domain may declare that some of its fact types accept proposals only from its own systems — the systems it registered at bootstrap. The kernel enforces this at Resolve: a proposal from any other system to such a fact fails the tick, named, exactly as an undeclared write does. This is how a ruling like Appendix A's Ruling 13 ("no other domain ever writes a position") becomes law rather than etiquette: deciders propose *intents*, which are open to them, and only the owner's systems turn intents into the restricted facts. Because authority is checked against the systems the owner registered, the kernel also refuses to run two systems under one id — a duplicate id would let a stranger wear an owner's name, and would share its random streams besides.
 # 3.2 The Scheduler
 
 The scheduler owns two questions: *who runs this tick*, and *in what order do their effects compose*.
@@ -71,6 +73,8 @@ The scheduler owns two questions: *who runs this tick*, and *in what order do th
 ## Cadence
 
 Each system registers its cadence (every tick, hourly, daily, monthly — simulation time, per Volume II). The scheduler maintains the cadence calendar and, at stage 1, selects the due set. Two refinements earn their complexity:
+
+**Cadence is declared in simulated time** *(Amendment A-1)*. A system asks to run "every minute", not "every 60 ticks"; the world's clock rule converts that to a period in ticks (never less than one). The step a system takes is the simulated duration its period actually covers, so a weather system stepping once a minute in a world of one-second ticks advances one minute of weather per run, and the same system in a world of hour-long ticks advances an hour per run — the same weather either way (Volume II, Time, invariant 11).
 
 **Dirty-region hints.** Systems may declare interest predicates ("run for regions where weather changed"). Hints *narrow* work; they may never *add* work outside cadence, and a hintless run must produce identical results (hints are pure optimization — Chapter 4's observational-equivalence clause applies).
 

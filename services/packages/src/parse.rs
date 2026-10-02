@@ -6,9 +6,10 @@
 //! pure data — this reads declarations, it never executes them (Vol. IV Ch. 1, invariant 6).
 
 use crate::model::{
-    AdjacencySpec, ContainmentSpec, ExposureSpec, LivingRules, MadeOfSpec, Manifest,
-    MaterialProperty, MaterialSpec, OrganismSpec, PhysicalRules, PortalDangerSpec, PortalSpec,
-    PositionSpec, RegionSpec, WorldPackage,
+    AdjacencySpec, BodySpec, ClockRules, ContainmentSpec, ExposureSpec, FacingSpec, Flag, FlagSpec,
+    LivingRules, MadeOfSpec, Manifest, MaterialProperty, MaterialSpec, MotionSpec, OrganismSpec,
+    PhysicalRules, PortalDangerSpec, PortalSpec, PositionSpec, RegionMembershipSpec, RegionSpec,
+    TerrainSpec, TravelSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -44,11 +45,18 @@ impl fmt::Display for ParseError {
 
 /// Parse a world file into a [`WorldPackage`].
 ///
-/// Recognised sections: `[manifest]`, `[rules.physical]`, `[rules.living]`, `[regions]`
+/// Recognised sections: `[manifest]`, `[clock]` (`tick_seconds` or `tick_ms`, and
+/// `day_seconds`), `[rules.physical]`, `[rules.living]`, `[regions]`
 /// (`region_id = temperature[, elevation]`), `[organisms]`
 /// (`organism_id = region_id, body_heat`), `[containment]` (`child_id = parent_id`),
 /// `[adjacency]`, `[exposure]`, `[positions]`, `[portals]`, `[portal_danger]`, `[materials]`
-/// (`material_id = property:value, …`), and `[made_of]` (`object_id = material_id[, …]`).
+/// (`material_id = property:value, …`), `[made_of]` (`object_id = material_id[, …]`),
+/// `[in_region]` (`location_id = region_id[, …]`), `[bodies]`
+/// (`entity_id = half_width, half_depth, height`), `[facing]` (`entity_id = degrees`), and
+/// `[motion]` (`entity_id = x, y, z, seconds`), `[flags]` (`entity_id = flag[, …]`, flags
+/// `solid`, `opaque`, `enclosed`, `mobile`, `closed`), `[portal_pairs]` (`portal = portal`),
+/// `[terrain]` (`region_id = spacing, columns, h h h …` row-major), `[travel]`
+/// (`entity_id = target_id, speed`), and `[places]` (`place_id = container_id` or `none`).
 /// Blank lines and `#` comments are ignored. A missing required field is an error — the
 /// loader never fabricates defaults (Vol. IV Ch. 2).
 pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
@@ -57,23 +65,31 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut version: Option<Version> = None;
     let mut engine: Option<EngineReq> = None;
     let mut domains: Option<Vec<String>> = None;
-    let mut ticks_per_day: Option<u64> = None;
+    let mut tick_ms: Option<u64> = None;
+    let mut day_seconds: Option<u64> = None;
+    let mut environment_step_seconds: Option<u64> = None;
     let mut amplitude: Option<i64> = None;
-    let mut swing: Option<i64> = None;
+    let mut temperature_variability: Option<i64> = None;
+    let mut weather_persistence_seconds: Option<u64> = None;
     let mut illumination_peak: Option<i64> = None;
     let mut humidity_baseline: Option<i64> = None;
-    let mut humidity_swing: Option<i64> = None;
-    let mut humidity_drying_divisor: Option<i64> = None;
+    let mut humidity_variability: Option<i64> = None;
     let mut pressure_sea_level: Option<i64> = None;
     let mut pressure_elevation_factor: Option<i64> = None;
-    let mut pressure_weather_swing: Option<i64> = None;
-    let mut pressure_settle_divisor: Option<i64> = None;
+    let mut pressure_variability: Option<i64> = None;
     let mut wind_gradient_divisor: Option<i64> = None;
     let mut fall_danger_per_meter: Option<i64> = None;
     let mut thermal_mass_reference: Option<i64> = None;
+    let mut gravity_cm_s2: Option<i64> = None;
+    let mut step_height_cm: Option<i64> = None;
+    let mut max_slope_percent: Option<i64> = None;
+    let mut nav_cell_cm: Option<i64> = None;
+    let mut reach_cm: Option<i64> = None;
+    let mut indoor_coupling_seconds: Option<u64> = None;
+    let mut metabolism_step_seconds: Option<u64> = None;
     let mut set_point: Option<i64> = None;
-    let mut warm_response: Option<i64> = None;
-    let mut cold_response: Option<i64> = None;
+    let mut warm_response_seconds: Option<u64> = None;
+    let mut cold_response_seconds: Option<u64> = None;
     let mut regions: Vec<RegionSpec> = Vec::new();
     let mut organisms: Vec<OrganismSpec> = Vec::new();
     let mut containment: Vec<ContainmentSpec> = Vec::new();
@@ -84,6 +100,15 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut portal_danger: Vec<PortalDangerSpec> = Vec::new();
     let mut materials: Vec<MaterialSpec> = Vec::new();
     let mut made_of: Vec<MadeOfSpec> = Vec::new();
+    let mut in_region: Vec<RegionMembershipSpec> = Vec::new();
+    let mut bodies: Vec<BodySpec> = Vec::new();
+    let mut facing: Vec<FacingSpec> = Vec::new();
+    let mut motion: Vec<MotionSpec> = Vec::new();
+    let mut flags: Vec<FlagSpec> = Vec::new();
+    let mut portal_pairs: Vec<(u64, u64)> = Vec::new();
+    let mut terrain: Vec<TerrainSpec> = Vec::new();
+    let mut travel: Vec<TravelSpec> = Vec::new();
+    let mut places: Vec<(u64, Option<u64>)> = Vec::new();
 
     for (i, raw) in text.lines().enumerate() {
         let line_no = i + 1;
@@ -127,30 +152,70 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     ))
                 }
             },
+            "clock" => match key {
+                // The tick may be declared in whole seconds or in milliseconds — one or the
+                // other — so an hour-long tick and a tenth-of-a-second tick both read naturally.
+                "tick_seconds" | "tick_ms" => {
+                    if tick_ms.is_some() {
+                        return Err(ParseError::at(
+                            line_no,
+                            "declare the tick length once, as tick_seconds or tick_ms",
+                        ));
+                    }
+                    let n: u64 = parse_num(value, line_no)?;
+                    let ms = if key == "tick_seconds" {
+                        n.checked_mul(1000)
+                            .ok_or_else(|| ParseError::at(line_no, "tick length overflows"))?
+                    } else {
+                        n
+                    };
+                    if ms == 0 {
+                        return Err(ParseError::at(
+                            line_no,
+                            "a tick must last some time (zero length)",
+                        ));
+                    }
+                    tick_ms = Some(ms);
+                }
+                "day_seconds" => day_seconds = Some(parse_num(value, line_no)?),
+                other => {
+                    return Err(ParseError::at(
+                        line_no,
+                        format!("unknown clock key {other:?}"),
+                    ))
+                }
+            },
             "rules.physical" => match key {
-                "ticks_per_day" => ticks_per_day = Some(parse_num(value, line_no)?),
+                "environment_step_seconds" => {
+                    environment_step_seconds = Some(parse_num(value, line_no)?)
+                }
                 "diurnal_amplitude_centi_c" => amplitude = Some(parse_num(value, line_no)?),
-                "weather_max_swing_centi_c" => swing = Some(parse_num(value, line_no)?),
+                "temperature_variability_centi_c" => {
+                    temperature_variability = Some(parse_num(value, line_no)?)
+                }
+                "weather_persistence_seconds" => {
+                    weather_persistence_seconds = Some(parse_num(value, line_no)?)
+                }
                 "illumination_peak" => illumination_peak = Some(parse_num(value, line_no)?),
                 "humidity_baseline" => humidity_baseline = Some(parse_num(value, line_no)?),
-                "humidity_swing" => humidity_swing = Some(parse_num(value, line_no)?),
-                "humidity_drying_divisor" => {
-                    humidity_drying_divisor = Some(parse_num(value, line_no)?)
-                }
+                "humidity_variability" => humidity_variability = Some(parse_num(value, line_no)?),
                 "pressure_sea_level" => pressure_sea_level = Some(parse_num(value, line_no)?),
                 "pressure_elevation_factor" => {
                     pressure_elevation_factor = Some(parse_num(value, line_no)?)
                 }
-                "pressure_weather_swing" => {
-                    pressure_weather_swing = Some(parse_num(value, line_no)?)
-                }
-                "pressure_settle_divisor" => {
-                    pressure_settle_divisor = Some(parse_num(value, line_no)?)
-                }
+                "pressure_variability" => pressure_variability = Some(parse_num(value, line_no)?),
                 "wind_gradient_divisor" => wind_gradient_divisor = Some(parse_num(value, line_no)?),
                 "fall_danger_per_meter" => fall_danger_per_meter = Some(parse_num(value, line_no)?),
                 "thermal_mass_reference" => {
                     thermal_mass_reference = Some(parse_num(value, line_no)?)
+                }
+                "gravity_cm_s2" => gravity_cm_s2 = Some(parse_num(value, line_no)?),
+                "step_height_cm" => step_height_cm = Some(parse_num(value, line_no)?),
+                "max_slope_percent" => max_slope_percent = Some(parse_num(value, line_no)?),
+                "nav_cell_cm" => nav_cell_cm = Some(parse_num(value, line_no)?),
+                "reach_cm" => reach_cm = Some(parse_num(value, line_no)?),
+                "indoor_coupling_seconds" => {
+                    indoor_coupling_seconds = Some(parse_num(value, line_no)?)
                 }
                 other => {
                     return Err(ParseError::at(
@@ -160,9 +225,12 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 }
             },
             "rules.living" => match key {
+                "metabolism_step_seconds" => {
+                    metabolism_step_seconds = Some(parse_num(value, line_no)?)
+                }
                 "set_point_centi_c" => set_point = Some(parse_num(value, line_no)?),
-                "warm_response" => warm_response = Some(parse_num(value, line_no)?),
-                "cold_response" => cold_response = Some(parse_num(value, line_no)?),
+                "warm_response_seconds" => warm_response_seconds = Some(parse_num(value, line_no)?),
+                "cold_response_seconds" => cold_response_seconds = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -246,6 +314,145 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     });
                 }
             }
+            "in_region" => {
+                let location_id: u64 = parse_num(key, line_no)?;
+                for region in value.split(',') {
+                    let region_id: u64 = parse_num(region, line_no)?;
+                    // Lying within oneself says nothing and would only be a typo for another
+                    // id; refuse it here rather than seed a meaningless fact (the region queries
+                    // would tolerate it, but a package should not carry it).
+                    if region_id == location_id {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("entity {location_id} cannot be a region of itself"),
+                        ));
+                    }
+                    in_region.push(RegionMembershipSpec {
+                        location_id,
+                        region_id,
+                    });
+                }
+            }
+            "bodies" => {
+                let entity_id: u64 = parse_num(key, line_no)?;
+                let [half_width, half_depth, height] =
+                    parse_ints::<3>(value, line_no, "half_width, half_depth, height")?;
+                if half_width < 0 || half_depth < 0 || height < 0 {
+                    return Err(ParseError::at(line_no, "a body's size cannot be negative"));
+                }
+                bodies.push(BodySpec {
+                    entity_id,
+                    half_width,
+                    half_depth,
+                    height,
+                });
+            }
+            "facing" => {
+                let entity_id: u64 = parse_num(key, line_no)?;
+                facing.push(FacingSpec {
+                    entity_id,
+                    heading: parse_degrees(value, line_no)?,
+                });
+            }
+            "motion" => {
+                let entity_id: u64 = parse_num(key, line_no)?;
+                let [x, y, z, seconds] = parse_ints::<4>(value, line_no, "x, y, z, seconds")?;
+                if seconds < 0 {
+                    return Err(ParseError::at(line_no, "arrival cannot be in the past"));
+                }
+                motion.push(MotionSpec {
+                    entity_id,
+                    target: [x, y, z],
+                    seconds: seconds as u64,
+                });
+            }
+            "flags" => {
+                let entity_id: u64 = parse_num(key, line_no)?;
+                let mut list = Vec::new();
+                for name in value.split(',') {
+                    list.push(match name.trim() {
+                        "solid" => Flag::Solid,
+                        "opaque" => Flag::Opaque,
+                        "enclosed" => Flag::Enclosed,
+                        "mobile" => Flag::Mobile,
+                        "closed" => Flag::Closed,
+                        other => {
+                            return Err(ParseError::at(
+                                line_no,
+                                format!(
+                                "unknown flag {other:?} (solid, opaque, enclosed, mobile, closed)"
+                            ),
+                            ))
+                        }
+                    });
+                }
+                flags.push(FlagSpec {
+                    entity_id,
+                    flags: list,
+                });
+            }
+            "portal_pairs" => {
+                let a: u64 = parse_num(key, line_no)?;
+                let b: u64 = parse_num(value, line_no)?;
+                portal_pairs.push((a, b));
+            }
+            "terrain" => {
+                let region_id: u64 = parse_num(key, line_no)?;
+                let mut parts = value.splitn(3, ',');
+                let mut next = |what: &str| {
+                    parts.next().ok_or_else(|| {
+                        ParseError::at(
+                            line_no,
+                            format!("expected `spacing, columns, heights…` ({what})"),
+                        )
+                    })
+                };
+                let spacing: i64 = parse_num(next("spacing")?, line_no)?;
+                let columns: usize = parse_num(next("columns")?, line_no)?;
+                let heights = next("heights")?
+                    .split_whitespace()
+                    .map(|h| parse_num(h, line_no))
+                    .collect::<Result<Vec<i64>, _>>()?;
+                if spacing <= 0
+                    || columns == 0
+                    || heights.is_empty()
+                    || heights.len() % columns != 0
+                {
+                    return Err(ParseError::at(
+                        line_no,
+                        "terrain needs a positive spacing and whole rows of heights",
+                    ));
+                }
+                terrain.push(TerrainSpec {
+                    region_id,
+                    spacing,
+                    columns,
+                    heights,
+                });
+            }
+            "places" => {
+                let place: u64 = parse_num(key, line_no)?;
+                let within = match value.trim() {
+                    "none" => None,
+                    v => Some(parse_num(v, line_no)?),
+                };
+                places.push((place, within));
+            }
+            "travel" => {
+                let entity_id: u64 = parse_num(key, line_no)?;
+                let [target, speed_cm_s] = parse_ints::<2>(value, line_no, "target, speed")?;
+                if target < 0 || speed_cm_s <= 0 {
+                    return Err(ParseError::at(
+                        line_no,
+                        "travel needs a target id and a positive speed",
+                    ));
+                }
+                travel.push(TravelSpec {
+                    entity_id,
+                    target: target as u64,
+                    speed_cm_s,
+                });
+            }
             "" => {
                 return Err(ParseError::at(
                     line_no,
@@ -267,30 +474,33 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         engine: require(engine, "manifest.engine")?,
         domains: require(domains, "manifest.domains")?,
     };
+    let clock = ClockRules {
+        tick_ms: require(tick_ms, "clock.tick_seconds (or clock.tick_ms)")?,
+        day_seconds: require(day_seconds, "clock.day_seconds")?,
+    };
     let physical_rules = PhysicalRules {
-        ticks_per_day: require(ticks_per_day, "rules.physical.ticks_per_day")?,
+        environment_step_seconds: require(
+            environment_step_seconds,
+            "rules.physical.environment_step_seconds",
+        )?,
         diurnal_amplitude_centi_c: require(amplitude, "rules.physical.diurnal_amplitude_centi_c")?,
-        weather_max_swing_centi_c: require(swing, "rules.physical.weather_max_swing_centi_c")?,
+        temperature_variability_centi_c: require(
+            temperature_variability,
+            "rules.physical.temperature_variability_centi_c",
+        )?,
+        weather_persistence_seconds: require(
+            weather_persistence_seconds,
+            "rules.physical.weather_persistence_seconds",
+        )?,
         illumination_peak: require(illumination_peak, "rules.physical.illumination_peak")?,
         humidity_baseline: require(humidity_baseline, "rules.physical.humidity_baseline")?,
-        humidity_swing: require(humidity_swing, "rules.physical.humidity_swing")?,
-        humidity_drying_divisor: require(
-            humidity_drying_divisor,
-            "rules.physical.humidity_drying_divisor",
-        )?,
+        humidity_variability: require(humidity_variability, "rules.physical.humidity_variability")?,
         pressure_sea_level: require(pressure_sea_level, "rules.physical.pressure_sea_level")?,
         pressure_elevation_factor: require(
             pressure_elevation_factor,
             "rules.physical.pressure_elevation_factor",
         )?,
-        pressure_weather_swing: require(
-            pressure_weather_swing,
-            "rules.physical.pressure_weather_swing",
-        )?,
-        pressure_settle_divisor: require(
-            pressure_settle_divisor,
-            "rules.physical.pressure_settle_divisor",
-        )?,
+        pressure_variability: require(pressure_variability, "rules.physical.pressure_variability")?,
         wind_gradient_divisor: require(
             wind_gradient_divisor,
             "rules.physical.wind_gradient_divisor",
@@ -303,18 +513,43 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             thermal_mass_reference,
             "rules.physical.thermal_mass_reference",
         )?,
+        gravity_cm_s2: require(gravity_cm_s2, "rules.physical.gravity_cm_s2")?,
+        step_height_cm: require(step_height_cm, "rules.physical.step_height_cm")?,
+        max_slope_percent: require(max_slope_percent, "rules.physical.max_slope_percent")?,
+        nav_cell_cm: require(nav_cell_cm, "rules.physical.nav_cell_cm")?,
+        reach_cm: require(reach_cm, "rules.physical.reach_cm")?,
+        indoor_coupling_seconds: require(
+            indoor_coupling_seconds,
+            "rules.physical.indoor_coupling_seconds",
+        )?,
     };
-    let living_rules = match (set_point, warm_response, cold_response) {
-        (None, None, None) => None,
+    let living_rules = match (
+        metabolism_step_seconds,
+        set_point,
+        warm_response_seconds,
+        cold_response_seconds,
+    ) {
+        (None, None, None, None) => None,
         _ => Some(LivingRules {
+            metabolism_step_seconds: require(
+                metabolism_step_seconds,
+                "rules.living.metabolism_step_seconds",
+            )?,
             set_point_centi_c: require(set_point, "rules.living.set_point_centi_c")?,
-            warm_response: require(warm_response, "rules.living.warm_response")?,
-            cold_response: require(cold_response, "rules.living.cold_response")?,
+            warm_response_seconds: require(
+                warm_response_seconds,
+                "rules.living.warm_response_seconds",
+            )?,
+            cold_response_seconds: require(
+                cold_response_seconds,
+                "rules.living.cold_response_seconds",
+            )?,
         }),
     };
 
     Ok(WorldPackage {
         manifest,
+        clock,
         physical_rules,
         living_rules,
         regions,
@@ -327,7 +562,69 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         portal_danger,
         materials,
         made_of,
+        in_region,
+        bodies,
+        facing,
+        motion,
+        flags,
+        portal_pairs,
+        terrain,
+        travel,
+        places,
     })
+}
+
+/// Parse exactly `N` comma-separated integers, naming the expected shape in any error.
+fn parse_ints<const N: usize>(
+    value: &str,
+    line_no: usize,
+    shape: &str,
+) -> Result<[i64; N], ParseError> {
+    let parts: Vec<&str> = value.split(',').collect();
+    if parts.len() != N {
+        return Err(ParseError::at(line_no, format!("expected `{shape}`")));
+    }
+    let mut out = [0i64; N];
+    for (slot, part) in out.iter_mut().zip(parts) {
+        *slot = parse_num(part, line_no)?;
+    }
+    Ok(out)
+}
+
+/// Parse a compass bearing in degrees — a whole number or up to two decimal places, possibly
+/// negative (`90`, `22.5`, `-45`) — into hundredths of a degree.
+fn parse_degrees(value: &str, line_no: usize) -> Result<i64, ParseError> {
+    let v = value.trim();
+    let bad = || {
+        ParseError::at(
+            line_no,
+            format!("expected degrees like 90 or 22.5, got {v:?}"),
+        )
+    };
+    let (negative, digits) = match v.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, v),
+    };
+    // A decimal point must have digits after it: "1." is a typo, not a bearing.
+    let (whole, frac) = match digits.split_once('.') {
+        Some((_, "")) => return Err(bad()),
+        Some((w, f)) => (w, f),
+        None => (digits, ""),
+    };
+    if whole.is_empty() || frac.len() > 2 || !frac.chars().all(|c| c.is_ascii_digit()) {
+        return Err(bad());
+    }
+    let whole: i64 = whole.parse().map_err(|_| bad())?;
+    let frac: i64 = if frac.is_empty() {
+        0
+    } else {
+        format!("{frac:0<2}").parse().map_err(|_| bad())?
+    };
+    let centi = whole
+        .checked_mul(100)
+        .and_then(|w| w.checked_add(frac))
+        .ok_or_else(bad)?;
+    Ok(if negative { -centi } else { centi })
 }
 
 /// Parse a material line's value: a comma-separated list of `property:value` pairs, e.g.
@@ -499,7 +796,7 @@ fn require<T>(opt: Option<T>, what: &str) -> Result<T, ParseError> {
 #[cfg(test)]
 mod tests {
     use super::parse_world;
-    use crate::model::MaterialProperty;
+    use crate::model::{Flag, MaterialProperty};
 
     const HEADER: &str = "\
 [manifest]
@@ -507,21 +804,29 @@ id = world.test
 version = 0.1.0
 engine = >=0.0, <1.0
 domains = physical
+[clock]
+tick_seconds = 3600
+day_seconds = 86400
 [rules.physical]
-ticks_per_day = 24
+environment_step_seconds = 3600
 diurnal_amplitude_centi_c = 400
-weather_max_swing_centi_c = 40
+temperature_variability_centi_c = 300
+weather_persistence_seconds = 21600
 illumination_peak = 10000
 humidity_baseline = 5500
-humidity_swing = 80
-humidity_drying_divisor = 8
+humidity_variability = 800
 pressure_sea_level = 10130
 pressure_elevation_factor = 1
-pressure_weather_swing = 20
-pressure_settle_divisor = 8
+pressure_variability = 60
 wind_gradient_divisor = 10
 fall_danger_per_meter = 1500
 thermal_mass_reference = 1000
+gravity_cm_s2 = 981
+step_height_cm = 40
+max_slope_percent = 100
+nav_cell_cm = 50
+reach_cm = 75
+indoor_coupling_seconds = 14400
 [regions]
 1 = 1500
 ";
@@ -553,6 +858,40 @@ thermal_mass_reference = 1000
     }
 
     #[test]
+    fn region_memberships_parse_one_link_per_region() {
+        let text = format!(
+            "{HEADER}\
+[in_region]
+3 = 900, 901     # the farmhouse lies in a climate zone and a watershed
+4 = 902
+"
+        );
+        let pkg = parse_world(&text).expect("parses");
+        let links: Vec<(u64, u64)> = pkg
+            .in_region
+            .iter()
+            .map(|m| (m.location_id, m.region_id))
+            .collect();
+        assert_eq!(links, vec![(3, 900), (3, 901), (4, 902)]);
+    }
+
+    #[test]
+    fn a_location_cannot_be_its_own_region() {
+        let text = format!(
+            "{HEADER}\
+[in_region]
+5 = 900, 5
+"
+        );
+        let err = parse_world(&text).expect_err("must reject self-membership");
+        assert!(
+            err.reason.contains("region of itself"),
+            "got: {}",
+            err.reason
+        );
+    }
+
+    #[test]
     fn an_unknown_material_property_is_rejected() {
         // No silent defaults: a property the engine does not model is an error, not ignored
         // (Vol. IV Ch. 2, missing/unknown is failure).
@@ -568,5 +907,89 @@ thermal_mass_reference = 1000
             "error should name the offending property, got: {}",
             err.reason
         );
+    }
+
+    #[test]
+    fn the_clock_takes_seconds_or_milliseconds_but_not_both() {
+        let tenth = HEADER.replace("tick_seconds = 3600", "tick_ms = 100");
+        assert_eq!(parse_world(&tenth).expect("parses").clock.tick_ms, 100);
+        assert_eq!(parse_world(HEADER).unwrap().clock.tick_ms, 3_600_000);
+        let both = HEADER.replace("tick_seconds = 3600", "tick_seconds = 3600\ntick_ms = 100");
+        assert!(parse_world(&both).is_err(), "two tick lengths is ambiguous");
+        let zero = HEADER.replace("tick_seconds = 3600", "tick_seconds = 0");
+        assert!(parse_world(&zero).is_err(), "time must pass");
+        let none = HEADER.replace("tick_seconds = 3600\n", "");
+        let err = parse_world(&none).expect_err("no default tick length");
+        assert!(
+            err.reason.contains("clock.tick_seconds"),
+            "got {}",
+            err.reason
+        );
+    }
+
+    #[test]
+    fn bodies_facing_and_motion_parse() {
+        let text = format!(
+            "{HEADER}\
+[bodies]
+10 = 25, 15, 175      # a person: 50 cm wide, 30 cm deep, 1.75 m tall
+[facing]
+10 = 90
+11 = 22.5
+12 = -45
+[motion]
+10 = 1000, 0, 0, 30
+"
+        );
+        let pkg = parse_world(&text).expect("parses");
+        assert_eq!(
+            pkg.bodies,
+            vec![crate::model::BodySpec {
+                entity_id: 10,
+                half_width: 25,
+                half_depth: 15,
+                height: 175
+            }]
+        );
+        let headings: Vec<i64> = pkg.facing.iter().map(|f| f.heading).collect();
+        assert_eq!(headings, vec![9_000, 2_250, -4_500]);
+        assert_eq!(pkg.motion[0].target, [1000, 0, 0]);
+        assert_eq!(pkg.motion[0].seconds, 30);
+        for bad in ["10 = 1.234", "10 = east", "10 = 1."] {
+            let t = format!("{HEADER}[facing]\n{bad}\n");
+            assert!(parse_world(&t).is_err(), "{bad} must be rejected");
+        }
+        let neg = format!("{HEADER}[bodies]\n10 = -1, 1, 1\n");
+        assert!(parse_world(&neg).is_err(), "negative size");
+    }
+
+    #[test]
+    fn constraints_terrain_and_travel_parse() {
+        let text = format!(
+            "{HEADER}\
+[flags]
+5 = enclosed
+30 = solid, opaque
+1000 = closed, opaque
+10 = mobile
+[portal_pairs]
+1000 = 1001
+[terrain]
+1 = 500, 3, 0 10 20  5 15 25
+[travel]
+10 = 2, 140
+"
+        );
+        let pkg = parse_world(&text).expect("parses");
+        assert_eq!(pkg.flags.len(), 4);
+        assert_eq!(pkg.flags[1].flags, vec![Flag::Solid, Flag::Opaque]);
+        assert_eq!(pkg.portal_pairs, vec![(1000, 1001)]);
+        assert_eq!(pkg.terrain[0].heights, vec![0, 10, 20, 5, 15, 25]);
+        assert_eq!(pkg.terrain[0].columns, 3);
+        assert_eq!(pkg.travel[0].target, 2);
+        let ragged = format!("{HEADER}[terrain]\n1 = 500, 3, 0 10 20 5\n");
+        assert!(parse_world(&ragged).is_err(), "rows must be whole");
+        let unknown = format!("{HEADER}[flags]\n1 = sticky\n");
+        assert!(parse_world(&unknown).is_err());
     }
 }

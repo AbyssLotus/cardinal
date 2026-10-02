@@ -38,6 +38,9 @@ members = [
     "frontends/cli",
     "frontends/narrator",
     "frontends/tools",
+
+    # tests/ — the reference-world suite: every feature exercised in one world, Ashford.
+    "tests/reference",
 ]
 
 [workspace.package]

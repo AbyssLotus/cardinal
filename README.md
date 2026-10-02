@@ -94,18 +94,36 @@ Uncommented code does not merge. Clarity is a review criterion equal to correctn
 
 ## Status
 
-**Rebuild phase — scaffold.** The v0.1 proof of concept (six milestones, playable,
+**Rebuild phase — foundations.** The v0.1 proof of concept (six milestones, playable,
 365-day-stable) is archived at [archive/poc-v0.1](archive/poc-v0.1/README.md). The
 reference engine is being built here, from the specification, in roadmap order
-(Vol. V Ch. 10 §10.4):
+(Vol. V Ch. 10 §10.4), re-sequenced by the
+[3D-readiness audit](docs/audits/3d-world-readiness.md):
 
-- [ ] Kernel: reality store contract + tick pipeline (Vol. V Ch. 2–3)
-- [ ] Determinism harness: per-tick state hashing, twin-run CI (Vol. V Ch. 4 — *the
-      cheapest alarm, first*)
-- [ ] Domain registration + first domains (Physical Reality is mandatory: Vol. IV Ch. 2 §2.1)
-- [ ] Package loader + validation stack (Vol. IV Ch. 3, Ch. 7)
+- [x] Kernel: reality store contract + tick pipeline (Vol. V Ch. 2–3)
+- [x] Determinism harness: per-tick state hashing, twin-run CI (Vol. V Ch. 4)
+- [x] Domain registration + first domains: Physical Reality, Living Systems (thermoregulation)
+- [x] Package loader (no engine defaults; every rule from the package)
+- [x] Time with units: tick length is a world rule; every rate is per simulated second
+      (Amendment A-1)
+- [x] Spatial index in the store contract; proximity and contents queries (Amendment A-2)
+- [x] Bodies: one-fact positions, size, facing that turns containers' frames, motion as
+      segments (Amendment A-3)
+- [x] Constraints and travel: solids, opacity, enclosure, open/shut and linked openings,
+      fit, terrain, gravity, line of sight, intent-driven travel (Amendment A-4, Ruling 13)
+- [x] Authority, shelter, and ground-relative height (Amendment A-5); thermal mass as heat
+      stored per volume (Amendment A-6)
+- [x] Package validation, layers 1–4: schema, reference, coherence, world (Vol. IV Ch. 7)
+- [x] Ashford, the working reference city: the whole integration suite runs in one fictional
+      world ([worlds/ashford.world](worlds/ashford.world), [tests/reference](tests/reference/README.md))
+- [ ] Validation layer 5 (scenarios), invariant soaks, liveness envelopes (Vol. IV Ch. 7)
 - [ ] Persistence: chronicle tail + snapshots, two-road recovery (Vol. V Ch. 7)
+- [ ] Hybrid store hot tier; residency ladder; parallel evaluation (Vol. V Ch. 2, Ch. 5)
+- [ ] Presentation stream for clients (text narrator, 3D viewer) (Vol. V Ch. 5–6, Ch. 9)
 - [ ] First probe worlds, then the five reference worlds (Vol. IV Ch. 8)
+
+Spec amendments made along the way are recorded in
+[docs/design-spec/AMENDMENTS.md](docs/design-spec/AMENDMENTS.md).
 
 ## Hard rules (inherited, still binding)
 

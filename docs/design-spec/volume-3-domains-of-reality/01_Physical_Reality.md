@@ -541,6 +541,22 @@ Floodwaters temporarily contain roads.
 
 The Physical Reality domain should therefore treat containment as state rather than immutable structure.
 
+## Bodies, Facing, and Motion
+
+*Amendment A-3 (2026-10), see [AMENDMENTS.md](../AMENDMENTS.md).*
+
+Containment says *within what*; three further facts say *where, how big, which way, and going where* — enough to hold a person, an item, or a place's position meaningfully at any moment.
+
+**Position is one fact.** An entity's position is a single three-component value in its container's local frame: where its **base** sits (the point on which it stands or rests). One fact, written atomically — never three axes that could disagree.
+
+**Size.** A body may declare its extent: a half-width and a half-depth across its footprint, and a height above its base. A thing without a size is a point. Size is what lets space answer *does it fit*, *what does it overlap*, and *what is it standing on*.
+
+**Facing.** A body may declare a heading — a compass bearing, clockwise from its frame's north. Facing is what makes *ahead*, *to the left*, and *behind* answerable (§1.6, Relative Position). A container's heading orients the frame of everything inside it: when a ship turns, its deck turns with it, and the crew's positions *on the deck* do not change. Pitch and roll are not yet represented; they join when a world needs a tilted frame.
+
+**Motion is a segment, not a stream.** A moving body carries one straight segment: the target it is heading for, the tick it set out, and the tick it will arrive. Its position at any tick in between is *derived* — exactly, by every consumer, the same way — and nothing is written while it travels. Facts change only when motion changes: when a body sets out, changes course, or arrives. Its speed and its direction of travel are consequences of the segment, asked for, never stored. This keeps a world of walking people from writing every footstep into history, and lets anyone ask where a body *will* be.
+
+Consumers never interpolate for themselves; they ask Physical Reality where a body is at a tick (representation independence, §1.14). Who *decides* to move is never Physical Reality's concern (Appendix A, Ruling 4); how motion unfolds, and what stops it, is.
+
 ---
 
 # 1.9 Materials
@@ -730,6 +746,28 @@ Each contributes its own facts.
 
 Emergent behavior arises from their composition.
 
+## Constraints Made Concrete
+
+*Amendment A-4 (2026-10), see [AMENDMENTS.md](../AMENDMENTS.md).*
+
+Physical Reality's own constraints are facts about bodies and places, and every consumer asks about them the same way:
+
+- **Solid** bodies cannot be passed through or stood inside; **opaque** ones block sight. A glass pane is solid and not opaque; fog is a field, not a body.
+- An **enclosed** region is walled: movement and sight cross its boundary only through its portals. A field within a farm is not enclosed; a room is.
+- A portal may be **closed**. A closed portal lets nothing through; it lets sight through only if it is not opaque — a shut window can be seen through, a shut door cannot. An opening's two faces are **linked**, so whatever passes through one emerges at the other.
+- A body **fits** through a portal only if it is no wider and no taller than the opening.
+- **Ground** is where a place's floor is: a terrain surface where the place declares one (a heightfield in its own frame), and its frame's level floor where it does not. A body is **supported** by the ground or by the top of a solid body beneath it within a step's height.
+- A **mobile** body that is not supported falls, under the world's gravity, until it is. (Falling is kinematic — a body drops to its support in the time gravity takes — not a rigid-body simulation; Physics remains a consumer, §1.1.)
+- **Line of sight** between two bodies holds when the straight line from the observer's eye to the other's centre crosses no opaque body, no rising ground, and no enclosed boundary except through an opening that lets sight through.
+
+**Shelter** *(Amendment A-5)*. An enclosed region is out of the weather: the sun does not shine into it and the sky's weather does not fall on it, unless the world declares how exposed it is. Daylight reaches it only through openings that let light through, in proportion to their area against its floor — a room with one small window is dim at noon. Its temperature follows the air outside it (the region it stands in) with a lag the world declares, so a cottage warms through a summer afternoon and keeps some of that warmth into the night.
+
+**Thermal mass** *(Amendment A-6)* is the heat a region's material stores per unit volume — its density times its specific heat. The more it stores, the less the day and the weather move the region's temperature, and the longer an indoor room takes to follow the air outside: a granite hall answers the afternoon later than a timber kitchen, though timber holds more heat per kilogram.
+
+**Height above the ground** *(Amendment A-5)* is measured from the ground directly beneath — the terrain of the nearest enclosing place that has terrain, or the outermost frame's floor where none does. A door at the foot of a hillside cottage is at ground level, however high the hill; the loft is a storey above the hillside, not a storey above sea level.
+
+**Travel** obeys all of these. A body given somewhere to go — a place to enter or a thing to reach — is moved by Physical Reality: from region to region through openings it fits and that are open, and within a region around whatever is solid, at the speed it was asked to travel, one straight segment at a time. Two bodies cannot squeeze through one opening on the same tick; the one with the lower id goes first. When no way exists, the travel is reported blocked — a fact a decider can read and reconsider — rather than silently abandoned or impossibly completed.
+
 ---
 
 # Designer Note
@@ -798,6 +836,8 @@ This asymmetry suggests an important architectural principle:
 Implementations are encouraged to organize spatial data in ways that accelerate common queries while remaining free to choose the underlying structures that best fit the simulation.
 
 No particular indexing strategy is mandated.
+
+*Amendment A-2:* the reference implementation answers proximity through a store-maintained spatial index (Volume V Chapter 2 §2.1), one coordinate frame per container — a room, a ship, a region — so the contents of a moving container never need re-indexing when the container moves. Physical Reality registers the placement rule and owns the exact answers: **what lies within a distance of an entity** (across frames, measured in the frame of their common ancestor), **the nearest few**, **what a container holds**, and **what lies in a box of a frame**. Every answer is identical with or without the index.
 
 Future implementations may employ spatial trees, graphs, sparse fields, hierarchical partitions, procedural generators, distributed storage, or techniques not yet invented.
 

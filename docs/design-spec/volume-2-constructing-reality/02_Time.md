@@ -52,6 +52,37 @@ It determines how quickly simulation ticks are processed, but it never becomes p
 
 Stopping the simulation pauses reality. Advancing faster simply processes more ticks per second.
 
+### Simulated Duration
+
+*Amendment A-1 (2026-10), see [AMENDMENTS.md](../AMENDMENTS.md).*
+
+A tick is not only a step; it is a **length of simulated time**. Every world package declares
+how long one tick lasts (its clock rule), and that length is the only bridge between the
+tick counter and the physical meaning of time.
+
+Every rule that describes change over time is therefore declared as a **rate or a time
+constant in simulated time** — centimetres per second, a weather spell that persists for six
+hours, a body that cools toward the air over an hour — never as an amount per tick. A system
+converts its rule into a per-step change using the simulated duration its step actually
+covers.
+
+The consequence is the property worlds depend on: **tick length is a resolution choice, not a
+rule.** The same world run with hour-long ticks or tenth-of-a-second ticks keeps the same
+climate, the same walking speeds, and the same rates of decay. A finer tick resolves *when*
+things happen more precisely; it never changes *what* happens on average.
+
+Two disciplines follow:
+
+- **Fixed-point change must not erode at fine resolution.** A per-step change smaller than the
+  quantity's smallest unit must not silently round to nothing. Implementations carry such
+  state at finer internal resolution, express it as the difference of absolute levels (so
+  sums telescope exactly), or round without bias using the deterministic streams.
+- **Stochastic rules are declared by their statistics, not their steps.** A weather rule
+  says "temperature wanders about its normal with a spread of three degrees and a memory of
+  six hours", and the per-step noise is derived from that — so the spread is the same at any
+  tick length, and it is *bounded*: random processes in a world revert toward a normal rather
+  than wandering without limit.
+
 ---
 
 ## The Tick
@@ -335,6 +366,7 @@ Every implementation SHALL preserve the following rules.
 8. Replay must reconstruct identical reality.
 9. Rollback never rewrites simulated history.
 10. Parallel execution must be observationally equivalent to sequential execution.
+11. Every rate is declared in simulated time; tick length is a resolution choice that changes no rate *(Amendment A-1)*.
 
 Time is therefore more than a counter.
 

@@ -5,7 +5,13 @@ The only mandatory domain: every world has a *where* (Vol. IV Ch. 2 §2.1).
 
 **Owns:** position, orientation, adjacency; topology and connectivity; regions and
 containment; material composition and properties; environmental state (temperature,
-water, light, weather); physical constraints (blocking, visibility, passability).
+water, light, weather); physical constraints (blocking, visibility, passability); bodies'
+size and facing; motion and travel (Appendix A, Rulings 4 and 13); terrain and ground.
+
+**Where to look:** `space` (positions, frames, routes), `nearby` (within / nearest / contents),
+`regions` (overlapping regions), `motion` (segments), `shape` (exact body tests), `terrain`
+(ground and support), `sight` (line of sight), `travel` (gravity and intent-driven travel),
+`index` (the spatial index's placement rule), `systems` (the environment).
 
 **Never owns:** biology, decisions, ownership, economics, governments, culture,
 rendering (Ch. 1 §1.3). Physics is a consumer, not the center (Ch. 1, Designer Note).

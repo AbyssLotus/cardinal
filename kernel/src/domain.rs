@@ -6,10 +6,12 @@
 //! (Vol. IV Ch. 2), and the coherence checks that validate a resolved value. The kernel
 //! calls these; a domain never writes another domain's facts (Appendix A, Ruling 9).
 
-use crate::fact::{Cardinality, FactType};
+use crate::fact::{Cardinality, FactType, SystemId};
 use crate::proposal::Change;
+use crate::spatial::SpatialProjector;
 use crate::system::System;
 use crate::value::Value;
+use std::sync::Arc;
 
 /// The outcome of composing the proposals for one fact.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -68,6 +70,14 @@ pub trait Domain {
     /// The systems this domain contributes to the tick.
     fn systems(&self) -> Vec<Box<dyn System>>;
 
+    /// The placement rule for the store's spatial index, if this domain owns space
+    /// (Amendment A-2; Appendix A: positions and containment are Physical Reality's). Whatever
+    /// assembles a world installs it with `MemoryStore::install_spatial_index`. Defaults to
+    /// none: a domain that owns no space has no say in where things are.
+    fn spatial_projector(&self) -> Option<Arc<dyn SpatialProjector>> {
+        None
+    }
+
     /// Compose competing proposals against one owned fact into a single resolved outcome
     /// (Vol. V Ch. 3 §3.1, Resolve; Vol. IV Ch. 2). `current` is the committed value, if
     /// any; `changes` are the proposed changes to this fact in deterministic order. An
@@ -96,5 +106,15 @@ pub trait Domain {
     fn validate_many(&self, fact_type: FactType, values: &[Value]) -> Result<(), ValidationError> {
         let _ = (fact_type, values);
         Ok(())
+    }
+
+    /// Whether this owner accepts a proposal to `fact_type` from `system` (Amendment A-5,
+    /// *Owners may refuse writers*). An owner that restricts a fact to its own systems answers
+    /// `false` for any other proposer, and the kernel fails the tick, named. The default accepts
+    /// every proposer — most facts are open to anyone whose proposal the owner's composition
+    /// and validation then judge (Appendix A, Ruling 9).
+    fn accepts(&self, fact_type: FactType, system: SystemId) -> bool {
+        let _ = (fact_type, system);
+        true
     }
 }

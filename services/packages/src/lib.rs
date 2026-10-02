@@ -16,9 +16,11 @@
 pub mod loader;
 pub mod model;
 pub mod parse;
+pub mod validate;
 pub mod version;
 
-pub use loader::{engine_version, load, LoadError, LoadedWorld};
-pub use model::{Manifest, PhysicalRules, RegionSpec, WorldPackage};
+pub use loader::{engine_version, living_config, load, physical_config, LoadError, LoadedWorld};
+pub use model::{ClockRules, LivingRules, Manifest, PhysicalRules, RegionSpec, WorldPackage};
 pub use parse::{parse_world, ParseError};
+pub use validate::{validate, Layer, Problem};
 pub use version::{EngineReq, Version, VersionParseError};

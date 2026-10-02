@@ -220,6 +220,32 @@ both directions; a death while instantiated debits the population.
 **Reason:** Double-existence (counted *and* instantiated) double-counts every consequence.
 The seam is explicit so the books always balance. (Ch. 10 §10.4.)
 
+
+## Ruling 13 — Travel: deciders choose where, Physical Reality decides how
+
+*Amendment A-4 (2026-10).*
+
+**Dispute:** Ruling 4 says "the travel is Physical Reality" — but somebody must say *where*
+to go, and something must say what happens on the way. Who writes a moving body's position?
+
+**Decision:** A decision system (a player's validated action, an NPC's choice) proposes an
+**intent** — where to travel and how fast — as a fact Physical Reality owns. Physical Reality
+alone turns the intent into motion: it finds the way, moves the body segment by segment, stops
+it where walls, closed doors, narrow openings, and solid things say it must, drops it when
+nothing holds it up, and reports the travel blocked when no way exists. No other domain ever
+writes a position, a motion segment, or a containment link to move a body.
+
+**Reason:** The same pattern as Ruling 9 (owners apply), for the same reason: if a decider could
+set positions directly, it would be a second authority on space, and a wall would be a
+suggestion. With intents, a guard can *want* to walk through a locked door — and the world says
+no, in a way the guard can notice. (Ch. 1 §1.11; Ruling 4.)
+
+*Amendment A-5 (2026-10):* the same holds for **operating** and **turning**. Opening or shutting
+a door and facing a new way are intents a decider proposes; Physical Reality carries them out
+only for a body within reach of the door (a door's two faces open and shut together), and
+reports when it cannot. Positions, containment, motion, facing, and door state accept writes
+from Physical Reality's own systems alone, and the kernel enforces it (Vol. V Ch. 3, *Owners
+may refuse writers*).
 ---
 
 # Amending This Matrix

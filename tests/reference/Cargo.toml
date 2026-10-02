@@ -1,0 +1,20 @@
+[package]
+name = "reference"
+description = "The reference-world test suite: every engine feature exercised in Ashford (Vol. V Ch. 8 §8.3)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+# The one place allowed to depend on every layer: it assembles a world the way a frontend would
+# (Vol. V Ch. 1 §1.1 — tests sit above the layers they exercise).
+[dependencies]
+kernel.workspace = true
+physical.workspace = true
+living.workspace = true
+packages.workspace = true

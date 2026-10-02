@@ -1,0 +1,470 @@
+# Cardinal reference world -- Ashford, a city in the Vale.
+#
+# One fictional world in which every engine feature is exercised in context, instead of a small
+# world per feature. It grew from the city where Alice, Bob, Carol, and Dave live (the old
+# house world). The tests in tests/reference/ load it, give its people things to do, and ask
+# the engine what became of them.
+#
+# Nesting -- each place lies in the one above; positions are local to their container:
+#
+#   the Reach (9)                      the outermost frame: a geological region, no climate
+#   |-- the Vale (1)                   a climate: Ashford and everything in it inherits it
+#   |   `-- Ashford (10)               the city
+#   |       |-- Old Town (11)          Alice's house and yard; the manor
+#   |       |-- the Hill (12)          terrain: a slope, a ridge with a cliff, a pass, a mine
+#   |       |-- the Harbour (13)       a ship at its mooring
+#   |       `-- Millside (14)          the farm, the wood, the mill (overlapping regions)
+#   |-- Highmoor (2)                   a colder climate 400 m up, on granite
+#   `-- Southfen (3)                   a warmer climate down in the fens
+#
+# Entity ids by range: 1-14 nesting; 100s Alice's house; 200s the Hill; 300s the manor;
+# 400s the mine; 500s the harbour; 600s Millside; 700s materials; 900s overlapping regions;
+# 1000s openings (portals); 2000s people, animals, and things that move.
+#
+# Units: centimetres, centidegrees C, hundredths of a percent, compass degrees.
+
+[manifest]
+id = world.ashford
+version = 0.1.0
+engine = >=0.0, <1.0
+domains = physical, living
+
+[clock]
+# A text world: one tick is one simulated second.
+tick_seconds = 1
+day_seconds = 86400
+
+[rules.physical]
+environment_step_seconds = 60       # the weather steps once a simulated minute
+diurnal_amplitude_centi_c = 500
+temperature_variability_centi_c = 300
+weather_persistence_seconds = 21600
+illumination_peak = 10000
+humidity_baseline = 6000
+humidity_variability = 800
+pressure_sea_level = 10130
+pressure_elevation_factor = 1
+pressure_variability = 60
+wind_gradient_divisor = 10
+fall_danger_per_meter = 1500
+thermal_mass_reference = 2000
+gravity_cm_s2 = 981
+step_height_cm = 40
+max_slope_percent = 100
+nav_cell_cm = 50
+reach_cm = 75
+indoor_coupling_seconds = 14400
+
+[rules.living]
+metabolism_step_seconds = 60
+set_point_centi_c = 3700
+warm_response_seconds = 21600
+cold_response_seconds = 10800
+
+# ---- The nesting -------------------------------------------------------------------------
+
+# Climates: places with weather of their own (temperature, elevation). Everything nested inside
+# one without its own inherits it. Walled rooms become indoor climates as the day begins.
+[regions]
+1 = 1400, 5000          # the Vale
+2 = 600, 40000          # Highmoor
+3 = 1800, 500           # Southfen
+400 = 1300, 5300        # the mine mouth (on the Hill)
+401 = 1100, 5300        # the deep gallery
+402 = 1500, 5300        # the miners' cabin
+
+# Places that only hold other places: no climate of their own.
+[places]
+9 = none                # the Reach
+10 = 1                  # Ashford, in the Vale
+11 = 10                 # Old Town
+12 = 10                 # the Hill
+13 = 10                 # the Harbour
+14 = 10                 # Millside
+100 = 11                # Alice's yard
+101 = 11                # Alice's house
+300 = 11                # the manor grounds
+305 = 11                # the manor house
+200 = 12                # the cottage
+600 = 14                # the farm
+602 = 600               # the far field
+603 = 14                # the wood
+
+[containment]
+1 = 9
+2 = 9
+3 = 9
+102 = 101               # Alice's cellar, kitchen, bedroom
+103 = 101
+104 = 101
+110 = 100               # the shed
+111 = 100               # a stone by the shed
+120 = 103               # the kitchen table
+121 = 103               # the lamp
+130 = 100               # the hay wagon
+140 = 100               # the cart
+2020 = 100              # the wardrobe, waiting to be carried in
+301 = 305               # the manor's hall, undercroft, gallery, vault
+302 = 305
+303 = 305
+304 = 305
+201 = 200               # the cottage kitchen and loft
+202 = 200
+203 = 201               # the cottage table
+210 = 12                # a boulder on the hillside
+211 = 12                # a marker downhill of it
+2090 = 12               # a cairn beyond the cliff
+400 = 12                # the mine
+401 = 12
+402 = 12
+500 = 13                # the Heron, moored
+510 = 13                # the harbour gate, well, and stables
+511 = 13
+512 = 13
+601 = 600               # the farmhouse
+604 = 14                # the mill
+
+[positions]
+# entity = x, y[, z] -- its base, in its container's frame
+1 = 0, 0, 0
+2 = 500000, 0, 40000
+3 = -500000, 0, -4500
+10 = 0, 0, 0
+11 = 0, 0, 0
+12 = 0, 100000, 0
+13 = 0, -100000, 0
+14 = -100000, 0, 0
+# Old Town
+100 = 0, 0, 0
+101 = 1000, 0, 0
+102 = 0, 0, -300
+103 = 0, 0, 0
+104 = 0, 0, 300
+110 = 300, -800, 0
+111 = 300, -400, 0
+120 = 0, 0, 0
+121 = 300, 0, 0
+130 = 500, 400, 0
+140 = -500, 0, 0
+2020 = 1100, 900, 0
+300 = 5000, 0, 0
+305 = 6000, 0, 0
+301 = 0, 0, 0
+302 = 0, 0, -300
+303 = 0, 0, 300
+304 = 0, 0, -600
+# the Hill
+200 = 2000, 1000, 300
+201 = 0, 0, 0
+202 = 0, 0, 260
+203 = 150, 50, 0
+210 = 1500, 3000, 200
+211 = 500, 3000, 50
+2090 = 5500, 1000, 300
+400 = 7000, 4000, 300
+401 = 7000, 4500, 300
+402 = 6000, 4500, 300
+# the Harbour
+500 = 10000, 0, 0
+510 = 1000, 0, 0
+511 = 0, 1000, 0
+512 = 0, -1000, 0
+# Millside
+600 = 0, 0, 0
+601 = 0, 0, 0
+602 = 3000, 0, 0
+603 = 6000, 0, 0
+604 = 9000, 0, 0
+# people and animals
+2001 = 100, 100, 0          # Alice, in her bedroom
+2002 = 0, 420, 0            # Bob, in the kitchen by the front door
+2003 = 300, -800, 250       # Carol, up on the shed roof
+2004 = -430, 0, 0           # Dave, at the bedroom window
+2005 = 100, 0, 0            # Erin, out in the yard
+2010 = 700, 100, 0          # the cat, in the yard
+2011 = 900, 800, 0          # a courier with a parcel for the house
+2012 = 0, 0, 0              # a raccoon in the cellar
+2013 = 1000, 500, 0         # Finn, on the doorstep
+2014 = 1000, 500, 0         # Gwen, on the doorstep beside him
+2015 = 0, 0, 0              # the steward, in the manor hall
+2030 = 0, 0, 0              # a rider, in the cart
+2040 = 0, 0, 0              # Hal, a shepherd on Highmoor
+2041 = 0, 0, 0              # Ida, out on Southfen
+2050 = 0, 500, 0            # the Heron's captain, 5 m forward of the mast
+2051 = 200, 0, 0            # her bosun, 2 m to starboard
+2052 = 0, 0, 0              # the harbour guard
+2060 = 0, 0, 0              # the farmer, in the farmhouse
+2061 = 0, 0, 0              # a fox, in the wood
+2062 = 0, 0, 0              # the miller, in the mill
+2070 = 500, 1000, 50        # a villager at the foot of the Hill
+2080 = 2500, 2000, 300      # Jory, in the west valley
+2081 = 5500, 2000, 300      # Kit, in the east valley
+2082 = 4000, 2000, 1500     # Lena, on the ridgeline
+2083 = 2800, 1000, 300      # a hiker below the cliff
+2084 = 1500, 3000, 500      # Nell, standing on the boulder
+
+# The Hill's ground: 10 m between samples, 8 to a row (x = 0 .. 70 m), 6 rows (y = 0 .. 50 m).
+# A slope rising east to the cottage; a 15 m cliff along x = 40 m for the first 30 m north;
+# a level pass beyond it.
+[terrain]
+12 = 1000, 8, 0 100 300 300 1500 300 300 300  0 100 300 300 1500 300 300 300  0 100 300 300 1500 300 300 300  0 100 300 300 1500 300 300 300  0 100 300 300 300 300 300 300  0 100 300 300 300 300 300 300
+
+[adjacency]
+1 = 2                   # the Vale borders Highmoor
+1 = 3                   # and Southfen
+600 = 603               # the farm borders the wood
+603 = 604               # the wood borders the mill
+
+# ---- Openings ----------------------------------------------------------------------------
+[portals]
+# portal = host, destination, x, y[, z]
+# Alice's house: rooms 10 m square; walls at +/-5 m. Yard coordinates = Old Town's.
+1001 = 100, 103, 1000, 500          # front door, outside (north wall)
+1002 = 103, 100, 0, 500             # front door, inside
+1003 = 100, 103, 500, 0, 30         # low window, outside (west wall; sill 30 cm)
+1004 = 103, 100, -500, 0, 30        # low window, inside
+1005 = 100, 102, 1500, 0            # cellar bulkhead, outside (east)
+1006 = 102, 100, 500, 0             # cellar bulkhead, inside
+1007 = 103, 104, 400, -400          # stairs up
+1008 = 104, 103, 400, -400          # stairs down
+1009 = 103, 102, -400, -400         # cellar stairs down
+1010 = 102, 103, -400, -400         # cellar stairs up
+1011 = 104, 100, -500, 0, 80        # bedroom window (west), shut glass
+1012 = 100, 104, 500, 0, 380        # its yard face, 3.8 m up the wall
+# The manor: 8 m rooms; a sealed vault no opening reaches.
+1101 = 300, 301, 1000, 400          # front door, outside
+1102 = 301, 300, 0, 400             # front door, inside
+1103 = 301, 302, 200, -200          # stairs down to the undercroft
+1104 = 302, 301, 200, -200
+1105 = 301, 303, -200, -200         # stairs up to the gallery
+1106 = 303, 301, -200, -200
+1107 = 303, 300, 0, -400, 100       # a gallery window onto the grounds: a way out, 4 m up
+# The cottage on the Hill.
+1201 = 12, 201, 2000, 1300, 300     # its door, outside
+1202 = 201, 12, 0, 300              # its door, inside
+1203 = 201, 202, 300, -200          # the ladder, foot
+1204 = 202, 201, 300, -200          # the ladder, head
+
+[portal_pairs]
+1001 = 1002
+1003 = 1004
+1005 = 1006
+1007 = 1008
+1009 = 1010
+1011 = 1012
+1101 = 1102
+1103 = 1104
+1105 = 1106
+1201 = 1202
+1203 = 1204
+
+[portal_danger]
+1102 = 0                # the manor's inside front door is pinned harmless
+
+# ---- Bodies ------------------------------------------------------------------------------
+[bodies]
+# entity = half_width, half_depth, height
+102 = 500, 500, 280     # Alice's rooms: 10 m x 10 m, 2.8 m high
+103 = 500, 500, 280
+104 = 500, 500, 280
+301 = 400, 400, 300     # the manor's rooms
+302 = 400, 400, 300
+303 = 400, 400, 300
+304 = 200, 200, 250
+201 = 400, 300, 260     # the cottage kitchen
+202 = 400, 300, 200     # the loft
+601 = 600, 400, 300     # the farmhouse
+604 = 400, 400, 600     # the mill
+1001 = 45, 10, 205      # doors: 90 cm wide, 2.05 m tall
+1002 = 45, 10, 205
+1101 = 45, 10, 205
+1102 = 45, 10, 205
+1201 = 45, 10, 205
+1202 = 45, 10, 205
+1003 = 20, 10, 50       # the low window: 40 cm wide
+1004 = 20, 10, 50
+1005 = 50, 10, 120      # the bulkhead: 1 m wide, 1.2 m tall
+1006 = 50, 10, 120
+1007 = 50, 50, 220      # stairs and ladders
+1008 = 50, 50, 220
+1009 = 50, 50, 220
+1010 = 50, 50, 220
+1103 = 50, 50, 220
+1104 = 50, 50, 220
+1105 = 50, 50, 220
+1106 = 50, 50, 220
+1203 = 30, 30, 260
+1204 = 30, 30, 260
+1011 = 40, 10, 100      # the bedroom window: 80 cm wide
+1012 = 40, 10, 100
+1107 = 40, 10, 100
+110 = 150, 100, 250     # the shed: 3 m x 2 m, 2.5 m tall
+120 = 100, 150, 80      # the kitchen table: 2 m x 3 m, waist high
+203 = 80, 50, 75        # the cottage table
+130 = 100, 150, 300     # the hay wagon, piled high
+140 = 80, 120, 100      # the cart
+2020 = 60, 30, 200      # the wardrobe: 1.2 m wide
+210 = 100, 100, 300     # the boulder
+500 = 300, 1500, 800    # the Heron: 6 m beam, 30 m long
+2001 = 25, 15, 165      # people
+2002 = 25, 15, 180
+2003 = 25, 15, 170
+2004 = 25, 15, 175
+2005 = 25, 15, 170
+2011 = 25, 15, 175
+2013 = 25, 15, 175
+2014 = 25, 15, 170
+2015 = 25, 15, 175
+2030 = 25, 15, 170
+2040 = 25, 15, 180
+2041 = 25, 15, 165
+2050 = 25, 15, 175
+2051 = 25, 15, 180
+2052 = 25, 15, 185
+2060 = 25, 15, 175
+2062 = 25, 15, 175
+2070 = 25, 15, 175
+2080 = 25, 15, 175
+2081 = 25, 15, 175
+2082 = 25, 15, 175
+2083 = 25, 15, 175
+2084 = 25, 15, 175
+2010 = 10, 20, 35       # the cat
+2012 = 12, 25, 40       # the raccoon
+2061 = 10, 30, 45       # the fox
+
+[facing]
+2001 = 90               # Alice faces east
+2004 = 270              # Dave faces west, out of the window
+2052 = 0                # the harbour guard faces north
+1003 = 90               # windows and the bulkhead run along north-south walls
+1004 = 90
+1005 = 90
+1006 = 90
+1011 = 90
+1012 = 90
+
+[flags]
+102 = enclosed          # walled rooms
+103 = enclosed
+104 = enclosed
+301 = enclosed
+302 = enclosed
+303 = enclosed
+304 = enclosed
+201 = enclosed
+202 = enclosed
+601 = enclosed
+604 = enclosed
+1001 = opaque           # doors hide what is behind them when shut
+1002 = opaque
+1101 = opaque
+1102 = opaque
+1201 = opaque
+1202 = opaque
+1011 = closed           # the bedroom window is shut (glass: still see-through)
+1012 = closed
+110 = solid, opaque     # the shed
+120 = solid             # tables
+203 = solid
+130 = solid, opaque     # the hay wagon
+210 = solid, opaque     # the boulder
+140 = mobile            # things that move
+2020 = solid, mobile
+500 = mobile
+2001 = mobile
+2002 = mobile
+2003 = mobile
+2004 = mobile
+2005 = mobile
+2010 = mobile
+2011 = mobile
+2012 = mobile
+2013 = mobile
+2014 = mobile
+2015 = mobile
+2030 = mobile
+2040 = mobile
+2041 = mobile
+2050 = mobile
+2051 = mobile
+2052 = mobile
+2060 = mobile
+2061 = mobile
+2062 = mobile
+2070 = mobile
+2080 = mobile
+2081 = mobile
+2082 = mobile
+2083 = mobile
+2084 = mobile
+
+[motion]
+# The cart is already rolling west out of the yard: 30 m in 30 s.
+140 = -3500, 0, 0, 30
+
+[exposure]
+400 = 4000              # the mine mouth: partly open to the sky
+401 = 0                 # the deep gallery: sealed
+402 = 1000              # the miners' cabin: shuttered
+
+# ---- Living things (body heat) ----------------------------------------------------------
+[organisms]
+# organism = the place it is in, starting body heat
+2001 = 104, 3700
+2002 = 103, 3700
+2003 = 100, 3700
+2004 = 104, 3700
+2005 = 100, 3700
+2010 = 100, 3850
+2011 = 100, 3700
+2012 = 102, 3800
+2013 = 100, 3700
+2014 = 100, 3700
+2015 = 301, 3700
+2030 = 140, 3700
+2040 = 2, 3700
+2041 = 3, 3700
+2050 = 500, 3700
+2051 = 500, 3700
+2052 = 13, 3700
+2060 = 601, 3700
+2061 = 603, 3880
+2062 = 604, 3700
+2070 = 12, 3700
+2080 = 12, 3700
+2081 = 12, 3700
+2082 = 12, 3700
+2083 = 12, 3700
+2084 = 12, 3700
+
+# ---- Materials ---------------------------------------------------------------------------
+[materials]
+700 = density:700, hardness:3000, flammability:7000, thermal_capacity:1700    # timber
+701 = density:2500, hardness:5500, flammability:0, thermal_capacity:840        # glass
+702 = density:7870, hardness:9000, flammability:0, conductivity:8000           # iron
+703 = density:2700, hardness:7000, flammability:0, thermal_capacity:790        # granite
+
+[made_of]
+103 = 700               # Alice's kitchen and bedroom: timber
+104 = 700
+102 = 703               # her cellar: granite
+1001 = 700, 702         # the front door: timber with an iron band
+1002 = 700, 702
+1003 = 701              # windows: glass
+1004 = 701
+1011 = 701
+1012 = 701
+301 = 703               # the manor: granite throughout
+302 = 703
+303 = 703
+304 = 703
+2 = 703                 # Highmoor's bedrock
+
+# ---- Overlapping regions (Millside) --------------------------------------------------------
+[in_region]
+10 = 900                # Ashford lies in the temperate zone
+600 = 901               # the farm drains to the Brack
+604 = 901, 903          # so does the mill, which also sits in the frost hollow
+603 = 902               # the wood is the fox's run...
+602 = 902, 903          # ...and so is the far field, which is frost-hollow ground too

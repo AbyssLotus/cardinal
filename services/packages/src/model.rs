@@ -11,6 +11,8 @@ use crate::version::{EngineReq, Version};
 pub struct WorldPackage {
     /// Identity, version, and engine requirement.
     pub manifest: Manifest,
+    /// The world's clock: tick length and day length (Vol. II Ch. 2, Amendment A-1).
+    pub clock: ClockRules,
     /// Tunable rules for the physical domain.
     pub physical_rules: PhysicalRules,
     /// Tunable rules for the living domain, present only if the domain is selected.
@@ -42,6 +44,127 @@ pub struct WorldPackage {
     /// Which materials each physical object is composed of (Vol. III Ch. 1 §1.9), seeded as a
     /// cardinality-many `made_of` fact — one entry per object/material link.
     pub made_of: Vec<MadeOfSpec>,
+    /// Overlapping region memberships beyond the containment hierarchy (Vol. III Ch. 1 §1.7),
+    /// seeded as a cardinality-many `in_region` fact — one entry per location/region link.
+    pub in_region: Vec<RegionMembershipSpec>,
+    /// Body sizes (Amendment A-3). An entity absent here is a point.
+    pub bodies: Vec<BodySpec>,
+    /// Facings (Amendment A-3). An entity absent here faces its frame's north.
+    pub facing: Vec<FacingSpec>,
+    /// Motion already under way when the world begins (Amendment A-3).
+    pub motion: Vec<MotionSpec>,
+    /// Per-entity constraint flags (Amendment A-4).
+    pub flags: Vec<FlagSpec>,
+    /// Linked faces of openings (Amendment A-4), each seeded in both directions.
+    pub portal_pairs: Vec<(u64, u64)>,
+    /// Terrain heightfields (Amendment A-4).
+    pub terrain: Vec<TerrainSpec>,
+    /// Travel intents under way when the world begins (Ruling 13).
+    pub travel: Vec<TravelSpec>,
+    /// Places that exist to hold other places — a continent, a city's hinterland, a town — each
+    /// with the place it lies in (`None` for the outermost). A place declared here has no climate
+    /// of its own; it, and everything in it without one, inherits the nearest enclosing climate
+    /// (Amendment A-5).
+    pub places: Vec<(u64, Option<u64>)>,
+}
+
+/// A constraint flag a world may set on an entity (Amendment A-4).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Flag {
+    /// Nothing passes through it.
+    Solid,
+    /// Blocks sight (on a portal: when closed).
+    Opaque,
+    /// A walled region, crossed only through its portals.
+    Enclosed,
+    /// A free body: falls when unsupported, can travel.
+    Mobile,
+    /// A portal that starts closed.
+    Closed,
+}
+
+/// The flags one entity carries.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct FlagSpec {
+    /// The entity's raw id.
+    pub entity_id: u64,
+    /// Its flags, as declared.
+    pub flags: Vec<Flag>,
+}
+
+/// A region's terrain (Amendment A-4): `heights` row by row, `columns` to a row, samples
+/// `spacing` centimetres apart in the region's frame, sample `[0, 0]` at its origin.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct TerrainSpec {
+    /// The region's raw id.
+    pub region_id: u64,
+    /// Distance between neighbouring samples, in centimetres.
+    pub spacing: i64,
+    /// Samples per row.
+    pub columns: usize,
+    /// Heights in centimetres, row-major.
+    pub heights: Vec<i64>,
+}
+
+/// A travel intent under way at the world's start (Ruling 13): the body is heading for
+/// `target` at `speed_cm_s`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct TravelSpec {
+    /// The traveller's raw id.
+    pub entity_id: u64,
+    /// Where it is going: a place to enter or a thing to reach.
+    pub target: u64,
+    /// Its speed, in centimetres per second.
+    pub speed_cm_s: i64,
+}
+
+/// A body's size (Amendment A-3), in centimetres: it spans `half_width` to either side of its
+/// base, `half_depth` fore and aft, and `height` upward.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct BodySpec {
+    /// The body's raw id.
+    pub entity_id: u64,
+    /// Half its width (along its own x axis), in centimetres.
+    pub half_width: i64,
+    /// Half its depth (along its own y axis, front to back), in centimetres.
+    pub half_depth: i64,
+    /// Its height above its base, in centimetres.
+    pub height: i64,
+}
+
+/// A body's facing (Amendment A-3): a compass bearing in hundredths of a degree, clockwise
+/// from its frame's north.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct FacingSpec {
+    /// The body's raw id.
+    pub entity_id: u64,
+    /// Its heading, in hundredths of a degree (any value; it wraps).
+    pub heading: i64,
+}
+
+/// Motion under way at the world's start (Amendment A-3): the body is travelling in a straight
+/// line from its position toward `target` (its container's frame, centimetres) and arrives
+/// `seconds` of simulated time after the world begins.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MotionSpec {
+    /// The body's raw id.
+    pub entity_id: u64,
+    /// Where it is heading, in centimetres in its container's frame.
+    pub target: [i64; 3],
+    /// How long until it arrives, in seconds of simulated time.
+    pub seconds: u64,
+}
+
+/// A seeded region membership (Vol. III Ch. 1 §1.7): `location_id` lies within `region_id`,
+/// alongside — not instead of — its place in the containment hierarchy. One location may have
+/// many such links (a farmhouse in a watershed, a climate zone, and a territory at once). The
+/// region entity needs no facts of its own: a classification region is the places that name it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct RegionMembershipSpec {
+    /// The member location's (or region's) raw id.
+    pub location_id: u64,
+    /// The region it lies within (a region entity's raw id).
+    pub region_id: u64,
 }
 
 /// A property a material may expose (Vol. III Ch. 1 §1.9). Materials expose *characteristics*,
@@ -96,50 +219,77 @@ pub struct Manifest {
     pub domains: Vec<String>,
 }
 
+/// The world's clock rule (Vol. II Ch. 2, *Simulated Duration*, Amendment A-1): how much
+/// simulated time a tick lasts and how long a day is. Every rate elsewhere in the package is
+/// declared in simulated time, so changing `tick_ms` changes resolution, never behaviour.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ClockRules {
+    /// Simulated length of one tick, in milliseconds (always positive).
+    pub tick_ms: u64,
+    /// Simulated length of one day/night cycle, in seconds.
+    pub day_seconds: u64,
+}
+
 /// Tunable environmental rules the physical domain consumes (Vol. IV Ch. 2 §2.2). Every
-/// number here is package data; none is hardcoded in the engine (invariant 5).
+/// number here is package data; none is hardcoded in the engine (invariant 5). Rules about
+/// change over time are rates or statistics in simulated time (Amendment A-1).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PhysicalRules {
-    /// Ticks in one day/night cycle (shared by temperature and illumination).
-    pub ticks_per_day: u64,
+    /// How often the environment steps, in seconds of simulated time.
+    pub environment_step_seconds: u64,
     /// Peak diurnal temperature swing, in centidegrees Celsius.
     pub diurnal_amplitude_centi_c: i64,
-    /// Maximum per-tick temperature weather perturbation, in centidegrees Celsius.
-    pub weather_max_swing_centi_c: i64,
+    /// Typical size (standard deviation) of weather's departure from normal temperature, in
+    /// centidegrees Celsius.
+    pub temperature_variability_centi_c: i64,
+    /// How long a spell of weather tends to last, in seconds of simulated time.
+    pub weather_persistence_seconds: u64,
     /// Illumination at midday, in hundredths of a percent (0..=10000).
     pub illumination_peak: i64,
-    /// Humidity baseline the weather drifts toward, in hundredths of a percent.
+    /// Humidity baseline the weather departs from, in hundredths of a percent.
     pub humidity_baseline: i64,
-    /// Maximum per-tick humidity weather perturbation, in hundredths of a percent.
-    pub humidity_swing: i64,
-    /// Divisor governing how fast humidity returns to baseline (larger = slower).
-    pub humidity_drying_divisor: i64,
+    /// Typical size of weather's departure from baseline humidity, in hundredths of a percent.
+    pub humidity_variability: i64,
     /// Baseline atmospheric pressure at the datum, in decapascals.
     pub pressure_sea_level: i64,
     /// Decapascals of pressure lost per metre of elevation.
     pub pressure_elevation_factor: i64,
-    /// Maximum per-tick pressure weather perturbation, in decapascals.
-    pub pressure_weather_swing: i64,
-    /// Divisor governing how fast pressure returns to baseline (larger = slower).
-    pub pressure_settle_divisor: i64,
+    /// Typical size of weather's departure from baseline pressure, in decapascals.
+    pub pressure_variability: i64,
     /// Divisor scaling wind speed per unit pressure gradient (larger = gentler wind).
     pub wind_gradient_divisor: i64,
     /// Danger points added per metre of a portal's height above the ground (fall danger).
     pub fall_danger_per_meter: i64,
-    /// Material thermal capacity (J/(kg·K)) at which a region's temperature swing is halved
-    /// (Vol. III Ch. 1 §1.9). Governs how strongly thermal mass resists the day/night swing.
+    /// Thermal mass — heat stored per unit volume, kJ/(m³·K) — at which a region's temperature
+    /// swing is halved (Vol. III Ch. 1 §1.9; Amendment A-6). Governs how strongly thermal mass
+    /// resists the day/night swing and the weather, and lengthens an indoor room's lag.
     pub thermal_mass_reference: i64,
+    /// Gravitational acceleration, in centimetres per second squared.
+    pub gravity_cm_s2: i64,
+    /// The highest a body steps up without climbing, in centimetres.
+    pub step_height_cm: i64,
+    /// The steepest ground a body walks over, as a percentage grade.
+    pub max_slope_percent: i64,
+    /// The cell size of a travel planning grid, in centimetres.
+    pub nav_cell_cm: i64,
+    /// How far beyond its own body a body can reach to operate something, in centimetres.
+    pub reach_cm: i64,
+    /// Time constant of a sheltered room's air following the air outside it, in seconds.
+    pub indoor_coupling_seconds: u64,
 }
 
-/// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2).
+/// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2), as time constants
+/// in simulated time (Amendment A-1).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct LivingRules {
+    /// How often metabolism steps, in seconds of simulated time.
+    pub metabolism_step_seconds: u64,
     /// Metabolic set-point body heat, in centidegrees Celsius.
     pub set_point_centi_c: i64,
-    /// Divisor governing pull toward the set point (larger = slower).
-    pub warm_response: i64,
-    /// Divisor governing pull toward ambient temperature (larger = slower).
-    pub cold_response: i64,
+    /// Time constant of the pull toward the set point, in seconds (larger = slower).
+    pub warm_response_seconds: u64,
+    /// Time constant of the pull toward ambient temperature, in seconds (larger = slower).
+    pub cold_response_seconds: u64,
 }
 
 /// One region the world begins with (Vol. IV Ch. 4, generation): an id, a starting
