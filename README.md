@@ -117,6 +117,11 @@ reference engine is being built here, from the specification, in roadmap order
 - [x] Ashford, the working reference city: the whole integration suite runs in one fictional
       world ([worlds/ashford.world](worlds/ashford.world), [tests/reference](tests/reference/README.md))
 - [ ] Validation layer 5 (scenarios), invariant soaks, liveness envelopes (Vol. IV Ch. 7)
+- [x] Agents, first slice ([plan](docs/audits/agents.md)): facts about a pair (A-7); sight by
+      daylight, beliefs, and memory (A-8); minds that choose from what they believe — warmth
+      and routines — and act through intents (A-9)
+- [ ] Agents, next: needs beyond warmth, talking and rumour, model-backed minds as recorded
+      inputs
 - [ ] Persistence: chronicle tail + snapshots, two-road recovery (Vol. V Ch. 7)
 - [ ] Hybrid store hot tier; residency ladder; parallel evaluation (Vol. V Ch. 2, Ch. 5)
 - [ ] Presentation stream for clients (text narrator, 3D viewer) (Vol. V Ch. 5–6, Ch. 9)

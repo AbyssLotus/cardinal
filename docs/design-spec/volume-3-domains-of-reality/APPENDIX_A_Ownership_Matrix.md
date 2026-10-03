@@ -33,6 +33,7 @@ precedent: when a new boundary question arises, argue from them.
 | Material composition and properties | Physical Reality | Resources, Conflict, Knowledge |
 | Environmental state (temperature, water, light, weather) | Physical Reality | Living Systems, Ecology, Economy |
 | Physical constraints (blocking, visibility, passability) | Physical Reality | Conflict, Information, Economy |
+| What each sighted body could see (in view) *(A-8)* | Physical Reality | Information |
 | Vital state (health, energy, needs) | Living Systems | Conflict, decision systems |
 | Metabolism, growth, lifecycle stage | Living Systems | Ecology, Society |
 | Sensory and physical capability | Living Systems | Information, Conflict, Knowledge |
@@ -71,6 +72,7 @@ precedent: when a new boundary question arises, argue from them.
 | Food webs and carrying capacity | Ecology | Resources, Society |
 | Migration and succession (habitat) | Ecology | Physical Reality, Society |
 | Observation, knowledge, memory, belief (individual) | Information layer (Vol. II Ch. 4) | decision systems, all |
+| Goals, commitments, routines, decision traces (per mind) *(A-9)* | Decision systems (minds) | Information, observability |
 | Events and the chronicle | Persistence/History (Vol. II Ch. 5) | all; tooling |
 
 Categories marked as world-package *data* (recipes, technique definitions, cultural
@@ -246,6 +248,24 @@ only for a body within reach of the door (a door's two faces open and shut toget
 reports when it cannot. Positions, containment, motion, facing, and door state accept writes
 from Physical Reality's own systems alone, and the kernel enforces it (Vol. V Ch. 3, *Owners
 may refuse writers*).
+## Ruling 14 — Deciding: minds read beliefs, never reality
+
+*Amendment A-9 (2026-10).*
+
+**Dispute:** The matrix lists decision systems only as consumers. Who owns a mind's goals and
+plans, and what may a decision system read?
+
+**Decision:** Decision systems (minds) own what a mind is committed to: its goal, its plan's
+next step, its routines, and the trace of why it chose. They read **only** the information
+layer's facts and their own. A mind knows where it is, how cold it is, and whether its way was
+blocked only as beliefs perception wrote. They act only through intents anyone may propose:
+where to travel, what to open, which way to face.
+
+**Reason:** Vol. II Ch. 4, invariant 6: decisions operate on information, not reality. Ruling 4
+keeps the pipeline whole. A mind that read reality would walk to food it never saw, which is
+the omniscient familiar of Vol. V Ch. 9. Reading beliefs only, two minds in one reality can choose
+differently because they know different things.
+
 ---
 
 # Amending This Matrix

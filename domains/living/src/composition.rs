@@ -87,3 +87,25 @@ mod tests {
         assert!(err.is_err());
     }
 }
+
+/// Compose proposals for a declared capability such as sight range (Amendment A-8): one `Set`
+/// or `Create` replaces it, a `Tombstone` removes it (blindness), and two competing sets are a
+/// conflict. Capabilities are declared state today; nothing yet adjusts them by degrees.
+pub fn compose_capability(
+    current: Option<Value>,
+    changes: &[Change],
+) -> Result<Resolved, ResolveError> {
+    match changes {
+        [] => current
+            .map(Resolved::Write)
+            .ok_or(ResolveError::new("no capability to keep")),
+        [Change::Set(v) | Change::Create(v)] if v.as_int().is_some() => Ok(Resolved::Write(*v)),
+        [Change::Tombstone] => Ok(Resolved::Tombstone),
+        [_] => Err(ResolveError::new(
+            "a capability is set as an integer or removed",
+        )),
+        _ => Err(ResolveError::new(
+            "competing capability proposals with no declared tie-break",
+        )),
+    }
+}

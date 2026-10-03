@@ -17,6 +17,11 @@ pub struct WorldPackage {
     pub physical_rules: PhysicalRules,
     /// Tunable rules for the living domain, present only if the domain is selected.
     pub living_rules: Option<LivingRules>,
+    /// Tunable rules for the information layer, present only if it is selected (Amendment
+    /// A-8).
+    pub information_rules: Option<InformationRules>,
+    /// Tunable rules for decision systems, present only if minds are selected (Amendment A-9).
+    pub minds_rules: Option<MindsRules>,
     /// The regions the world begins with.
     pub regions: Vec<RegionSpec>,
     /// The organisms the world begins with (living domain), each placed in a region.
@@ -66,6 +71,19 @@ pub struct WorldPackage {
     /// of its own; it, and everything in it without one, inherits the nearest enclosing climate
     /// (Amendment A-5).
     pub places: Vec<(u64, Option<u64>)>,
+    /// How far each organism can see, in centimetres (Living Systems' sensory capability,
+    /// Amendment A-8): `(organism, sight range)`. An organism absent here perceives nothing.
+    pub senses: Vec<(u64, i64)>,
+    /// What each mind knows at the start (Amendment A-8; Vol. IV Ch. 5): `(mind, things)`.
+    /// For each thing, where it is; for an opening, also where it leads and whether it is open;
+    /// for a place, also how warm its air is.
+    pub knows: Vec<(u64, Vec<u64>)>,
+    /// Which entities have minds, and how fast each walks when it chooses to go somewhere
+    /// (cm/s): `(mind, walk speed)` (Amendment A-9).
+    pub minds: Vec<(u64, i64)>,
+    /// Daily routines: `(mind, from hour, to hour, where)` — where the world says a mind belongs
+    /// between those hours (a window that wraps past midnight when `from > to`).
+    pub routines: Vec<(u64, i64, i64, u64)>,
 }
 
 /// A constraint flag a world may set on an entity (Amendment A-4).
@@ -276,6 +294,36 @@ pub struct PhysicalRules {
     pub reach_cm: i64,
     /// Time constant of a sheltered room's air following the air outside it, in seconds.
     pub indoor_coupling_seconds: u64,
+    /// How often what each sighted body can see is refreshed, in seconds (Amendment A-8).
+    pub sight_step_seconds: u64,
+    /// The least illumination, in hundredths of a percent, in which a thing can be seen.
+    pub sight_min_illumination: i64,
+}
+
+/// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MindsRules {
+    /// How often a mind thinks, in seconds of simulated time.
+    pub think_step_seconds: u64,
+    /// Body heat, in centidegrees, below which a mind feels cold.
+    pub cold_below_centi_c: i64,
+    /// The age, in seconds, at which a belief is trusted half as much as a fresh one.
+    pub trust_half_age_seconds: u64,
+    /// What each opening on the way costs a choice.
+    pub hop_cost: i64,
+    /// What keeping a routine is worth.
+    pub routine_value: i64,
+    /// How much better a new choice must be before a mind abandons the one it has made.
+    pub switch_margin: i64,
+}
+
+/// Tunable rules the information layer consumes (Vol. IV Ch. 2 §2.2; Amendment A-8).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct InformationRules {
+    /// How often minds perceive, in seconds of simulated time.
+    pub perception_step_seconds: u64,
+    /// The least change of warmth, in centidegrees, a mind notices.
+    pub warmth_resolution_centi_c: i64,
 }
 
 /// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2), as time constants

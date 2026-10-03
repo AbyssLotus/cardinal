@@ -275,12 +275,7 @@ pub fn run_tick<S: RealityStore>(
     //    Remove change is chronicled exactly like a write (Vol. I, Law 17, traces on death).
     for group in grouped.values() {
         for p in group {
-            chronicle.push(ChronicleEntry::new(
-                tick,
-                p.target.entity,
-                p.target.fact_type,
-                p.cause,
-            ));
+            chronicle.push(ChronicleEntry::new(tick, p.target, p.cause));
         }
     }
 

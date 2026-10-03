@@ -38,7 +38,8 @@ The engine is four layers, with dependencies pointing strictly downward:
 │  DOMAINS        physical, living, resources,   │
 │                 economy, society, culture,     │
 │                 knowledge, conflict,           │
-│                 institutions, ecology          │
+│                 institutions, ecology;         │
+│                 information (A-8), minds (A-9) │
 ├────────────────────────────────────────────────┤
 │  KERNEL         reality store, scheduler,      │
 │                 tick machinery, RNG streams,   │
@@ -47,6 +48,8 @@ The engine is four layers, with dependencies pointing strictly downward:
 ```
 
 **The kernel** is Volume II made executable: facts, ticks, commits, determinism. It knows nothing of deer, prices, or grudges — it knows fact types, proposals, and streams. The kernel is small by intention; every line in it is load-bearing for every world that will ever run.
+
+**The information layer and decision systems sit in the domain layer** *(Amendments A-8, A-9)*. Volume II's information layer (perception, belief, memory) and the decision systems that act on it are owners of facts with systems in the tick, so they live beside the domains under the same law: they import no domain, and meet the rest of the world only in committed reality.
 
 **Domains** are Volume III made executable: one module per domain, each containing its fact-type schemas, its systems, and its composition validators. Domains depend on the kernel and *never on each other* — Chapter 12 of Volume III is enforced here as a build-level rule, not a code-review hope.
 

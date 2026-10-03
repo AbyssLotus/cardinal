@@ -15,6 +15,8 @@ something Ashford lacks grows Ashford.
 | `sight.rs` | walls, glass, open and shut doors, curtains, a wagon in the way, the ridge |
 | `ground.rs` | terrain between its samples, slope, height above the ground, the drop through each opening |
 | `climate.rs` | weather per climate inherited down the nesting; tick-length invariance; exposure; shelter, daylight through openings, indoor lag by thermal mass; pressure, wind, humidity |
+| `perception.rs` | seeing by daylight and not in the dark, believing what was seen, remembering it after it is gone (rightly or not), knowing where one stands and how warm it is, knowing nothing of what one never saw |
+| `minds.rs` | Erin comes in from the cold to the kitchen she remembers warm, opening the shut door in her way; the courier, who never saw the kitchen, stays out; the guard keeps his hours; same seed, same choices |
 | `living.rs` | body heat against the air of whatever encloses a body; tick-length invariance; Living never perturbing Physical |
 | `engine.rs` | replay determinism, seed divergence, the spatial index invisible and exact, declared reads, tick abort on a broken invariant, the loader's refusals and validation problems |
 

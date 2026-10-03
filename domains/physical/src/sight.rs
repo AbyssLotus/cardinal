@@ -19,18 +19,26 @@
 //! Like proximity, sight looks for candidates through the spatial index when there is one and by
 //! scanning otherwise; the tests that decide are exact and shared, so both roads agree.
 
+use crate::climate::ambient;
 use crate::nearby::{contents, within};
-use crate::schema::{CONTAINED_IN, ENCLOSED, LEADS_TO, OPAQUE, PORTAL_OPEN};
+use crate::schema::{
+    BODY_SIZE, CONTAINED_IN, ENCLOSED, HAS_PORTAL, HEADING, ILLUMINATION, IN_VIEW, LEADS_TO,
+    MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PORTAL_OPEN, POSITION, SIGHT_RANGE,
+    TERRAIN_SAMPLE, TERRAIN_SPACING,
+};
 use crate::shape::body_box;
 use crate::space::{lower, portals_in, position_in};
 use crate::terrain::{is_true, spacing, terrain_height};
-use kernel::fact::FactKey;
+use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::fixed::{div_round, isqrt};
 use kernel::hierarchy::{ancestry, lowest_common_ancestor};
 use kernel::identity::EntityId;
+use kernel::proposal::{Change, Proposal};
 use kernel::spatial::Aabb;
-use kernel::system::CommittedView;
+use kernel::system::{Cadence, CommittedView, System, TickContext};
+use kernel::time::Step;
 use kernel::value::Value;
+use std::collections::BTreeSet;
 
 /// Rounding slack, in centimetres, allowed when a line carried into a nested, turned frame is
 /// tested against an opening there — the same few centimetres per level the proximity search
@@ -220,4 +228,128 @@ pub fn visible(view: &dyn CommittedView, observer: EntityId, radius: i64) -> Vec
         .into_iter()
         .filter(|(e, _)| line_of_sight(view, observer, *e))
         .collect()
+}
+
+/// Whether `entity` stands in light enough to be seen: the illumination of its own place, or of
+/// the nearest enclosing place that has one, is at least `min`. A world that simulates no light
+/// at all is always lit.
+pub fn lit(view: &dyn CommittedView, entity: EntityId, min: i64) -> bool {
+    ambient(view, entity, ILLUMINATION).map_or(true, |(_, light)| light >= min)
+}
+
+/// What `observer` could see within `range`: in sight, and lit — in ascending id order.
+pub fn in_view(
+    view: &dyn CommittedView,
+    observer: EntityId,
+    range: i64,
+    min_illumination: i64,
+) -> BTreeSet<EntityId> {
+    if range <= 0 {
+        return BTreeSet::new();
+    }
+    within(view, observer, range)
+        .into_iter()
+        .map(|(e, _)| e)
+        .filter(|e| lit(view, *e, min_illumination) && line_of_sight(view, observer, *e))
+        .collect()
+}
+
+// Sight reads where things are (the placement facts the index mirrors), what blocks a line
+// (walls, openings, opaque bodies, the ground), the light, the observer's range, and what it
+// saw last step — to write only the difference.
+const SIGHT_READS: &[FactType] = &[
+    CONTAINED_IN,
+    POSITION,
+    BODY_SIZE,
+    HEADING,
+    MOTION_TARGET,
+    MOTION_START,
+    MOTION_END,
+    ENCLOSED,
+    LEADS_TO,
+    HAS_PORTAL,
+    OPAQUE,
+    PORTAL_OPEN,
+    TERRAIN_SAMPLE,
+    TERRAIN_SPACING,
+    ILLUMINATION,
+    SIGHT_RANGE,
+    IN_VIEW,
+];
+const SIGHT_WRITES: &[FactType] = &[IN_VIEW];
+
+/// Publishes what each body with sight could see (Amendment A-8; Vol. III Ch. 1, *What is in
+/// view*): everything within its sight range — Living Systems' fact — along a clear line and
+/// lit above the world's threshold. One proposal per thing that came into or went out of view,
+/// so a still scene writes nothing. A body whose sight range is gone sees nothing.
+pub struct Sight {
+    step: Step,
+    min_illumination: i64,
+}
+
+impl Sight {
+    /// Refresh what is in view as `step` says; things in light below `min_illumination` (hundredths
+    /// of a percent) cannot be seen.
+    pub const fn new(step: Step, min_illumination: i64) -> Self {
+        Self {
+            step,
+            min_illumination,
+        }
+    }
+}
+
+impl System for Sight {
+    fn id(&self) -> SystemId {
+        SystemId::new("physical.sight")
+    }
+    fn reads(&self) -> &'static [FactType] {
+        SIGHT_READS
+    }
+    fn writes(&self) -> &'static [FactType] {
+        SIGHT_WRITES
+    }
+    fn cadence(&self) -> Cadence {
+        self.step.cadence()
+    }
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+        let mut observers: BTreeSet<EntityId> =
+            view.entities_with(SIGHT_RANGE).into_iter().collect();
+        observers.extend(view.entities_with(IN_VIEW));
+        let mut out = Vec::new();
+        for observer in observers {
+            let range = view
+                .read(FactKey::new(observer, SIGHT_RANGE))
+                .and_then(|f| f.value.as_int())
+                .unwrap_or(0);
+            let now = in_view(view, observer, range, self.min_illumination);
+            let before: BTreeSet<EntityId> = view
+                .read_all(FactKey::new(observer, IN_VIEW))
+                .into_iter()
+                .filter_map(|f| match f.value {
+                    Value::Entity(e) => Some(e),
+                    _ => None,
+                })
+                .collect();
+            let key = FactKey::new(observer, IN_VIEW);
+            for seen in now.difference(&before) {
+                out.push(Proposal::new(
+                    self.id(),
+                    key,
+                    ctx.basis_tick(),
+                    Change::Add(Value::Entity(*seen)),
+                    Cause::new("came_into_view"),
+                ));
+            }
+            for gone in before.difference(&now) {
+                out.push(Proposal::new(
+                    self.id(),
+                    key,
+                    ctx.basis_tick(),
+                    Change::Remove(Value::Entity(*gone)),
+                    Cause::new("went_out_of_view"),
+                ));
+            }
+        }
+        out
+    }
 }

@@ -40,9 +40,15 @@ the Reach                          (no climate; the root)
 └── Southfen       18 °C, 5 m
 ```
 
+Its people perceive and decide. Everyone has a sight range (`[senses]`); some know things from
+the start (`[knows]` — Erin knows the kitchen, still warm from last night's stove; the courier
+knows only the yard); and three have minds (`[minds]`, `[routines]`): Erin, the courier, and the
+harbour guard, who keeps the gate by day and the well in the evening.
+
 Ashford is written in the engine's current single-file format: one `.world` file of
 `[sections]` (manifest, clock, rules, places, containment, positions, portals, bodies,
-facing, flags, motion, terrain, materials, organisms, regions). The directory layout above
+facing, flags, motion, terrain, materials, organisms, regions, senses, knows, minds,
+routines). The directory layout above
 is where packages are headed as content packs, generation, and scenarios arrive.
 
 ## Destined residents

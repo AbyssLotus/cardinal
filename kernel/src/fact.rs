@@ -110,19 +110,39 @@ impl Provenance {
     }
 }
 
-/// The address of a single fact: an entity and a fact type (Vol. V Ch. 2 §2.1).
+/// The address of a single fact: an entity and a fact type (Vol. V Ch. 2 §2.1) — and, for a
+/// fact about a pair, the second entity it is about (Amendment A-7).
+///
+/// Keys order by entity, then fact type, then the second entity (a fact of one entity first), so
+/// all of an entity's facts — and all of a holder's facts of one type — are contiguous.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct FactKey {
-    /// The entity the fact is about.
+    /// The entity the fact belongs to: for a fact about a pair, its holder.
     pub entity: EntityId,
     /// The kind of fact.
     pub fact_type: FactType,
+    /// For a fact about a pair, the second entity — what Erin's belief is *about*, whom she
+    /// trusts. `None` for a fact of one entity.
+    pub about: Option<EntityId>,
 }
 
 impl FactKey {
-    /// Address a fact by its entity and type.
+    /// Address a fact of one entity by its entity and type.
     pub const fn new(entity: EntityId, fact_type: FactType) -> Self {
-        Self { entity, fact_type }
+        Self {
+            entity,
+            fact_type,
+            about: None,
+        }
+    }
+
+    /// Address a fact about a pair: `holder`'s `fact_type` about `about` (Amendment A-7).
+    pub const fn pair(holder: EntityId, fact_type: FactType, about: EntityId) -> Self {
+        Self {
+            entity: holder,
+            fact_type,
+            about: Some(about),
+        }
     }
 }
 

@@ -13,6 +13,11 @@ use kernel::fact::FactType;
 /// environment. Owned by Living Systems; fixed-point, not float (Vol. V Ch. 4).
 pub const BODY_HEAT: FactType = FactType::new("living.vital.body_heat");
 
+/// How far an organism can see, in centimetres — its first sensory capability (Vol. III Ch. 2
+/// §2.2; Amendment A-8). What it can perceive, never what it knows: Physical Reality reports
+/// what lies in view within this range, and the information layer decides what is observed.
+pub const SIGHT_RANGE: FactType = FactType::new("living.sense.sight_range");
+
 /// An entity's immediate container — **Physical Reality's** fact (Appendix A), consumed here
 /// by its stable id to learn which region an organism inhabits. Naming an id is not
 /// importing code (Vol. III Ch. 12 §12.1).

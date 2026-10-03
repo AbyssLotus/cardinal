@@ -1,6 +1,7 @@
 //! # Living Systems domain -- Vol. III Ch. 2
 //!
-//! Owns (Appendix A): vital state, metabolism, lifecycle, capability, inheritance, death.
+//! Owns (Appendix A): vital state, metabolism, lifecycle, capability, inheritance, death. The
+//! first capability is sight range ([`schema::SIGHT_RANGE`], Amendment A-8).
 //!
 //! Must be cleanly absent when disabled (Vol. IV Ch. 2 selection): worlds that switch this
 //! domain off carry no trace of it, and Physical Reality runs byte-identically whether or
@@ -72,7 +73,7 @@ impl Domain for LivingDomain {
     }
 
     fn owns(&self, fact_type: FactType) -> bool {
-        fact_type == schema::BODY_HEAT
+        fact_type == schema::BODY_HEAT || fact_type == schema::SIGHT_RANGE
     }
 
     fn systems(&self) -> Vec<Box<dyn System>> {
@@ -94,6 +95,8 @@ impl Domain for LivingDomain {
     ) -> Result<Resolved, ResolveError> {
         if fact_type == schema::BODY_HEAT {
             composition::compose_body_heat(current, changes)
+        } else if fact_type == schema::SIGHT_RANGE {
+            composition::compose_capability(current, changes)
         } else {
             Err(ResolveError::new(
                 "living: fact type not owned by this domain",
@@ -108,6 +111,13 @@ impl Domain for LivingDomain {
                     return Err(ValidationError::new(
                         "body heat resolved below absolute zero",
                     ));
+                }
+            }
+        }
+        if fact_type == schema::SIGHT_RANGE {
+            if let Resolved::Write(Value::Int(cm)) = value {
+                if *cm < 0 {
+                    return Err(ValidationError::new("sight range resolved negative"));
                 }
             }
         }

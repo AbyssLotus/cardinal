@@ -7,9 +7,9 @@
 
 use crate::model::{
     AdjacencySpec, BodySpec, ClockRules, ContainmentSpec, ExposureSpec, FacingSpec, Flag, FlagSpec,
-    LivingRules, MadeOfSpec, Manifest, MaterialProperty, MaterialSpec, MotionSpec, OrganismSpec,
-    PhysicalRules, PortalDangerSpec, PortalSpec, PositionSpec, RegionMembershipSpec, RegionSpec,
-    TerrainSpec, TravelSpec, WorldPackage,
+    InformationRules, LivingRules, MadeOfSpec, Manifest, MaterialProperty, MaterialSpec,
+    MindsRules, MotionSpec, OrganismSpec, PhysicalRules, PortalDangerSpec, PortalSpec,
+    PositionSpec, RegionMembershipSpec, RegionSpec, TerrainSpec, TravelSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -86,6 +86,20 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut nav_cell_cm: Option<i64> = None;
     let mut reach_cm: Option<i64> = None;
     let mut indoor_coupling_seconds: Option<u64> = None;
+    let mut sight_step_seconds: Option<u64> = None;
+    let mut sight_min_illumination: Option<i64> = None;
+    let mut perception_step_seconds: Option<u64> = None;
+    let mut warmth_resolution: Option<i64> = None;
+    let mut senses: Vec<(u64, i64)> = Vec::new();
+    let mut knows: Vec<(u64, Vec<u64>)> = Vec::new();
+    let mut think_step_seconds: Option<u64> = None;
+    let mut cold_below: Option<i64> = None;
+    let mut trust_half_age_seconds: Option<u64> = None;
+    let mut hop_cost: Option<i64> = None;
+    let mut routine_value: Option<i64> = None;
+    let mut switch_margin: Option<i64> = None;
+    let mut minds: Vec<(u64, i64)> = Vec::new();
+    let mut routines: Vec<(u64, i64, i64, u64)> = Vec::new();
     let mut metabolism_step_seconds: Option<u64> = None;
     let mut set_point: Option<i64> = None;
     let mut warm_response_seconds: Option<u64> = None;
@@ -217,6 +231,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "indoor_coupling_seconds" => {
                     indoor_coupling_seconds = Some(parse_num(value, line_no)?)
                 }
+                "sight_step_seconds" => sight_step_seconds = Some(parse_num(value, line_no)?),
+                "sight_min_illumination" => {
+                    sight_min_illumination = Some(parse_num(value, line_no)?)
+                }
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -238,6 +256,62 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     ))
                 }
             },
+            "rules.information" => match key {
+                "perception_step_seconds" => {
+                    perception_step_seconds = Some(parse_num(value, line_no)?)
+                }
+                "warmth_resolution_centi_c" => warmth_resolution = Some(parse_num(value, line_no)?),
+                other => {
+                    return Err(ParseError::at(
+                        line_no,
+                        format!("unknown information rule {other:?}"),
+                    ))
+                }
+            },
+            "rules.minds" => match key {
+                "think_step_seconds" => think_step_seconds = Some(parse_num(value, line_no)?),
+                "cold_below_centi_c" => cold_below = Some(parse_num(value, line_no)?),
+                "trust_half_age_seconds" => {
+                    trust_half_age_seconds = Some(parse_num(value, line_no)?)
+                }
+                "hop_cost" => hop_cost = Some(parse_num(value, line_no)?),
+                "routine_value" => routine_value = Some(parse_num(value, line_no)?),
+                "switch_margin" => switch_margin = Some(parse_num(value, line_no)?),
+                other => {
+                    return Err(ParseError::at(
+                        line_no,
+                        format!("unknown minds rule {other:?}"),
+                    ))
+                }
+            },
+            "minds" => {
+                let mind: u64 = parse_num(key, line_no)?;
+                minds.push((mind, parse_num(value, line_no)?));
+            }
+            "routines" => {
+                let mind: u64 = parse_num(key, line_no)?;
+                let [from, to, target] =
+                    parse_ints::<3>(value, line_no, "from_hour, to_hour, where")?;
+                if !(0..=24).contains(&from) || !(0..=24).contains(&to) || target < 0 {
+                    return Err(ParseError::at(
+                        line_no,
+                        "a routine is from_hour, to_hour (0-24), where",
+                    ));
+                }
+                routines.push((mind, from, to, target as u64));
+            }
+            "senses" => {
+                let organism: u64 = parse_num(key, line_no)?;
+                senses.push((organism, parse_num(value, line_no)?));
+            }
+            "knows" => {
+                let mind: u64 = parse_num(key, line_no)?;
+                let things = value
+                    .split(',')
+                    .map(|t| parse_num(t.trim(), line_no))
+                    .collect::<Result<Vec<u64>, _>>()?;
+                knows.push((mind, things));
+            }
             "regions" => {
                 let region_id: u64 = parse_num(key, line_no)?;
                 let (temp, elevation) = parse_region_values(value, line_no)?;
@@ -522,6 +596,45 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             indoor_coupling_seconds,
             "rules.physical.indoor_coupling_seconds",
         )?,
+        sight_step_seconds: require(sight_step_seconds, "rules.physical.sight_step_seconds")?,
+        sight_min_illumination: require(
+            sight_min_illumination,
+            "rules.physical.sight_min_illumination",
+        )?,
+    };
+    let minds_rules = match (
+        think_step_seconds,
+        cold_below,
+        trust_half_age_seconds,
+        hop_cost,
+        routine_value,
+        switch_margin,
+    ) {
+        (None, None, None, None, None, None) => None,
+        _ => Some(MindsRules {
+            think_step_seconds: require(think_step_seconds, "rules.minds.think_step_seconds")?,
+            cold_below_centi_c: require(cold_below, "rules.minds.cold_below_centi_c")?,
+            trust_half_age_seconds: require(
+                trust_half_age_seconds,
+                "rules.minds.trust_half_age_seconds",
+            )?,
+            hop_cost: require(hop_cost, "rules.minds.hop_cost")?,
+            routine_value: require(routine_value, "rules.minds.routine_value")?,
+            switch_margin: require(switch_margin, "rules.minds.switch_margin")?,
+        }),
+    };
+    let information_rules = match (perception_step_seconds, warmth_resolution) {
+        (None, None) => None,
+        _ => Some(InformationRules {
+            perception_step_seconds: require(
+                perception_step_seconds,
+                "rules.information.perception_step_seconds",
+            )?,
+            warmth_resolution_centi_c: require(
+                warmth_resolution,
+                "rules.information.warmth_resolution_centi_c",
+            )?,
+        }),
     };
     let living_rules = match (
         metabolism_step_seconds,
@@ -552,6 +665,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         clock,
         physical_rules,
         living_rules,
+        information_rules,
+        minds_rules,
         regions,
         organisms,
         containment,
@@ -571,6 +686,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         terrain,
         travel,
         places,
+        senses,
+        knows,
+        minds,
+        routines,
     })
 }
 
@@ -827,6 +946,8 @@ max_slope_percent = 100
 nav_cell_cm = 50
 reach_cm = 75
 indoor_coupling_seconds = 14400
+sight_step_seconds = 1
+sight_min_illumination = 50
 [regions]
 1 = 1500
 ";

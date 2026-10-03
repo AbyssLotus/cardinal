@@ -9,7 +9,7 @@ use physical::materials::{
 };
 use physical::nearby::{contents, in_box, nearest, within};
 use physical::regions::{is_within, members_of, overlaps, regions_of, shared_regions};
-use physical::schema::{MOTION_END, MOTION_START, MOTION_TARGET, POSITION};
+use physical::schema::{CONTAINED_IN, MOTION_END, MOTION_START, MOTION_TARGET, POSITION};
 use physical::space::{
     distance, heading_in, height_above_ground, local_position, position_in, relative_bearing,
     relative_position,
@@ -194,7 +194,7 @@ fn millside_lies_in_regions_that_overlap_without_nesting() {
 fn the_rolling_cart_carries_its_rider_without_writing_them() {
     let mut city = City::new();
     // The cart was already rolling west at the start: 30 m in 30 s. Ten seconds on, it and
-    // its rider are 10 m along, and nothing was written for the rider.
+    // its rider are 10 m along, and nothing was written to move the rider.
     city.run(10);
     let s = city.store();
     assert_eq!(position_in(s, e(RIDER), e(OLD_TOWN)), Some([-1_500, 0, 0]));
@@ -203,10 +203,18 @@ fn the_rolling_cart_carries_its_rider_without_writing_them() {
         [0, 0, 0],
         "still on the cart's bed"
     );
+    // Nothing about where the rider is was written; they did watch the town go by.
+    let placed = [
+        POSITION,
+        CONTAINED_IN,
+        MOTION_START,
+        MOTION_END,
+        MOTION_TARGET,
+    ];
     assert!(city
         .chronicle
         .iter()
-        .all(|c| c.subject() != e(RIDER) || c.fact_type() == living::schema::BODY_HEAT));
+        .all(|c| c.subject() != e(RIDER) || !placed.contains(&c.fact_type())));
 }
 
 #[test]

@@ -99,6 +99,9 @@ integration suite in one fictional city instead of a world per feature.
 | D9 | Improved. "Who is within 3 m": 2 µs among 10 rooms, 27 µs among 1,000 (was 121 µs). Far rooms' contents are skipped, but the search still checks each sibling room's bounds, so cost still grows with room count. Room bounds in a spatial index of their own (M18) remain the full fix. | measured, release build |
 | D10 | Fixed. Legs over terrain are kept to half a sample spacing, short enough that a walker never sinks more than 2 cm into the hillside mid-stride. | `movement.rs` (the villager) |
 
+M13 (decision systems) and M14 (the information layer) have a first slice: see
+`docs/audits/agents.md`. Perception (M3) has sight by daylight; hearing and the rest are to come.
+
 Ashford found three more defects as it was built, all fixed:
 
 - **A slope was mistaken for a ledge.** Walking down the Hill, a walker "fell" the height the

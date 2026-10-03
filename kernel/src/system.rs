@@ -53,6 +53,11 @@ pub trait CommittedView {
     /// entity created mid-simulation is simulated the tick its facts commit.
     fn entities_with(&self, fact_type: FactType) -> Vec<EntityId>;
 
+    /// Every committed fact of `fact_type` that `holder` holds about a second entity
+    /// (Amendment A-7), as `(about, fact)` in ascending order of what it is about — one entry per
+    /// value. "Everything Erin believes about where things are" is one call.
+    fn read_about(&self, holder: EntityId, fact_type: FactType) -> Vec<(EntityId, Fact)>;
+
     /// The values of a cardinality-many fact that lie between `lo` and `hi` (inclusive, in the
     /// values' total order), sorted — a slice of a large set without reading all of it. A
     /// heightfield stored as a set of `[column, row, height]` samples answers "the sample at
@@ -149,6 +154,14 @@ impl CommittedView for ScopedView<'_> {
     fn read_range(&self, key: FactKey, lo: &Value, hi: &Value) -> Vec<Fact> {
         if self.check(key.fact_type) {
             self.inner.read_range(key, lo, hi)
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn read_about(&self, holder: EntityId, fact_type: FactType) -> Vec<(EntityId, Fact)> {
+        if self.check(fact_type) {
+            self.inner.read_about(holder, fact_type)
         } else {
             Vec::new()
         }
@@ -259,6 +272,13 @@ mod tests {
                 .map(|k| k.entity)
                 .collect()
         }
+        fn read_about(&self, holder: EntityId, fact_type: FactType) -> Vec<(EntityId, Fact)> {
+            self.0
+                .iter()
+                .filter(|(k, _)| k.entity == holder && k.fact_type == fact_type)
+                .filter_map(|(k, f)| Some((k.about?, *f)))
+                .collect()
+        }
         fn tick(&self) -> u64 {
             0
         }
@@ -298,6 +318,16 @@ mod tests {
         assert_eq!(scoped.entities_with(A).len(), 1);
         assert!(scoped.violation().is_none());
         assert!(scoped.entities_with(B).is_empty());
+        assert_eq!(scoped.violation(), Some(B));
+    }
+
+    #[test]
+    fn scoped_view_records_undeclared_pair_reads() {
+        let inner = map_view();
+        let scoped = ScopedView::new(&inner, &[A]);
+        assert!(scoped.read_about(EntityId::from_raw(1), A).is_empty());
+        assert!(scoped.violation().is_none());
+        assert!(scoped.read_about(EntityId::from_raw(1), B).is_empty());
         assert_eq!(scoped.violation(), Some(B));
     }
 }

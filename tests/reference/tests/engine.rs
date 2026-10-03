@@ -138,6 +138,9 @@ impl CommittedView for Scanning<'_> {
     fn entities_with(&self, fact_type: FactType) -> Vec<EntityId> {
         self.0.entities_with(fact_type)
     }
+    fn read_about(&self, holder: EntityId, fact_type: FactType) -> Vec<(EntityId, Fact)> {
+        self.0.read_about(holder, fact_type)
+    }
     fn tick(&self) -> u64 {
         self.0.tick()
     }

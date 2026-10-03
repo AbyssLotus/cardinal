@@ -80,6 +80,18 @@ May a model decide what an NPC does? The architecture's answer: yes, in exactly 
 
 **The condition.** Determinism (Ch. 4) does not bend. A sampled model is a nondeterminism door, so an LLM-in-the-loop mind must either (a) be *recorded*: its outputs captured as inputs in the chronicle, making replay exact (the model is then formally an input source, like a player — which is the honest description); or (b) run in study/companion contexts explicitly outside the deterministic guarantee, never in reference worlds or tested saves. There is no third mode; "mostly deterministic" is Chapter 4's tolerated flake wearing a mind.
 
+**The reference mind, as built** *(Amendment A-9)*.
+- **What it sees.** A mind reads its beliefs and its own commitments, never reality (Appendix A,
+  Ruling 14).
+- **When it thinks.** On a cadence the world declares, staggered by mind.
+- **How it chooses.** It weighs each place it knows: the warmth it remembers there against the
+  cold it feels, trusted less the older the memory; the routine the world gives it for the hour;
+  and the cost of the way it believes leads there. It keeps its choice unless something clearly
+  better appears.
+- **How it acts.** By the intents a player would use. When the way it believed open proves shut,
+  it walks to the opening and opens it.
+- **What it leaves behind.** A trace of what it chose, why, and how strongly.
+
 **The default.** Utility-based deterministic decision systems (the current engine's agents) remain the reference for the population at large — cheap, testable, tunable by rules. Model-backed minds are a *garnish for depth* (a named character's dialogue-driven choices, recorded as inputs), not the crowd's machinery. A thousand LLM wolves is a cost model and a replay problem; one LLM chancellor, recorded, is a feature.
 
 ---

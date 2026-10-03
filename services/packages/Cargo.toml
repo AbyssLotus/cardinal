@@ -14,3 +14,5 @@ workspace = true
 kernel.workspace = true
 physical.workspace = true
 living.workspace = true
+information.workspace = true
+minds.workspace = true

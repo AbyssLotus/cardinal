@@ -64,7 +64,7 @@ Living Systems owns:
 - Reproduction and inheritance
 - Senescence and natural death
 - Disease, injury, and recovery
-- Sensory capability (what an organism *can* perceive, not what it knows)
+- Sensory capability (what an organism *can* perceive, not what it knows). The first is **sight range** *(Amendment A-8)*: how far an organism's eyes reach, declared per organism by the world.
 - Physical capability (strength, speed, stamina as biological facts)
 
 Every one of these is a fact attached to an entity, owned by this domain, and consumed by others.

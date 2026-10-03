@@ -122,6 +122,22 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     for t in &package.travel {
         must_exist(t.entity_id, t.target, "its travel destination");
     }
+    for &(organism, _) in &package.senses {
+        must_exist(organism, organism, "the organism given sight");
+    }
+    for &(who, _) in &package.minds {
+        must_exist(who, who, "the entity given a mind");
+    }
+    for &(who, _, _, target) in &package.routines {
+        must_exist(who, who, "the mind given a routine");
+        must_exist(who, target, "the place its routine takes it to");
+    }
+    for (mind, things) in &package.knows {
+        must_exist(*mind, *mind, "the mind given knowledge");
+        for &thing in things {
+            must_exist(*mind, thing, "the thing it knows of");
+        }
+    }
     for m in &package.made_of {
         if !materials.contains(&m.material_id) {
             problem(
@@ -230,6 +246,14 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
             "[portal_danger]",
             package.portal_danger.iter().map(|d| d.portal_id).collect(),
         ),
+    );
+    once(
+        "mind",
+        single("[minds]", package.minds.iter().map(|m| m.0).collect()),
+    );
+    once(
+        "sight range",
+        single("[senses]", package.senses.iter().map(|s| s.0).collect()),
     );
     once(
         "material properties",

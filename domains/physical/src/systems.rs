@@ -125,6 +125,20 @@ const DANGER_WRITES: &[FactType] = &[PORTAL_DANGER];
 /// tick length (Amendment A-1). Systems that add to a field propose the *difference* between
 /// the wave at the two ends of their step, so summed deltas telescope back to the wave itself;
 /// systems that set an absolute level (the sun) use the level directly.
+/// The sun's light at simulated time `at_ms`, in `0..=peak`: its height in the sky — a cosine
+/// over the day, lowest at midnight and highest at noon — wherever it is above the horizon, and
+/// nothing between sunset (a quarter-day before midnight) and sunrise (a quarter-day after).
+/// Simulated time, not ticks, so the same at any tick length (Amendment A-1); fixed-point, so
+/// the same on every platform.
+fn daylight(at_ms: u64, day_ms: u64, peak: i64) -> i64 {
+    let day = day_ms.max(1) as i128;
+    let phase = (at_ms as i128).rem_euclid(day);
+    let angle = (phase * kernel::fixed::FULL_TURN as i128 / day) as i64;
+    let (_, cos) = kernel::fixed::sin_cos(angle);
+    let height = (-cos).max(0) as i128;
+    (peak as i128 * height / kernel::fixed::TRIG_ONE as i128) as i64
+}
+
 fn wave(at_ms: u64, period_ms: u64, amp: i64) -> i64 {
     let period = period_ms.max(2) as i128;
     let phase = (at_ms as i128).rem_euclid(period);
@@ -399,8 +413,9 @@ impl System for TemperatureWeather {
     }
 }
 
-/// The sun crossing the sky: illumination set to its absolute level for the moment, peaking
-/// at midday and dark at midnight (Vol. III Ch. 1 §1.10, Time and Change), for every region.
+/// The sun crossing the sky: illumination set to its absolute level for the moment, following
+/// the sun's height — full at midday, falling to nothing at sunset, and dark all night until
+/// sunrise (Vol. III Ch. 1 §1.10, Time and Change; Amendment A-8), for every region.
 /// The sun's position is a pure function of simulated time; exposure scales it so a sealed cave
 /// stays dark even at noon.
 pub struct DayNightCycle {
@@ -436,7 +451,7 @@ impl System for DayNightCycle {
         self.step.cadence()
     }
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
-        let sun = wave(
+        let sun = daylight(
             self.clock.ms_at(ctx.tick()),
             self.day_ms,
             self.peak_illumination,

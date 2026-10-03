@@ -14,17 +14,22 @@
 
 use crate::model::{Flag, MaterialProperty, WorldPackage};
 use crate::version::Version;
+use information::schema as info;
+use information::{InformationConfig, InformationDomain};
 use kernel::domain::Domain;
 use kernel::events::ChronicleEntry;
 use kernel::fact::{Cause, Fact, FactKey, FactType, Provenance, SystemId};
+use kernel::hierarchy::ancestry;
 use kernel::identity::EntityId;
 use kernel::store::MemoryStore;
-use kernel::system::System;
+use kernel::system::{CommittedView, System};
 use kernel::tick::{run_tick, TickError};
 use kernel::time::SimClock;
 use kernel::value::Value;
-use living::schema::BODY_HEAT;
+use living::schema::{BODY_HEAT, SIGHT_RANGE};
 use living::{LivingConfig, LivingDomain};
+use minds::schema as mind;
+use minds::{MindRules, MindsConfig, MindsDomain};
 use physical::schema::{
     ADJACENT_TO, BODY_SIZE, CONTAINED_IN, ELEVATION, ENCLOSED, EXPOSURE, HAS_PORTAL, HEADING,
     IN_REGION, LEADS_TO, MADE_OF, MATERIAL_CONDUCTIVITY, MATERIAL_DENSITY, MATERIAL_FLAMMABILITY,
@@ -50,6 +55,10 @@ pub enum LoadError {
     /// The living domain was selected but supplied no `[rules.living]` block. A missing
     /// rule is a validation error, never an engine default (Vol. IV Ch. 2).
     LivingRulesMissing,
+    /// The information layer was selected but supplied no `[rules.information]` block.
+    InformationRulesMissing,
+    /// Minds were selected but the package supplied no `[rules.minds]` block.
+    MindsRulesMissing,
     /// A selected domain has no implementation wired into the loader yet.
     UnsupportedDomain(String),
     /// The package failed validation (Vol. IV Ch. 7 §7.1): every problem found, each naming its
@@ -69,6 +78,13 @@ impl fmt::Display for LoadError {
             }
             LoadError::LivingRulesMissing => {
                 write!(f, "`living` domain selected but no [rules.living] provided")
+            }
+            LoadError::InformationRulesMissing => write!(
+                f,
+                "`information` selected but no [rules.information] provided"
+            ),
+            LoadError::MindsRulesMissing => {
+                write!(f, "`minds` selected but no [rules.minds] provided")
             }
             LoadError::UnsupportedDomain(d) => {
                 write!(f, "selected domain `{d}` is not implemented yet")
@@ -155,6 +171,35 @@ pub fn living_config(package: &WorldPackage) -> Option<LivingConfig> {
     })
 }
 
+/// Decision systems' configuration a package declares, exactly as [`load`] configures them —
+/// or `None` if the package has no `[rules.minds]`.
+pub fn minds_config(package: &WorldPackage) -> Option<MindsConfig> {
+    let r = package.minds_rules?;
+    Some(MindsConfig {
+        clock: SimClock::new(package.clock.tick_ms),
+        day_seconds: package.clock.day_seconds,
+        rules: MindRules {
+            think_step_seconds: r.think_step_seconds,
+            cold_below_centi_c: r.cold_below_centi_c,
+            trust_half_age_seconds: r.trust_half_age_seconds,
+            hop_cost: r.hop_cost,
+            routine_value: r.routine_value,
+            switch_margin: r.switch_margin,
+        },
+    })
+}
+
+/// The information layer's configuration a package declares, exactly as [`load`] configures it
+/// — or `None` if the package has no `[rules.information]`.
+pub fn information_config(package: &WorldPackage) -> Option<InformationConfig> {
+    let rules = package.information_rules?;
+    Some(InformationConfig {
+        clock: SimClock::new(package.clock.tick_ms),
+        perception_step_seconds: rules.perception_step_seconds,
+        warmth_resolution_centi_c: rules.warmth_resolution_centi_c,
+    })
+}
+
 /// The Physical Reality configuration a package declares: its clock and every physical rule,
 /// exactly as [`load`] configures the domain. Exposed so a harness can run one physical system
 /// in isolation against a loaded world's store.
@@ -182,6 +227,8 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
         nav_cell_cm: r.nav_cell_cm,
         reach_cm: r.reach_cm,
         indoor_coupling_seconds: r.indoor_coupling_seconds,
+        sight_step_seconds: r.sight_step_seconds,
+        sight_min_illumination: r.sight_min_illumination,
     }
 }
 
@@ -217,10 +264,14 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     //    than silently ignored (Vol. IV Ch. 2, invariants 2 & 3).
     let mut has_physical = false;
     let mut has_living = false;
+    let mut has_information = false;
+    let mut has_minds = false;
     for d in &package.manifest.domains {
         match d.as_str() {
             "physical" => has_physical = true,
             "living" => has_living = true,
+            "information" => has_information = true,
+            "minds" => has_minds = true,
             other => return Err(LoadError::UnsupportedDomain(other.to_string())),
         }
     }
@@ -459,6 +510,51 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 seeded(Value::Int(o.body_heat_centi_c)),
             );
         }
+        // Sensory capability is Living's (Amendment A-8).
+        for &(organism, range) in &package.senses {
+            store.seed(
+                FactKey::new(EntityId::from_raw(organism), SIGHT_RANGE),
+                seeded(Value::Int(range)),
+            );
+        }
+    }
+
+    // 3c. The information layer (optional; Amendment A-8): what each mind knows at the start.
+    if has_information {
+        let information = InformationDomain::new(
+            information_config(package).ok_or(LoadError::InformationRulesMissing)?,
+        );
+        systems.extend(information.systems());
+        domains.push(Box::new(information));
+        for (mind, things) in &package.knows {
+            for (key, value) in starting_knowledge(&store, EntityId::from_raw(*mind), things) {
+                store.seed(key, known(value));
+            }
+        }
+    }
+
+    // 3d. Decision systems (optional; Amendment A-9): who has a mind, how fast it walks, and the
+    //     routines the world gives it.
+    if has_minds {
+        let minds = MindsDomain::new(minds_config(package).ok_or(LoadError::MindsRulesMissing)?);
+        systems.extend(minds.systems());
+        domains.push(Box::new(minds));
+        for &(mind, speed) in &package.minds {
+            store.seed(
+                FactKey::new(EntityId::from_raw(mind), mind::WALK_SPEED),
+                seeded(Value::Int(speed)),
+            );
+        }
+        for &(who, from, to, target) in &package.routines {
+            store.seed(
+                FactKey::pair(
+                    EntityId::from_raw(who),
+                    mind::ROUTINE,
+                    EntityId::from_raw(target),
+                ),
+                seeded(Value::Vec3([from * 3600, to * 3600, 0])),
+            );
+        }
     }
 
     // 4. Install the spatial index (Vol. V Ch. 2 §2.1, Amendment A-2) from the placement rule
@@ -475,6 +571,51 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         domains,
         systems,
     })
+}
+
+/// What `mind` knows at the start about each of `things`, read from the seeded world: where it
+/// is; for an opening, where it leads and whether it is open; for a place, how warm its air is
+/// (its own, or the nearest enclosing place's). Beliefs as facts about a pair (Amendment A-7).
+fn starting_knowledge(
+    store: &MemoryStore,
+    mind: EntityId,
+    things: &[u64],
+) -> Vec<(FactKey, Value)> {
+    let read = |e: EntityId, ft| store.read(FactKey::new(e, ft)).map(|f| f.value);
+    let mut out = Vec::new();
+    for thing in things.iter().map(|t| EntityId::from_raw(*t)) {
+        if let Some(place) = read(thing, CONTAINED_IN) {
+            out.push((FactKey::pair(mind, info::PLACE_OF, thing), place));
+        }
+        if let Some(leads) = read(thing, LEADS_TO) {
+            out.push((FactKey::pair(mind, info::LEADS_TO, thing), leads));
+            let open = !matches!(read(thing, PORTAL_OPEN), Some(Value::Bool(false)));
+            out.push((FactKey::pair(mind, info::OPEN, thing), Value::Bool(open)));
+        }
+        let air = ancestry(store, thing, CONTAINED_IN)
+            .into_iter()
+            .find_map(|p| read(p, TEMPERATURE));
+        if let (true, Some(air)) = (is_place(store, thing), air) {
+            out.push((FactKey::pair(mind, info::WARMTH_OF, thing), air));
+        }
+    }
+    out
+}
+
+/// Whether `entity` is a place one can be in: something is in it, or it is walled, or it is a
+/// climate.
+fn is_place(store: &MemoryStore, entity: EntityId) -> bool {
+    store.read(FactKey::new(entity, ENCLOSED)).is_some()
+        || store.read(FactKey::new(entity, TEMPERATURE)).is_some()
+        || store.read(FactKey::new(entity, HAS_PORTAL)).is_some()
+}
+
+/// A belief seeded as starting knowledge: formed at tick 0, known from the start.
+fn known(value: Value) -> Fact {
+    Fact::new(
+        value,
+        Provenance::new(SystemId::new("worldgen"), 0, Cause::new("known")),
+    )
 }
 
 /// A fact seeded at world construction (generation), attributed to worldgen at tick 0.

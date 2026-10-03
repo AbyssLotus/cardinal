@@ -113,14 +113,31 @@ pub struct MemoryStore {
 
 /// The canonical triple encoding fed to the state hasher: entity id (8 bytes LE), fact-type
 /// name, value (a tag byte and a fixed width per type). The fixed-width head and the tagged
-/// tail make the variable-width name unambiguous (Vol. V Ch. 4 §4.2, canonicalisation).
+/// tail make the variable-width name unambiguous (Vol. V Ch. 4 §4.2, canonicalisation). A fact
+/// about a pair (Amendment A-7) puts a `0xFF` marker and the second entity's id between name and
+/// value: `0xFF` occurs in no UTF-8 name and is no value's tag, so the two shapes never collide,
+/// and a fact of one entity encodes exactly as it always has.
 fn triple_bytes(key: FactKey, value: &Value) -> Vec<u8> {
     let name = key.fact_type.name().as_bytes();
-    let mut buf = Vec::with_capacity(8 + name.len() + 25);
+    let mut buf = Vec::with_capacity(8 + name.len() + 9 + 25);
     buf.extend_from_slice(&key.entity.raw().to_le_bytes());
     buf.extend_from_slice(name);
+    if let Some(about) = key.about {
+        buf.push(PAIR_MARKER);
+        buf.extend_from_slice(&about.raw().to_le_bytes());
+    }
     value.write_canonical(&mut buf);
     buf
+}
+
+/// Marks a fact about a pair in the canonical encoding (see [`triple_bytes`]).
+const PAIR_MARKER: u8 = 0xFF;
+
+/// The first and last keys of `holder`'s facts of `fact_type` about a second entity: a closed
+/// range in key order, which sorts them by what they are about (Amendment A-7).
+fn pair_range(holder: EntityId, fact_type: FactType) -> std::ops::RangeInclusive<FactKey> {
+    FactKey::pair(holder, fact_type, EntityId::from_raw(0))
+        ..=FactKey::pair(holder, fact_type, EntityId::from_raw(u64::MAX))
 }
 
 impl MemoryStore {
@@ -209,13 +226,27 @@ impl MemoryStore {
             for value in values.keys() {
                 self.hasher.remove_fact(&triple_bytes(key, value));
             }
-            if let Some(entities) = self.by_type.get_mut(&key.fact_type) {
-                entities.remove(&key.entity);
-                if entities.is_empty() {
-                    self.by_type.remove(&key.fact_type);
+            if !self.holds_any(key.entity, key.fact_type) {
+                if let Some(entities) = self.by_type.get_mut(&key.fact_type) {
+                    entities.remove(&key.entity);
+                    if entities.is_empty() {
+                        self.by_type.remove(&key.fact_type);
+                    }
                 }
             }
         }
+    }
+
+    /// Whether `entity` still holds any value of `fact_type` — of its own, or about a second
+    /// entity. Clearing Erin's belief about Bob leaves her in the type index while she still
+    /// believes something about the cat.
+    fn holds_any(&self, entity: EntityId, fact_type: FactType) -> bool {
+        self.facts.contains_key(&FactKey::new(entity, fact_type))
+            || self
+                .facts
+                .range(pair_range(entity, fact_type))
+                .next()
+                .is_some()
     }
 }
 
@@ -239,6 +270,18 @@ impl CommittedView for MemoryStore {
             .get(&fact_type)
             .map(|entities| entities.iter().copied().collect())
             .unwrap_or_default()
+    }
+
+    fn read_about(&self, holder: EntityId, fact_type: FactType) -> Vec<(EntityId, Fact)> {
+        // One range walk: a holder's paired facts of one type are contiguous, ordered by what
+        // they are about.
+        let mut out = Vec::new();
+        for (key, values) in self.facts.range(pair_range(holder, fact_type)) {
+            if let Some(about) = key.about {
+                out.extend(values.iter().map(|(v, p)| (about, Fact::new(*v, *p))));
+            }
+        }
+        out
     }
 
     fn read_range(&self, key: FactKey, lo: &Value, hi: &Value) -> Vec<Fact> {
@@ -417,6 +460,82 @@ mod tests {
         assert!(store
             .read_range(FactKey::new(e1, NEIGHBOUR), &Value::Int(8), &Value::Int(2))
             .is_empty());
+    }
+
+    #[test]
+    fn a_fact_about_a_pair_is_its_own_fact() {
+        // Erin's beliefs about where Bob and the cat are: two facts of one type, each about a
+        // different entity, neither the same fact as Erin's own value of that type.
+        let (erin, bob, cat) = (
+            EntityId::from_raw(1),
+            EntityId::from_raw(2),
+            EntityId::from_raw(3),
+        );
+        let mut store = MemoryStore::new();
+        store.seed(FactKey::pair(erin, HEAT, cat), fact(30));
+        store.seed(FactKey::pair(erin, HEAT, bob), fact(20));
+        store.seed(FactKey::new(erin, HEAT), fact(10));
+        assert_eq!(
+            store.read(FactKey::pair(erin, HEAT, bob)).unwrap(),
+            fact(20)
+        );
+        assert_eq!(store.read(FactKey::new(erin, HEAT)).unwrap(), fact(10));
+        assert!(
+            store.read(FactKey::pair(bob, HEAT, erin)).is_none(),
+            "pairs are directed"
+        );
+        // All of Erin's, ordered by what they are about; her own value is not among them.
+        assert_eq!(
+            store.read_about(erin, HEAT),
+            vec![(bob, fact(20)), (cat, fact(30))]
+        );
+        assert!(store.read_about(erin, NEIGHBOUR).is_empty());
+        assert_eq!(store.facts_of(erin).len(), 3);
+        assert_eq!(store.state_hash(), rescan_hash(&store));
+    }
+
+    #[test]
+    fn clearing_one_pair_leaves_the_holder_indexed_while_it_holds_another() {
+        let (erin, bob, cat) = (
+            EntityId::from_raw(1),
+            EntityId::from_raw(2),
+            EntityId::from_raw(3),
+        );
+        let mut store = MemoryStore::new();
+        store.seed(FactKey::pair(erin, HEAT, bob), fact(20));
+        store.seed(FactKey::pair(erin, HEAT, cat), fact(30));
+        assert_eq!(store.entities_with(HEAT), vec![erin]);
+        let mut batch = CommitBatch::new(1);
+        batch.resolutions.push(Resolution::Clear {
+            key: FactKey::pair(erin, HEAT, bob),
+        });
+        store.apply(batch);
+        assert_eq!(
+            store.entities_with(HEAT),
+            vec![erin],
+            "she still believes in the cat"
+        );
+        assert_eq!(store.read_about(erin, HEAT), vec![(cat, fact(30))]);
+        assert_eq!(store.state_hash(), rescan_hash(&store));
+        let mut batch = CommitBatch::new(2);
+        batch.resolutions.push(Resolution::Clear {
+            key: FactKey::pair(erin, HEAT, cat),
+        });
+        store.apply(batch);
+        assert!(store.entities_with(HEAT).is_empty());
+        assert!(store.is_empty());
+    }
+
+    #[test]
+    fn a_pair_never_hashes_like_a_single() {
+        // The same holder, type, and value — once of her own, once about entity 0 — are
+        // different facts, and the digest must tell them apart.
+        let erin = EntityId::from_raw(1);
+        let mut own = MemoryStore::new();
+        own.seed(FactKey::new(erin, HEAT), fact(10));
+        let mut paired = MemoryStore::new();
+        paired.seed(FactKey::pair(erin, HEAT, EntityId::from_raw(0)), fact(10));
+        assert_ne!(own.state_hash(), paired.state_hash());
     }
 
     #[test]

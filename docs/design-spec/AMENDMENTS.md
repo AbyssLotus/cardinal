@@ -129,3 +129,76 @@ nearly twice what timber does (2133 against 1190 kJ/(m³·K)). Measured per kilo
 reference world's timber kitchen lagged the weather *more* than its granite manor — the
 opposite of A-5's promise that a stone cottage keeps the afternoon's warmth into the night.
 
+---
+
+## A-7 — A fact may be about a pair (2026-10)
+
+**Edits:** Vol. V Ch. 2 §2.1 (*A fact may be about a pair*).
+
+**Change.** A fact is addressed by an entity and a fact type, and — optionally — a second entity
+it is *about*. `(Erin, belief.place_of, about Bob) = the kitchen` is one fact: owned, with
+provenance and cardinality like any other, written only through `apply()`. The store reads one
+such fact by its full address, and all of a holder's facts of one type in order of what they are
+about. Facts without a second entity are unchanged, in meaning and in their committed digest.
+
+**Rationale.** The agents plan (`docs/audits/agents.md`, §4.1) needs a place for beliefs, and a
+belief is about a pair: who holds it and what it is about. The spec needs the same shape next for
+one person's opinion of another (Appendix A, Ruling 2), relationships in several dimensions
+(Vol. I Ch. 4 §12), and debts. The alternatives were a new entity per belief, which needs a
+runtime id allocator and an index of its own, or a record-shaped value, which would teach the
+kernel the shapes of domain data.
+
+---
+
+## A-8 — Perception and belief (2026-10)
+
+**Edits:**
+- Vol. II Ch. 4 (*The Layer as Built*)
+- Vol. III Ch. 1 *Constraints Made Concrete* (*What is in view*)
+- Vol. III Ch. 2 §2.2 (sight range)
+- Appendix A (in view)
+- Vol. V Ch. 1 §1.1 (the information layer in the domain layer)
+
+**Change.**
+- **Sight range.** Living Systems declares how far each organism can see.
+- **In view.** On a cadence the world declares, Physical Reality publishes what each body with sight could see: within range, along a clear line, and lit above a threshold the world declares.
+- **Night is dark.** Daylight follows the sun's height, zero from sunset to sunrise. It was a triangle wave from midnight to noon, which left Ashford above the sight threshold for all but about fourteen minutes of the night.
+- **Perception.** The information layer is a new owner of facts with no imports. It turns what is in view into beliefs, held as facts about a pair (A-7):
+  - where things were seen, and what openings were seen to lead to and whether they were open;
+  - how warm the places one has stood in felt;
+  - what one feels of oneself: one's place, one's body heat, where one is going, whether one's way was blocked, and what one was refused.
+- **Memory.** A belief stays current while its subject is in sight. When the subject leaves sight, the belief is stamped with when it was last seen, and is otherwise left alone.
+- **Starting knowledge.** What each mind knows at the start is package data (`[knows]`).
+
+**Rationale.** The agents plan (`docs/audits/agents.md`, §4.3–4.4). Domains never import each other, and sight is Physical's geometry, so Physical publishes the geometric fact and the information layer makes the observation. Confidence derived from age keeps memory exact under replay and free to store.
+
+---
+
+## A-9 — Minds (2026-10)
+
+**Edits:**
+- Appendix A (goals, commitments, routines, traces; Ruling 14)
+- Vol. V Ch. 9 §9.3 (*The reference mind, as built*)
+- Vol. V Ch. 1 §1.1 (decision systems in the domain layer)
+
+**Change.** Decision systems are a new owner of facts with no imports (`domains/minds`).
+- **Reads.** A mind reads only the information layer's facts and its own commitments.
+- **Choosing.** On a cadence the world declares, it scores each place it knows by:
+  - the warmth it remembers there against the cold it feels (its body heat below the world's
+    comfort line), trusted less the older the memory;
+  - the routine the world gives it for the hour;
+  - the number of openings it believes lie on the way.
+- **Commitment.** It keeps a choice until it arrives, unless another beats it by a margin the
+  world declares.
+- **Acting.** It acts by travel and open intents. When its travel is blocked, it walks to the
+  first opening on the way it believes in and opens it.
+- **Tracing.** It records its goal, its reason, and the decisive score.
+- **Package data.** Which entities have minds, how fast they walk, and their daily routines.
+- **A fresh intent outlives the clearing of the old.** If a decider asks for a new destination,
+  or a door opened or shut, in the tick Physical Reality clears the intent it just fulfilled,
+  the new one stands. This is Physical's composition rule for intents. Two deciders asking for
+  different things at once remains a conflict.
+
+**Rationale.** The agents plan (`docs/audits/agents.md`, §4.5), and the project owner's choice
+of warmth and routines as the first goals.
+

@@ -60,21 +60,21 @@ fn a_body_settles_where_its_air_puts_it_at_any_tick_length() {
 fn hal_on_the_moor_feels_the_cold_and_ida_in_the_fen_does_not() {
     let mut city = City::from(with_tick_seconds(600));
     city.run(2 * 144);
-    assert!(heat(&city, HAL) < heat(&city, ERIN));
-    assert!(heat(&city, ERIN) < heat(&city, IDA));
+    assert!(heat(&city, HAL) < heat(&city, FINN));
+    assert!(heat(&city, FINN) < heat(&city, IDA));
 }
 
 #[test]
 fn the_rider_feels_the_air_the_cart_rolls_through() {
     // The rider is in the cart, not in any place with a climate of its own: they feel the air
-    // of Old Town, which is the Vale's — as Erin, standing in the yard, does.
+    // of Old Town, which is the Vale's — as Finn, standing in the yard, does.
     let mut city = City::from(with_tick_seconds(600));
     city.run(2 * 144);
     assert!(
-        (heat(&city, RIDER) - heat(&city, ERIN)).abs() <= 2,
-        "rider {} vs Erin {}",
+        (heat(&city, RIDER) - heat(&city, FINN)).abs() <= 2,
+        "rider {} vs Finn {}",
         heat(&city, RIDER),
-        heat(&city, ERIN)
+        heat(&city, FINN)
     );
 }
 

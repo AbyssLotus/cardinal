@@ -27,7 +27,7 @@
 id = world.ashford
 version = 0.1.0
 engine = >=0.0, <1.0
-domains = physical, living
+domains = physical, living, information, minds
 
 [clock]
 # A text world: one tick is one simulated second.
@@ -54,12 +54,26 @@ max_slope_percent = 100
 nav_cell_cm = 50
 reach_cm = 75
 indoor_coupling_seconds = 14400
+sight_step_seconds = 1              # what each body can see, refreshed every second
+sight_min_illumination = 50         # below 0.5% of full daylight, nothing can be made out
 
 [rules.living]
 metabolism_step_seconds = 60
 set_point_centi_c = 3700
 warm_response_seconds = 21600
 cold_response_seconds = 10800
+
+[rules.information]
+perception_step_seconds = 1
+warmth_resolution_centi_c = 50      # half a degree: the least change of warmth anyone notices
+
+[rules.minds]
+think_step_seconds = 5              # each mind weighs its choices every five seconds
+cold_below_centi_c = 2300           # body heat below which a mind feels cold
+trust_half_age_seconds = 172800     # a two-day-old memory is trusted half as much as a fresh one
+hop_cost = 20                       # what each opening on the way costs a choice
+routine_value = 300                 # what keeping a routine is worth
+switch_margin = 100                 # how much better a new choice must be to change one's mind
 
 # ---- The nesting -------------------------------------------------------------------------
 
@@ -72,6 +86,7 @@ cold_response_seconds = 10800
 400 = 1300, 5300        # the mine mouth (on the Hill)
 401 = 1100, 5300        # the deep gallery
 402 = 1500, 5300        # the miners' cabin
+103 = 2000              # Alice's kitchen, still warm from last night's stove
 
 # Places that only hold other places: no climate of their own.
 [places]
@@ -437,6 +452,60 @@ cold_response_seconds = 10800
 2082 = 12, 3700
 2083 = 12, 3700
 2084 = 12, 3700
+
+# ---- Senses and starting knowledge -------------------------------------------------------
+[senses]
+# organism = how far it can see, cm
+2001 = 3000             # people: 30 m
+2002 = 3000
+2003 = 3000
+2004 = 3000
+2005 = 3000
+2010 = 2000             # the cat
+2011 = 3000
+2012 = 1500             # the raccoon
+2013 = 3000
+2014 = 3000
+2015 = 3000
+2030 = 3000
+2040 = 3000
+2041 = 3000
+2050 = 3000
+2051 = 3000
+2052 = 3000
+2060 = 3000
+2061 = 3000             # the fox
+2062 = 3000
+2070 = 3000
+2080 = 3000
+2081 = 3000
+2082 = 3000
+2083 = 3000
+2084 = 3000
+
+[knows]
+# mind = what it knows at the start: where each thing is; where an opening leads and whether
+# it is open; how warm a place's air is
+2001 = 100, 101, 102, 103, 104, 1001, 1002, 1007, 1008, 2002, 2004    # Alice: her house, Bob, Dave
+2002 = 100, 102, 103, 104, 1001, 1002, 1007, 1008, 1009, 1010          # Bob: the house
+2004 = 103, 104, 1007, 1008, 2002                                      # Dave: upstairs, and Bob below
+2005 = 100, 103, 1001, 1002                                            # Erin: the yard, the kitchen door
+2011 = 100                                                             # the courier: only the yard
+2015 = 300, 301, 302, 303, 1101, 1102, 1103, 1104, 1105, 1106          # the steward: the manor
+2070 = 12, 200, 201, 202, 1201, 1202, 1203, 1204                        # the villager: home
+2052 = 13, 510, 511, 512                                               # the guard: the harbour
+
+# ---- Minds -------------------------------------------------------------------------------
+[minds]
+# mind = how fast it walks when it chooses to go somewhere, cm/s
+2005 = 140              # Erin
+2011 = 140              # the courier
+2052 = 140              # the harbour guard
+
+[routines]
+# mind = from hour, to hour, where the world says it belongs
+2052 = 6, 18, 510       # the guard keeps the gate by day
+2052 = 18, 22, 511      # and the well in the evening
 
 # ---- Materials ---------------------------------------------------------------------------
 [materials]
