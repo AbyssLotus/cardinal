@@ -127,6 +127,19 @@ const MAX_SYSTEMS: usize = 1 << 10;
 /// than eight thousand years.
 const MAX_TICK: u64 = 1 << 38;
 
+/// What one system cost in one tick (Amendment A-21; Vol. V Ch. 8): the time its evaluation took
+/// and how many proposals it made. Kept outside the simulation — no system reads it and no fact
+/// depends on it, so wall-clock time cannot reach reality.
+#[derive(Clone, Copy, Debug)]
+pub struct SystemMeter {
+    /// The system, or `kernel.commit` for resolving, validating, and committing the tick.
+    pub system: SystemId,
+    /// Wall-clock time taken, in nanoseconds.
+    pub nanos: u128,
+    /// Proposals made (for `kernel.commit`, proposals resolved).
+    pub proposals: usize,
+}
+
 /// Advance committed reality by one tick through the seven ordered stages
 /// (Vol. V Ch. 3 §3.1).
 ///
@@ -143,6 +156,28 @@ pub fn run_tick<S: RealityStore>(
     tick: u64,
     seed: u64,
     chronicle: &mut Vec<ChronicleEntry>,
+) -> Result<(), TickError> {
+    run_tick_metered(
+        store,
+        domains,
+        systems,
+        tick,
+        seed,
+        chronicle,
+        &mut Vec::new(),
+    )
+}
+
+/// [`run_tick`], recording what each system cost into `meters` (Amendment A-21): one entry per
+/// system evaluated, in the order evaluated, and one for the kernel's own commit.
+pub fn run_tick_metered<S: RealityStore>(
+    store: &mut S,
+    domains: &[&dyn Domain],
+    systems: &[Box<dyn System>],
+    tick: u64,
+    seed: u64,
+    chronicle: &mut Vec<ChronicleEntry>,
+    meters: &mut Vec<SystemMeter>,
 ) -> Result<(), TickError> {
     // 0. CONTINUITY — reality advances exactly one tick at a time (Vol. V Ch. 3: tick N reads
     //    N − 1), and within what runtime ids can number (Amendment A-15).
@@ -184,7 +219,13 @@ pub fn run_tick<S: RealityStore>(
             let scoped = ScopedView::new(view, sys.reads());
             let slot = ids.iter().position(|id| *id == sys.id()).unwrap_or(0) as u64;
             let ctx = TickContext::new(tick, seed, sys.id().code(), slot);
+            let began = std::time::Instant::now();
             let emitted = sys.evaluate(&scoped, &ctx);
+            meters.push(SystemMeter {
+                system: sys.id(),
+                nanos: began.elapsed().as_nanos(),
+                proposals: emitted.len(),
+            });
             if ctx.exhausted() {
                 return Err(TickError::IdsExhausted(sys.id()));
             }
@@ -214,6 +255,8 @@ pub fn run_tick<S: RealityStore>(
             proposals.extend(emitted);
         }
     }
+    let committing = std::time::Instant::now();
+    let resolved = proposals.len();
 
     // 3-4. RESOLVE + VALIDATE — group proposals per fact (deterministic key order), then
     //      resolve each by its owner's cardinality and rules (Vol. V Ch. 3 §3.1).
@@ -316,7 +359,12 @@ pub fn run_tick<S: RealityStore>(
     }
 
     // 7. OBSERVE — read-only notification hook; nothing on the critical path here yet
-    //    (Vol. V Ch. 3 §3.1; Vol. V Ch. 9 §9.5.2).
+    //    (Vol. V Ch. 3 §3.1; Vol. V Ch. 9 §9.5.2). The meters are its first reading.
+    meters.push(SystemMeter {
+        system: SystemId::new("kernel.commit"),
+        nanos: committing.elapsed().as_nanos(),
+        proposals: resolved,
+    });
     Ok(())
 }
 

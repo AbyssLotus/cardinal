@@ -24,7 +24,7 @@ use kernel::hierarchy::ancestry;
 use kernel::identity::EntityId;
 use kernel::store::MemoryStore;
 use kernel::system::{CommittedView, System};
-use kernel::tick::{run_tick, TickError};
+use kernel::tick::{run_tick_metered, SystemMeter, TickError};
 use kernel::time::SimClock;
 use kernel::value::Value;
 use living::schema::{
@@ -122,6 +122,7 @@ pub struct LoadedWorld {
     store: MemoryStore,
     domains: Vec<Box<dyn Domain>>,
     systems: Vec<Box<dyn System>>,
+    meters: Vec<SystemMeter>,
 }
 
 impl fmt::Debug for LoadedWorld {
@@ -154,14 +155,27 @@ impl LoadedWorld {
         chronicle: &mut Vec<ChronicleEntry>,
     ) -> Result<(), TickError> {
         let domain_refs: Vec<&dyn Domain> = self.domains.iter().map(|d| d.as_ref()).collect();
-        run_tick(
+        self.meters.clear();
+        run_tick_metered(
             &mut self.store,
             &domain_refs,
             &self.systems,
             tick,
             seed,
             chronicle,
+            &mut self.meters,
         )
+    }
+
+    /// What each system cost in the last tick run (Amendment A-21).
+    pub fn meters(&self) -> &[SystemMeter] {
+        &self.meters
+    }
+
+    /// The store itself, for a harness that tunes what it remembers (Amendment A-21) — never to
+    /// write reality, which only ticks do.
+    pub fn store_mut(&mut self) -> &mut MemoryStore {
+        &mut self.store
     }
 
     /// Attach a front-door system to the running world: a decider standing in for a player or a
@@ -859,6 +873,7 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         store,
         domains,
         systems,
+        meters: Vec::new(),
     })
 }
 

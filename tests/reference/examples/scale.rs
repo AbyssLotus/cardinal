@@ -162,6 +162,7 @@ fn main() {
         let load = t0.elapsed();
         let facts0 = city.store().len();
         let (mut total, mut worst, mut entries) = (0.0f64, 0.0f64, 0usize);
+        let mut by_system: std::collections::BTreeMap<&str, (u128, usize)> = Default::default();
         for _ in 0..ticks {
             city.chronicle.clear();
             let t = Instant::now();
@@ -170,6 +171,11 @@ fn main() {
             total += ms;
             worst = worst.max(ms);
             entries += city.chronicle.len();
+            for m in city.meters() {
+                let e = by_system.entry(m.system.name()).or_default();
+                e.0 += m.nanos;
+                e.1 += m.proposals;
+            }
         }
         println!(
             "{:>7} {:>9.1} {:>10.2} {:>10.2} {:>12} {:>10} {:>10}",
@@ -182,6 +188,17 @@ fn main() {
             city.store().len()
         );
         let _ = city.store().state_hash();
+        if std::env::var("METERS").is_ok() {
+            let mut rows: Vec<_> = by_system.into_iter().collect();
+            rows.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+            for (name, (nanos, proposals)) in rows.iter().take(8) {
+                println!(
+                    "    {:>8.2} ms/tick {:>7} proposals/tick  {name}",
+                    *nanos as f64 / 1e6 / ticks as f64,
+                    proposals / ticks as usize
+                );
+            }
+        }
         if std::env::var("CENSUS").is_ok() {
             census(&city);
         }

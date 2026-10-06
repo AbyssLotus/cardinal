@@ -247,3 +247,42 @@ every organism is still visited. The saving is in #4 and #20 below.
 affect the outcome exists*. With one Cardinal amendment: what cannot affect the outcome *now* is
 still simulated, at the cost its level of detail allows. It is never frozen, so that when it does
 matter it is what the world says it is (Vol. V Ch. 5, *The Frozen Duchy*).
+
+---
+
+## 8. Build order, revised after phase 1's measurements (2026-10-06)
+
+The engine now meters itself (A-21). At 2,027 agents in the scene, a tick is:
+
+| System | Time | Share |
+|---|---|---|
+| Sight | 82 ms | 71% |
+| Perception | 13 ms | 11% |
+| Commit | 7.6 ms | 7% |
+| Minds | 7.3 ms | 6% |
+| Everything Living does together | 3 ms | |
+
+Levels (A-20) cut chronicle entries by about 31%.
+
+**What this changes.** Sight is the cost of the *scene*, which is bounded by attention to a few
+thousand people. At 2,000 it already fits the scene's budget. Speeding it up is worth doing, but
+it is not on the path to a million.
+
+That path is the **city tier**: residents as compact individuals that cost nothing until something
+is due.
+- At 10–15 facts each, even the reference store holds a million in about 4 GB, inside the 16 GB
+  budget.
+- About 230 wake-ups a second is trivial work on any store.
+
+So the city tier does not wait on the hot store or parallelism. It waits only on the agenda.
+
+**Revised order:**
+
+1. **The agenda** (A-22): a deterministic due-at-tick index, kernel-hosted, exact with or without
+   the index.
+2. **City-tier residents** (old phase 4): day plans, levels, holdings as quantities, woken by the
+   agenda; promotion into the scene and demotion back.
+3. **Generation** (old phase 5): a generated city to put them in. A million residents, measured.
+4. **The hot store and parallel shards** (old phases 2 and 3), sized by what step 3 measures.
+5. **Incremental sight and perception** for a larger scene, using change memory (A-21).
+6. **The world** (old phase 6): many regions on the residency ladder.

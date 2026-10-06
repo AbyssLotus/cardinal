@@ -307,6 +307,18 @@ impl City {
         self.world.store()
     }
 
+    /// What each system cost in the last tick (Amendment A-21).
+    pub fn meters(&self) -> &[kernel::tick::SystemMeter] {
+        self.world.meters()
+    }
+
+    /// Remember what changed in the last `ticks` ticks (Amendment A-21); 0 remembers nothing,
+    /// so every system does all its work. What is committed must not differ.
+    pub fn remember_changes(&mut self, ticks: usize) -> &mut Self {
+        self.world.store_mut().set_change_window(ticks);
+        self
+    }
+
     /// Advance `ticks` ticks.
     pub fn run(&mut self, ticks: u64) {
         for _ in 0..ticks {

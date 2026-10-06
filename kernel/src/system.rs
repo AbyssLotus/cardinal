@@ -83,6 +83,16 @@ pub trait CommittedView {
     fn spatial(&self) -> Option<&dyn SpatialQuery> {
         None
     }
+
+    /// The entities that had facts of `fact_type` written in the ticks after `since`, up to this
+    /// view's tick, in ascending order — or `None` if this view cannot say (Amendment A-21): it
+    /// keeps no memory of changes, or its memory does not reach back that far. A system given
+    /// `None` must do all the work it would do without the answer, so that nothing committed can
+    /// depend on how much a store remembers. "Written" includes a value set again unchanged.
+    fn changed_since(&self, fact_type: FactType, since: u64) -> Option<Vec<EntityId>> {
+        let _ = (fact_type, since);
+        None
+    }
 }
 
 /// A committed view scoped to a system's declared read set (Vol. V Ch. 3 §3.1).
@@ -181,6 +191,14 @@ impl CommittedView for ScopedView<'_> {
             declared &= self.check(*fact_type);
         }
         declared.then_some(index)
+    }
+
+    fn changed_since(&self, fact_type: FactType, since: u64) -> Option<Vec<EntityId>> {
+        if self.check(fact_type) {
+            self.inner.changed_since(fact_type, since)
+        } else {
+            None
+        }
     }
 }
 

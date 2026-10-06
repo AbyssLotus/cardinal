@@ -20,7 +20,7 @@ use crate::identity::EntityId;
 use crate::spatial::{SpatialIndex, SpatialProjector, SpatialQuery};
 use crate::system::CommittedView;
 use crate::value::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
 /// One resolved outcome for a single fact key, ready to commit (Vol. V Ch. 3 §3.1,
@@ -88,9 +88,17 @@ pub trait RealityStore: CommittedView {
     fn state_hash(&self) -> StateHash;
 }
 
+/// How many recent ticks a [`MemoryStore`] remembers what changed in, unless told otherwise
+/// (Amendment A-21): a bound on memory, never on correctness — older questions are answered
+/// "unknown".
+pub const CHANGE_WINDOW: usize = 64;
+
+/// What was written in one tick: per fact type, the entities whose facts of it were written.
+type Written = BTreeMap<FactType, BTreeSet<EntityId>>;
+
 /// The reference store: the fact/triple model as a sorted map of value sets
 /// (Vol. V Ch. 2 §2.2), with a fact-type index and an incrementally-maintained digest.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct MemoryStore {
     // Per fact key, the committed values (each with provenance). A cardinality-one fact holds
     // at most one; a cardinality-many fact holds a set. Sorted throughout for determinism.
@@ -109,6 +117,24 @@ pub struct MemoryStore {
     // The tick the committed state represents: 0 for the initial world, N after tick N's
     // `apply`. Read through `CommittedView::tick` (Vol. V Ch. 2 §2.1, clause 3).
     tick: u64,
+    // What each of the most recent ticks wrote, oldest first (Amendment A-21), at most
+    // `change_window` of them. Never part of the digest: it is memory of commits, not reality.
+    changes: VecDeque<(u64, Written)>,
+    change_window: usize,
+}
+
+impl Default for MemoryStore {
+    fn default() -> Self {
+        Self {
+            facts: BTreeMap::new(),
+            by_type: BTreeMap::new(),
+            hasher: StateHasher::default(),
+            spatial: None,
+            tick: 0,
+            changes: VecDeque::new(),
+            change_window: CHANGE_WINDOW,
+        }
+    }
 }
 
 /// The canonical triple encoding fed to the state hasher: entity id (8 bytes LE), fact-type
@@ -144,6 +170,16 @@ impl MemoryStore {
     /// An empty world.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Remember what changed in the last `ticks` ticks (Amendment A-21); 0 remembers nothing, so
+    /// every question about changes is answered "unknown". The answer may never change what is
+    /// committed, only what it costs to compute — which is how that is tested.
+    pub fn set_change_window(&mut self, ticks: usize) {
+        self.change_window = ticks;
+        while self.changes.len() > ticks {
+            self.changes.pop_front();
+        }
     }
 
     /// Seed a value at world construction, before tick 1.
@@ -301,6 +337,27 @@ impl CommittedView for MemoryStore {
     fn spatial(&self) -> Option<&dyn SpatialQuery> {
         self.spatial.as_ref().map(|ix| ix as &dyn SpatialQuery)
     }
+
+    fn changed_since(&self, fact_type: FactType, since: u64) -> Option<Vec<EntityId>> {
+        if since >= self.tick {
+            return Some(Vec::new());
+        }
+        // Every tick from `since + 1` to now must still be remembered.
+        let oldest = self.changes.front().map(|(t, _)| *t)?;
+        if oldest > since + 1 {
+            return None;
+        }
+        let mut out: BTreeSet<EntityId> = BTreeSet::new();
+        for (tick, written) in self.changes.iter().rev() {
+            if *tick <= since {
+                break;
+            }
+            if let Some(entities) = written.get(&fact_type) {
+                out.extend(entities.iter().copied());
+            }
+        }
+        Some(out.into_iter().collect())
+    }
 }
 
 impl RealityStore for MemoryStore {
@@ -325,12 +382,16 @@ impl RealityStore for MemoryStore {
         // lands — so an entity whose three position axes all change is placed once, from its
         // final facts.
         let mut moved: BTreeSet<EntityId> = BTreeSet::new();
+        let mut written: Written = BTreeMap::new();
         for resolution in batch.resolutions {
             let key = match &resolution {
                 Resolution::One { key, .. }
                 | Resolution::Many { key, .. }
                 | Resolution::Clear { key } => *key,
             };
+            if self.change_window > 0 {
+                written.entry(key.fact_type).or_default().insert(key.entity);
+            }
             if self.watched(key.fact_type) {
                 moved.insert(key.entity);
             }
@@ -352,6 +413,12 @@ impl RealityStore for MemoryStore {
         }
         self.tick = batch.tick;
         self.reproject(moved);
+        if self.change_window > 0 {
+            self.changes.push_back((batch.tick, written));
+            while self.changes.len() > self.change_window {
+                self.changes.pop_front();
+            }
+        }
     }
 
     fn state_hash(&self) -> StateHash {
