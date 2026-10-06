@@ -719,11 +719,17 @@ impl Travel {
             };
             (region, Some(target))
         };
+        // A waypoint where the body already stands is no step at all: it can get no closer, and
+        // is as blocked as one with no way — told so, rather than left waiting for a leg that
+        // never begins.
         let walk =
             |plan: &mut Planner, goal: [i64; 3], stop: i64, thing: Option<EntityId>| match plan
                 .next_waypoint(here, body, at, goal, stop, thing)
             {
-                Some(w) => Step::Walk(cap_on_terrain(view, here, at, w)),
+                Some(w) => match cap_on_terrain(view, here, at, w) {
+                    w if w == [at[0], at[1]] => Step::Blocked,
+                    w => Step::Walk(w),
+                },
                 None => Step::Blocked,
             };
         if here == goal_region {

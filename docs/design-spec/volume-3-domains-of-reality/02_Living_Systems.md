@@ -125,6 +125,9 @@ A system elsewhere may translate a critical need into a goal. Living Systems onl
   - Past a line the world declares it is starvation, and harms health.
   - Like every need, it is a measurement. Finding food is a mind's business, and picking or
     taking it is Physical Reality's.
+  - Hunger and fatigue are *levels* (Amendment A-20). Each is stored as where it stood, how fast
+    it moves, and since when, and written only when that changes: a meal, lying down, getting up,
+    death.
 - **Needs that arise** *(Amendment A-11)*. Some needs are not there from the start. They come into being from what happens, and each is *about* something: Gwen's longing for Finn, Bob's craving for poppy. A world declares the **kinds** of such need, built from mechanisms the engine knows. Each kind sets:
   - **what makes it arise:** a bond to someone (Society's), or a dependence on something (A-13);
   - **what meets it:** that someone's presence (in the same place, or in view), or a dose of that something;

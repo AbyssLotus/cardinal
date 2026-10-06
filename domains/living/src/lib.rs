@@ -120,17 +120,20 @@ impl Domain for LivingDomain {
             )),
             // Tiring and resting, and what harm and healing do to health (Amendment A-10).
             Box::new(systems::Fatigue::new(
+                c.clock,
                 step,
                 c.tire_per_hour,
                 c.rest_per_hour,
             )),
             // Needs that arise, grow, ease, and end (Amendment A-11).
             Box::new(systems::Needs::new(
+                c.clock,
                 step,
                 c.dependence_fade_per_day,
                 c.hunger_per_hour,
             )),
             Box::new(systems::Health::new(
+                c.clock,
                 step,
                 systems::HarmRules {
                     hypothermia_below_centi_c: c.hypothermia_below_centi_c,
@@ -179,18 +182,24 @@ impl Domain for LivingDomain {
                 }
             }
         }
-        let numeric = fact_type == schema::HUNGER
-            || fact_type == schema::FATIGUE
-            || fact_type == schema::HEALTH
+        let numeric = fact_type == schema::HEALTH
             || fact_type == schema::SIGHT_RANGE
             || fact_type == schema::FALL_JUDGED
             || (schema::NEED_FACTS.contains(&fact_type) && fact_type != schema::NEED_KIND);
         if numeric && matches!(value, Resolved::Write(v) if v.as_int().is_none()) {
             return Err(ValidationError::new("this living fact is a number"));
         }
-        if fact_type == schema::FATIGUE
-            || fact_type == schema::HUNGER
-            || fact_type == schema::HEALTH
+        // Hunger and fatigue are levels (Amendment A-20), standing within 0..=100%.
+        if fact_type == schema::FATIGUE || fact_type == schema::HUNGER {
+            if let Resolved::Write(v) = value {
+                let level = kernel::level::Level::from_value(*v)
+                    .ok_or(ValidationError::new("hunger and fatigue are levels"))?;
+                if !(0..=schema::FULL).contains(&level.value) {
+                    return Err(ValidationError::new("a level resolved outside 0..=100%"));
+                }
+            }
+        }
+        if fact_type == schema::HEALTH
             || fact_type == schema::NEED
             || fact_type == schema::DEPENDENCE
         {

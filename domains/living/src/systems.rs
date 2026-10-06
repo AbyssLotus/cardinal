@@ -16,10 +16,11 @@ use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::fixed::div_dither;
 use kernel::hierarchy::ancestry;
 use kernel::identity::EntityId;
+use kernel::level::Level;
 use kernel::proposal::{Change, Proposal};
 use kernel::rng::Rng;
 use kernel::system::{Cadence, CommittedView, System, TickContext};
-use kernel::time::Step;
+use kernel::time::{SimClock, Step};
 
 /// Reads: the organism's containment (to learn its region) and that region's temperature —
 /// both owned by Physical Reality — plus the organism's own body heat. Writes: body heat.
@@ -165,20 +166,24 @@ fn over(per_hour: i64, dt_ms: u64, rng: &mut Rng) -> i64 {
 const FATIGUE_READS: &[FactType] = &[HEALTH, FATIGUE, REST, MOTION_TARGET, TRAVEL_TO];
 const FATIGUE_WRITES: &[FactType] = &[FATIGUE];
 
-/// Tiring and resting (Vol. III Ch. 2 §2.4; Appendix A, Ruling 15; Amendment A-10): every living
-/// organism's fatigue rises while it is awake and falls while it rests, at the world's rates. It
-/// rests when a decider has asked it to and its body is still — not travelling, not falling.
+/// Tiring and resting (Vol. III Ch. 2 §2.4; Appendix A, Ruling 15; Amendments A-10, A-20): every
+/// living organism's fatigue rises while it is awake and falls while it rests, at the world's
+/// rates. It rests when a decider has asked it to and its body is still — not travelling, not
+/// falling. Fatigue is a level: written only when it changes course — lying down, getting up,
+/// setting off, stopping — and stopped by death.
 pub struct Fatigue {
+    clock: SimClock,
     step: Step,
     tire_per_hour: i64,
     rest_per_hour: i64,
 }
 
 impl Fatigue {
-    /// Tire at `tire_per_hour` and recover at `rest_per_hour` (hundredths of a percent), stepping
-    /// as `step` says.
-    pub const fn new(step: Step, tire_per_hour: i64, rest_per_hour: i64) -> Self {
+    /// Tire at `tire_per_hour` and recover at `rest_per_hour` (hundredths of a percent), looking
+    /// as `step` says on `clock`.
+    pub const fn new(clock: SimClock, step: Step, tire_per_hour: i64, rest_per_hour: i64) -> Self {
         Self {
+            clock,
             step,
             tire_per_hour,
             rest_per_hour,
@@ -202,28 +207,30 @@ impl System for Fatigue {
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         view.entities_with(FATIGUE)
             .into_iter()
-            .filter(|o| alive(view, *o))
             .filter_map(|organism| {
-                let now = int(view, FactKey::new(organism, FATIGUE))?;
+                let level = view
+                    .read(FactKey::new(organism, FATIGUE))
+                    .and_then(|f| Level::from_value(f.value))?;
                 let still = view.read(FactKey::new(organism, MOTION_TARGET)).is_none()
                     && view.read(FactKey::new(organism, TRAVEL_TO)).is_none();
                 let asked = view.read(FactKey::new(organism, REST)).map(|f| f.value)
                     == Some(kernel::value::Value::Bool(true));
                 let resting = asked && still;
-                let rate = if resting {
-                    -self.rest_per_hour
+                let (rate, why) = if !alive(view, organism) {
+                    (0, "died")
+                } else if resting {
+                    (-self.rest_per_hour, "resting")
                 } else {
-                    self.tire_per_hour
+                    (self.tire_per_hour, "awake")
                 };
-                let next = (now + over(rate, self.step.dt_ms, &mut ctx.rng(organism.raw())))
-                    .clamp(0, FULL);
-                (next != now).then(|| {
+                (level.per_hour != rate).then(|| {
+                    let next = level.from_tick(self.clock, ctx.basis_tick(), 0, FULL, rate);
                     Proposal::new(
                         self.id(),
                         FactKey::new(organism, FATIGUE),
                         ctx.basis_tick(),
-                        Change::Set(kernel::value::Value::Int(next)),
-                        Cause::new(if resting { "rested" } else { "awake" }),
+                        Change::Set(next.to_value()),
+                        Cause::new(why),
                     )
                 })
             })
@@ -270,14 +277,15 @@ const HEALTH_WRITES: &[FactType] = &[HEALTH, FALL_JUDGED, SIGHT_RANGE, TRAVEL_TO
 /// sight goes, and the travel it had asked for is cancelled — though its body and history remain
 /// (Vol. III Ch. 2 §2.8, invariant 7).
 pub struct Health {
+    clock: SimClock,
     step: Step,
     rules: HarmRules,
 }
 
 impl Health {
-    /// Judge harm and healing by `rules`, stepping as `step` says.
-    pub const fn new(step: Step, rules: HarmRules) -> Self {
-        Self { step, rules }
+    /// Judge harm and healing by `rules`, stepping as `step` says on `clock`.
+    pub const fn new(clock: SimClock, step: Step, rules: HarmRules) -> Self {
+        Self { clock, step, rules }
     }
 }
 
@@ -340,7 +348,10 @@ impl System for Health {
                 aching += over(harm * felt / FULL, self.step.dt_ms, &mut rng);
             }
             // Starving (Amendment A-16).
-            let hungry = int(view, FactKey::new(organism, HUNGER)).unwrap_or(0);
+            let hungry = view
+                .read(FactKey::new(organism, HUNGER))
+                .and_then(|f| Level::from_value(f.value))
+                .map_or(0, |l| l.at(self.clock, ctx.tick(), 0, FULL));
             let starving = if hungry > r.starving_above {
                 over(r.starving_harm_per_hour, self.step.dt_ms, &mut rng)
             } else {
@@ -430,6 +441,7 @@ const NEEDS_WRITES: &[FactType] = &[NEED, NEED_KIND, DEPENDENCE, DOSE_JUDGED, HU
 ///   or in view, and grows while it is not; a need met by a dose grows at its rate scaled by the
 ///   dependence beneath it, and each dose eases it by the kind's measure times the potency.
 pub struct Needs {
+    clock: SimClock,
     step: Step,
     dependence_fade_per_day: i64,
     hunger_per_hour: i64,
@@ -438,8 +450,14 @@ pub struct Needs {
 impl Needs {
     /// Needs stepping as `step` says; dependence fading at `dependence_fade_per_day`; hunger
     /// rising at `hunger_per_hour` (Amendment A-16).
-    pub const fn new(step: Step, dependence_fade_per_day: i64, hunger_per_hour: i64) -> Self {
+    pub const fn new(
+        clock: SimClock,
+        step: Step,
+        dependence_fade_per_day: i64,
+        hunger_per_hour: i64,
+    ) -> Self {
         Self {
+            clock,
             step,
             dependence_fade_per_day,
             hunger_per_hour,
@@ -475,6 +493,20 @@ impl System for Needs {
         let mut out = Vec::new();
         for organism in view.entities_with(BODY_HEAT) {
             if !alive(view, organism) {
+                // Death stops hunger where it stood (Amendment A-20).
+                let hunger = view
+                    .read(FactKey::new(organism, HUNGER))
+                    .and_then(|f| Level::from_value(f.value));
+                if let Some(level) = hunger.filter(|l| l.per_hour != 0) {
+                    let stopped = level.from_tick(self.clock, ctx.basis_tick(), 0, FULL, 0);
+                    out.push(Proposal::new(
+                        self.id(),
+                        FactKey::new(organism, HUNGER),
+                        ctx.basis_tick(),
+                        Change::Set(stopped.to_value()),
+                        Cause::new("died"),
+                    ));
+                }
                 continue;
             }
             let mut push = |key: FactKey, change, why| {
@@ -513,15 +545,27 @@ impl System for Needs {
                 }
             }
 
-            // Hunger: rising by the hour, lowered by what was eaten (Amendment A-16).
-            if let Some(hungry) = int(view, FactKey::new(organism, HUNGER)) {
-                let next = (hungry + over(self.hunger_per_hour, self.step.dt_ms, &mut rng) - fed)
-                    .clamp(0, FULL);
-                if next != hungry {
-                    let why = if fed > 0 { "ate" } else { "hungrier" };
+            // Hunger: a level rising by the hour, lowered by what was eaten (Amendments A-16,
+            // A-20). Written only when something is eaten, or the world's rate is not the one it
+            // moves at.
+            let hunger = view
+                .read(FactKey::new(organism, HUNGER))
+                .and_then(|f| Level::from_value(f.value));
+            if let Some(level) = hunger {
+                if fed > 0 || level.per_hour != self.hunger_per_hour {
+                    // The meal, and the rate, hold from the committed tick this step reads, as the
+                    // state it observes held over the step that follows.
+                    let since = ctx.basis_tick();
+                    let now = level.at(self.clock, since, 0, FULL);
+                    let next = Level::new((now - fed).clamp(0, FULL), self.hunger_per_hour, since);
+                    let why = if fed > 0 {
+                        "ate"
+                    } else {
+                        "hungry_at_the_worlds_rate"
+                    };
                     push(
                         FactKey::new(organism, HUNGER),
-                        Change::Set(Value::Int(next)),
+                        Change::Set(next.to_value()),
                         why,
                     );
                 }

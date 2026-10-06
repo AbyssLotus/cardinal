@@ -243,13 +243,11 @@ impl Perception {
                 return;
             }
         }
-        if let Some(hungry) = int(view, FactKey::new(mind, LIVING_HUNGER)) {
-            let key = FactKey::new(mind, FELT_HUNGER);
-            self.feel(view, ctx, out, key, hungry, self.need_resolution);
-        }
-        if let Some(tired) = int(view, FactKey::new(mind, LIVING_FATIGUE)) {
-            let key = FactKey::new(mind, FELT_FATIGUE);
-            self.feel(view, ctx, out, key, tired, self.need_resolution);
+        // Hunger and fatigue are levels (Amendment A-20): one knows them as they are, the body's
+        // level copied when it changes course — nothing to feel anew every step.
+        for (body, felt) in [(LIVING_HUNGER, FELT_HUNGER), (LIVING_FATIGUE, FELT_FATIGUE)] {
+            let level = value(view, FactKey::new(mind, body));
+            self.mirror(view, ctx, out, FactKey::new(mind, felt), level, "felt");
         }
         // Needs that arose (Amendment A-11): how strongly, and how they are met — and letting go
         // of those that are gone.

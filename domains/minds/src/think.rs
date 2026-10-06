@@ -56,6 +56,10 @@ pub struct MindRules {
     pub tired_above: i64,
     /// Fatigue below which a resting mind is rested and gets up.
     pub rested_below: i64,
+    /// How far past the tired line a mind already up and about its routine or work carries on
+    /// before it lets them wait (Amendment A-20): so it does not lie down again the moment it
+    /// tips over the line it got up under.
+    pub tired_margin: i64,
     /// How strongly a need that arose must be felt, in hundredths of a percent, before it moves
     /// a mind (Amendment A-11).
     pub need_above: i64,
@@ -219,6 +223,12 @@ impl Mind<'_> {
     }
     fn own_int(&self, fact: FactType) -> Option<i64> {
         self.own(fact)?.value.as_int()
+    }
+    /// One of the mind's own levels — felt hunger, felt fatigue — as it stands at `tick`
+    /// (Amendment A-20).
+    fn own_level(&self, fact: FactType, clock: SimClock, tick: u64) -> Option<i64> {
+        let level = kernel::level::Level::from_value(self.own(fact)?.value)?;
+        Some(level.at(clock, tick, 0, 10_000))
     }
     fn belief_entity(&self, fact: FactType, about: EntityId) -> Option<EntityId> {
         match self.view.read(FactKey::pair(self.me, fact, about))?.value {
@@ -546,7 +556,7 @@ impl Think {
         // Hunger (Amendment A-16): food believed in hand or somewhere a way is known to, and
         // trees believed to bear it — the more filling, the better (Amendment A-18): each
         // hundredth of a percent of hunger a food is believed to ease adds a hundredth of a unit.
-        let hunger = mind.own_int(FELT_HUNGER).unwrap_or(0) - r.hungry_above;
+        let hunger = mind.own_level(FELT_HUNGER, self.clock, tick).unwrap_or(0) - r.hungry_above;
         if hunger > 0 {
             let feeds = |m: EntityId| mind.belief_int(BELIEF_NUTRITION, m).is_some_and(|n| n > 0);
             let fills = |target: EntityId| {
@@ -696,10 +706,17 @@ impl Think {
         let mut acts = Acts { ctx, me, out };
         let speed = mind.own_int(WALK_SPEED).unwrap_or(0);
 
-        // Tired, a mind lets its routines and its work wait; the cold still moves it. In the
-        // sleeping hours, at all tired is tired enough to lie down (Amendment A-18).
-        let fatigue = mind.own_int(FELT_FATIGUE).unwrap_or(0);
-        let tired = fatigue > self.rules.tired_above;
+        // Tired, a mind lets its routines and its work wait; the cold still moves it. Already up
+        // and about them, it carries on a little past the line (Amendment A-20). In the sleeping
+        // hours, at all tired is tired enough to lie down (Amendment A-18).
+        let fatigue = mind.own_level(FELT_FATIGUE, self.clock, tick).unwrap_or(0);
+        let about_them = matches!(mind.own_int(REASON), Some(REASON_ROUTINE | REASON_WORK));
+        let line = if about_them {
+            self.rules.tired_above + self.rules.tired_margin
+        } else {
+            self.rules.tired_above
+        };
+        let tired = fatigue > line;
         if tired {
             options.retain(|o| o.reason != REASON_ROUTINE && o.reason != REASON_WORK);
         }

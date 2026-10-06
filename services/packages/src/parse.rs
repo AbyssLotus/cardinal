@@ -124,6 +124,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut need_weight: Option<i64> = None;
     let mut hungry_above: Option<i64> = None;
     let mut work_value: Option<i64> = None;
+    let mut tired_margin: Option<i64> = None;
     let mut sleep_hours: Option<(i64, i64)> = None;
     let mut courtship_step: Option<u64> = None;
     let mut bond_above: Option<i64> = None;
@@ -340,6 +341,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "need_weight" => need_weight = Some(parse_num(value, line_no)?),
                 "hungry_above" => hungry_above = Some(parse_num(value, line_no)?),
                 "work_value" => work_value = Some(parse_num(value, line_no)?),
+                "tired_margin" => tired_margin = Some(parse_num(value, line_no)?),
                 "sleep_hours" => sleep_hours = Some(parse_hours(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
@@ -759,6 +761,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             need_weight: require(need_weight, "rules.minds.need_weight")?,
             hungry_above: require(hungry_above, "rules.minds.hungry_above")?,
             work_value: require(work_value, "rules.minds.work_value")?,
+            tired_margin: require(tired_margin, "rules.minds.tired_margin")?,
             sleep_hours: require(sleep_hours, "rules.minds.sleep_hours")?,
         }),
     };

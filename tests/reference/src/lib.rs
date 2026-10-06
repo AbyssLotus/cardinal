@@ -262,6 +262,7 @@ impl System for FrontDoor {
 /// A running Ashford.
 pub struct City {
     world: LoadedWorld,
+    clock: kernel::time::SimClock,
     orders: Rc<RefCell<Vec<Order>>>,
     /// The last committed tick.
     pub tick: u64,
@@ -293,6 +294,7 @@ impl City {
         }));
         Self {
             world,
+            clock: kernel::time::SimClock::new(package.clock.tick_ms),
             orders,
             tick: 0,
             seed: 1,
@@ -443,7 +445,19 @@ impl City {
 
     /// The committed integer value of `fact` for `who`, if any.
     pub fn int(&self, who: u64, fact: FactType) -> Option<i64> {
-        self.read(who, fact).and_then(|v| v.as_int())
+        let value = self.read(who, fact)?;
+        // Hunger and fatigue, felt or real, are levels (Amendment A-20): read where they stand now.
+        let levels = [
+            living::schema::HUNGER,
+            living::schema::FATIGUE,
+            information::schema::FELT_HUNGER,
+            information::schema::FELT_FATIGUE,
+        ];
+        if levels.contains(&fact) {
+            let level = kernel::level::Level::from_value(value)?;
+            return Some(level.at(self.clock, self.tick, 0, living::schema::FULL));
+        }
+        value.as_int()
     }
 
     /// Whether `who` still has somewhere to go.

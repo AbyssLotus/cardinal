@@ -131,8 +131,8 @@ state hashes, or a stated and tested reason.
 | Phase | Builds | Gate |
 |---|---|---|
 | 0. **Measure** *(done)* | The scaling bench; exact sight speedups; tick continuity and id limits as errors | §6 of `hostile-audit-review.md` |
-| 1. **The agenda** | Kernel: a deterministic "due at tick" index. Living: hunger, fatigue, and heat as anchors and rates, and the ticks they cross a line. Minds wake on what is due or what changed. | Ashford's week behaves the same. In the village bench, an idle agent costs nothing, and chronicle entries per agent fall by at least half. |
-| 2. **The hot store** | Dense columns for hot facts behind the same store trait; compact provenance; a conformance suite against the reference store. | Identical hashes. Memory per detailed agent ≤ 20 KB; ticks ≥ 3× faster. |
+| 1. **The agenda** | Kernel: levels (A-20); what changed each tick, by fact type; a deterministic "due at tick" index; per-system time and proposal counts. Living: hunger and fatigue as levels, and the ticks they cross a line. Minds wake on what is due or what changed. | Ashford's week behaves the same. In the village bench, an idle agent costs nothing, and chronicle entries per agent fall by at least half. |
+| 2. **The hot store** | Dense columns for hot facts behind the same store trait; compact provenance; per-tick arenas and reused buffers; a conformance suite against the reference store. | Identical hashes. Memory per detailed agent ≤ 20 KB; ticks ≥ 3× faster. |
 | 3. **Parallel shards** | Systems, and entities within them, evaluated across cores; merged in key order. | Bit-identical at 1, 2, 4, 8, and 16 threads; ≥ 5× on eight cores. |
 | 4. **City-level residents** | Day plans, holdings as quantities, knowledge by kind; promotion to the scene and demotion back. | A district of 100,000 runs in real time on one core in under 200 MB. A round trip through the scene changes nothing. |
 | 5. **City geography and generation** | Streets, buildings, entrances, floors, and the route graph; a package-declared generator. | A Rome of a million generated in minutes, in under 4 GB. The player walks across it in real time. |
@@ -158,3 +158,92 @@ state hashes, or a stated and tested reason.
 - **The chronicle at city scale** must record events, not every number that moves. With anchors and
   rates it mostly will. What the durable log is (`hostile-audit-review.md` §2, finding 13) has to
   be decided before persistence is built.
+
+---
+
+## 7. A second outside review, weighed
+
+*An outside reviewer proposed 28 points and a top five. Each is weighed here against the code
+and this plan. Agreeing where it is right is not the same as adopting it whole.*
+
+**Already done.** Their points, and where the code already has them:
+- **Motion segments (their #1, and their first task)** are A-3. A body in motion writes at its
+  segment's ends, and its position between is derived.
+- **Spatial partitioning (#5)** is A-2: a hierarchical grid, the structure they recommend over
+  octrees.
+- **An incremental digest (#13)** is in `kernel/src/hash.rs`: O(changes), by add and remove.
+- **Batch commits and grouped proposals (#9, #10)** are already the tick: proposals are grouped
+  by fact, resolved once, and applied as one `CommitBatch`.
+- **Per-system frequency (#19)** exists as each system's cadence.
+- **Only entities with the needed facts take part (#3)**, because systems iterate
+  `entities_with(fact)`.
+
+Their own diagnosis is right that #3 and #19 do not save enough. Every organism has hunger, so
+every organism is still visited. The saving is in #4 and #20 below.
+
+**Right, and already this plan:**
+
+| Their point | Here |
+|---|---|
+| Dirty sets and event-driven activation (#4, #20, #16) | Phase 1, the agenda |
+| A data-oriented hot store, keeping the B-tree store as the reference (#7, #8) | Phase 2 |
+| Deterministic parallelism (#14) | Phase 3 |
+| Simulation LOD and aggregation (#17, #18) | Phases 4 and 6 |
+| Hot and archival history (#12) | Persistence, after the durable log is decided |
+
+**Right, and adopted now:**
+- **The kernel should say what changed (#4).** It has no such primitive today. `apply` knows
+  every key it touched, so it can keep, per fact type, the entities changed in each recent tick.
+  Then a system can ask "whose position changed since tick t?" in time proportional to the
+  answer. Waking minds, incremental sight, and work that only matters on change (portal danger is
+  still *computed* every tick, though now written only on change) all need it. **Added to
+  phase 1.**
+- **Per-system metrics (#27).** The bench needed an outside profiler to find that sight was 80% of
+  a tick. The kernel should time each system, and count its proposals, every tick. This sits
+  outside the simulation, so it cannot touch determinism, and feeds the meters Vol. V Ch. 8 asks
+  for. **Added to phase 1.**
+- **Per-tick buffer reuse and arenas (#22, #23).** Allocation shows in the profile (a few percent),
+  and Vol. V Ch. 2 §2.3 already prescribes arenas by tick. **Added to phase 2,** where the store's
+  layout changes anyway.
+
+**Right in part:**
+- **"Never store what can be derived" (#2).** True of positions, distances, and temperatures,
+  which Cardinal already derives. But some derived things are stored here for a reason the review
+  does not see: domains never call one another, so a derivation another domain needs crosses as a
+  fact. That is why what each body sees is a fact.
+  - The better answer is the one the spatial index already uses: the owner registers a derived
+    view the kernel hosts, other domains query it, and nothing is stored per tick.
+  - Visibility is the case worth doing this way: it is expensive, read by Information, and today
+    held twice (`in_view` and `in_sight`). **Carried into the incremental-sight work.**
+- **Incremental spatial queries (#6).** Worth it for what is expensive to derive (visibility), not
+  for proximity. With the grid, a neighbourhood is cheaper to recompute than to keep, since keeping
+  costs memory per entity per neighbour.
+- **Execution classes (#15).** Useful, but declared reads and writes already tell the scheduler
+  most of it. The one addition worth making is a system declaring that it is *per entity*, so the
+  kernel can shard it without being told how. **Carried into phase 3.**
+- **Compiling packages (#25, #26).** The loader already resolves ids and seeds facts once. What is
+  still recomputed is derived work done every tick whatever changed, which the change-tracking
+  above removes. And static lookups are slow only because the store is a B-tree, which phase 2
+  fixes.
+- **A compact chronicle (#11).** The bigger problem is not its layout but that entries hold no
+  values (`hostile-audit-review.md`, finding 13). Decide what the durable log is first, then
+  compress it.
+
+**Where we differ:**
+- **Order.** Their top five put the hot store second and event-driven scheduling third. Their own
+  stated order is "algorithm, then data model, then memory layout", and that puts event-driven
+  first. A store ten times faster still does work for a million idle agents; an agenda does none.
+  **This plan keeps the agenda first.**
+- **SIMD (#24).** They place it last, rightly. But its value here is smaller than they suggest. The
+  costs measured are branchy (sight, minds, perception), not wide arithmetic over arrays.
+- **What their list leaves out.** They omit the two costs this engine actually has most of:
+  - **perception and belief:** sight, mirrors, and memories, roughly 80% of a tick and most of the
+    store;
+  - **the consistency of moving between levels of detail.** Law 14 is the hard part of
+    aggregation, not the aggregation itself. A promoted person must be the person the aggregate
+    said they were.
+
+**Their closing principle** is right, and it is this plan's: *simulate as though only what can
+affect the outcome exists*. With one Cardinal amendment: what cannot affect the outcome *now* is
+still simulated, at the cost its level of detail allows. It is never frozen, so that when it does
+matter it is what the world says it is (Vol. V Ch. 5, *The Frozen Duchy*).

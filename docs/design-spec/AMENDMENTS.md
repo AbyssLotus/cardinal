@@ -514,3 +514,71 @@ knows of itself.
 **Rationale.** `docs/audits/autonomous-agents.md`, phase 6. The project owner chose curiosity and
 possessions as the first wants. Holdings are Economy's (Appendix A); likes and a home are a mind's
 own, as its temperament is (A-11).
+
+---
+
+## A-20 — Levels: quantities that move at a steady rate (2026-10)
+
+**Edits:**
+- Vol. V Ch. 2 §2.2 (*Levels*, beside motion segments)
+- Vol. III Ch. 2 §2.4 (hunger and fatigue are levels)
+- Vol. II Ch. 4 (feeling one's own levels)
+
+**Change.**
+- **A level** is a quantity that moves at a steady rate between events: hunger between meals,
+  fatigue between lying down and getting up. It is one three-component fact, `[value, rate per
+  hour, since tick]`: where it stood, how fast it moves, and since when. Its value at any later
+  tick is derived exactly from the simulated time elapsed, held within the quantity's bounds. It is
+  never stored per tick.
+- **Writing a level.** A level is written only when its rate or its value jumps:
+  - eating lowers hunger by the food's nutrition, from wherever it had reached;
+  - lying down, getting up, or moving changes the rate of fatigue;
+  - death stops both.
+
+  Between such events nothing is written and nothing is chronicled.
+- **Reading a level.** Any domain reads a level the same way, through the kernel's one
+  definition, so every reader agrees on its value at every tick.
+- **Feeling one's levels** (Information). One knows one's own hunger and fatigue as they are: the
+  felt level is the body's level, copied when it changes.
+- **Exact at any tick length.** The value at a moment of simulated time is the same whether the
+  world ticks by the second or by the hour (A-1), with no rounding carried from tick to tick.
+- **A change of course holds from the committed tick.** A meal, lying down, or getting up
+  changes a level from the tick whose state showed it, as a step's rate always held over the
+  step after the state it read.
+- **Tiredness has a margin** (Minds). A felt level is exact, where it used to be noticed only in
+  steps of the world's resolution, and those steps had given a mind getting up for its routine
+  some slack before it felt tired again. That slack is now a world rule: a mind already up and
+  about its routine or work carries on until it is `tired_margin` past the tired line.
+
+**Rationale.** `docs/audits/world-scale.md`, phase 1. Rewriting hunger and fatigue for every
+organism every tick was about a third of everything the chronicle recorded. A city of a million
+cannot afford a write per person per tick for numbers anyone could compute. Motion already works
+this way (A-3).
+
+---
+
+## A-21 — What changed, and what it cost (2026-10)
+
+**Edits:**
+- Vol. V Ch. 2 §2.1 (the store answers what changed)
+- Vol. V Ch. 3 §3.1 (the tick meters its systems)
+- Vol. V Ch. 8 (per-system meters)
+
+**Change.**
+- **What changed.** The committed view answers one more question: *which entities had facts of
+  this type written in the ticks after `t`?*
+  - The answer is sorted, and costs time in proportion to its size.
+  - A store may remember only a window of recent ticks. Asked about something older, it answers
+    *unknown*, never a guess.
+  - A system given *unknown* does all the work it would do without the answer. A system's first
+    evaluation always does all of it, since nothing it computed before can be standing yet.
+  - So no committed fact may depend on how far back a store remembers. That is tested by running a
+    world with the window and without it, and comparing every tick.
+  - A system reads changes only to fact types it declares it reads.
+- **What it cost.** The tick records, for each system it evaluates, how long it took and how many
+  proposals it made. The figures sit outside the simulation: no system reads them and no fact
+  depends on them, so they cannot touch determinism. They are the first of Vol. V Ch. 8's meters.
+
+**Rationale.** `docs/audits/world-scale.md`, phase 1, and §7: work done only for what changed is
+how a world of a million does a city's work, not a million people's. Finding where a tick's time
+goes took an outside profiler; the engine should say.

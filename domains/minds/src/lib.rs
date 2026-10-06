@@ -94,6 +94,7 @@ mod tests {
                 switch_margin: 100,
                 tired_above: 7_000,
                 rested_below: 1_500,
+                tired_margin: 200,
                 need_above: 3_000,
                 need_weight: 20,
                 hungry_above: 4_000,

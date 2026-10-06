@@ -252,6 +252,7 @@ pub fn minds_config(package: &WorldPackage) -> Option<MindsConfig> {
             need_weight: r.need_weight,
             hungry_above: r.hungry_above,
             work_value: r.work_value,
+            tired_margin: r.tired_margin,
             sleep_from_seconds: r.sleep_hours.0 * 3600,
             sleep_to_seconds: r.sleep_hours.1 * 3600,
         },
@@ -600,6 +601,7 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             LivingDomain::new(living_config(package).ok_or(LoadError::LivingRulesMissing)?);
         systems.extend(living.systems());
         domains.push(Box::new(living));
+        let rules = package.living_rules.ok_or(LoadError::LivingRulesMissing)?;
         for o in &package.organisms {
             let organism = EntityId::from_raw(o.id);
             store.seed(
@@ -613,7 +615,13 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 .iter()
                 .find(|(who, _)| *who == o.id)
                 .map_or(0, |(_, f)| *f);
-            store.seed(FactKey::new(organism, FATIGUE), seeded(Value::Int(tired)));
+            // Hunger and fatigue are levels (Amendment A-20): each begins moving at the world's
+            // rate — awake, so tiring.
+            let level = |v: i64, rate: i64| kernel::level::Level::new(v, rate, 0).to_value();
+            store.seed(
+                FactKey::new(organism, FATIGUE),
+                seeded(level(tired, rules.tire_per_hour)),
+            );
             store.seed(FactKey::new(organism, HEALTH), seeded(Value::Int(FULL)));
             let hungry = package
                 .hunger
@@ -622,7 +630,7 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 .map_or(0, |(_, h)| *h);
             store.seed(
                 FactKey::new(organism, living::schema::HUNGER),
-                seeded(Value::Int(hungry)),
+                seeded(level(hungry, rules.hunger_per_hour)),
             );
         }
         // The kinds of need that can arise, each an entity carrying its rules (Amendment A-11).

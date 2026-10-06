@@ -100,6 +100,15 @@ COLD  — chronicle + snapshots: persistence formats (Ch. 7)
 
 Systems iterate the hot tier at array speed; `apply()` writes hot and appends warm; snapshots and history serve from warm/cold. The fact model remains the *logical truth*; the tiers are how it goes fast. All clause obligations (provenance, consistency, single path) are enforced at the contract, so tiers can be rebalanced — or a tier's technology replaced — invisibly.
 
+## What Is Never Stored Per Tick
+
+Some truths change continuously, but predictably. Storing them every tick would make the store and the chronicle grow with *time × things*, though nothing anyone could not compute has happened.
+
+- **Motion** *(Amendment A-3)*: a body in motion is one segment, a target with departure and arrival ticks. Its position at any tick is derived.
+- **Levels** *(Amendment A-20)*: a quantity moving at a steady rate is `[value, rate per hour, since tick]`. Its value at any tick is derived, exactly, from simulated time; one kernel definition serves every reader.
+
+Either is written only when it changes course. A still world, and a world going steadily about its business, writes almost nothing.
+
 ---
 
 # 2.3 Memory Management

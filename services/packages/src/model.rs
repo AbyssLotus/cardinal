@@ -371,6 +371,9 @@ pub struct MindsRules {
     pub hungry_above: i64,
     /// What working one's job is worth, in its hours (Amendment A-18).
     pub work_value: i64,
+    /// How far past the tired line a mind up and about its routine or work carries on
+    /// (Amendment A-20).
+    pub tired_margin: i64,
     /// The world's sleeping hours, `(from, to)` in whole hours; wrapping past midnight when
     /// `from > to` (Amendment A-18).
     pub sleep_hours: (i64, i64),

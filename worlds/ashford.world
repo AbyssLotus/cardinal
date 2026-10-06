@@ -92,6 +92,7 @@ routine_value = 300                 # what keeping a routine is worth
 switch_margin = 100                 # how much better a new choice must be to change one's mind
 tired_above = 7000                  # tired: rests when it has nowhere to be; routines can wait
 rested_below = 1500                 # rested: gets up
+tired_margin = 500                  # up and about, carries on 5% past the tired line: about an hour
 need_above = 3000                   # a longing or craving felt past 30% moves a mind
 need_weight = 20                    # what each hundredth of a percent past that is worth
 hungry_above = 4000                 # past 40% hungry, a mind goes looking for food
