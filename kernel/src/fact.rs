@@ -26,19 +26,86 @@ pub enum Cardinality {
 /// The type of a fact, namespaced by its owning domain (e.g. `"physical.env.temperature"`).
 ///
 /// Each fact type has exactly one owning domain (Appendix A). The name is a stable static
-/// string; ordering by it gives deterministic, hash-free iteration (Vol. V Ch. 4 §4.1).
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct FactType(&'static str);
+/// string. A fact type also carries a code computed from its name when it is declared, and is
+/// compared and ordered by that code first and its name only to break a tie: the same order on
+/// every run and platform (Vol. V Ch. 4 §4.1), without comparing long names on every lookup.
+#[derive(Clone, Copy)]
+pub struct FactType {
+    code: u64,
+    name: &'static str,
+}
 
 impl FactType {
+    /// Sorts before every fact type: where a walk over all of one entity's facts begins.
+    pub const MIN: FactType = FactType { code: 0, name: "" };
+
     /// Declare a fact type from its stable, domain-namespaced name.
     pub const fn new(name: &'static str) -> Self {
-        Self(name)
+        Self {
+            code: fnv1a_64(name),
+            name,
+        }
     }
 
     /// The fact type's stable name.
     pub const fn name(&self) -> &'static str {
-        self.0
+        self.name
+    }
+
+    /// Whether two names are the same name: the same static string, or equal text.
+    fn same_name(&self, other: &Self) -> bool {
+        std::ptr::eq(self.name, other.name) || self.name == other.name
+    }
+}
+
+/// FNV-1a 64-bit over a name, at compile time: a fact type's code.
+const fn fnv1a_64(name: &str) -> u64 {
+    let bytes = name.as_bytes();
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut i = 0;
+    while i < bytes.len() {
+        h ^= bytes[i] as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        i += 1;
+    }
+    h
+}
+
+impl PartialEq for FactType {
+    fn eq(&self, other: &Self) -> bool {
+        self.code == other.code && self.same_name(other)
+    }
+}
+
+impl Eq for FactType {}
+
+impl Ord for FactType {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.code.cmp(&other.code).then_with(|| {
+            if self.same_name(other) {
+                std::cmp::Ordering::Equal
+            } else {
+                self.name.cmp(other.name)
+            }
+        })
+    }
+}
+
+impl PartialOrd for FactType {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::hash::Hash for FactType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.code.hash(state);
+    }
+}
+
+impl std::fmt::Debug for FactType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("FactType").field(&self.name).finish()
     }
 }
 
@@ -159,5 +226,30 @@ impl Fact {
     /// Pair a value with its provenance.
     pub const fn new(value: Value, provenance: Provenance) -> Self {
         Self { value, provenance }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FactType;
+
+    #[test]
+    fn min_sorts_before_every_fact_type() {
+        for name in ["", "a", "physical.space.contained_in", "zzzz", "mind.goal"] {
+            assert!(FactType::MIN <= FactType::new(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn fact_types_compare_by_name_whatever_their_code() {
+        // Equal names are equal however they were declared; different names never are, and
+        // the order is total and the same every run.
+        let a = FactType::new("physical.space.contained_in");
+        let b = FactType::new(concat!("physical.space.", "contained_in"));
+        assert_eq!(a, b);
+        assert_eq!(a.cmp(&b), std::cmp::Ordering::Equal);
+        let c = FactType::new("physical.space.portal_open");
+        assert_ne!(a, c);
+        assert_eq!(a.cmp(&c), c.cmp(&a).reverse());
     }
 }

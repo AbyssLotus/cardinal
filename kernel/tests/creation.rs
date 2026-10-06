@@ -95,3 +95,24 @@ fn the_same_world_makes_the_same_things() {
     assert_eq!(a.entities_with(MADE), b.entities_with(MADE));
     assert_eq!(a.state_hash(), b.state_hash());
 }
+
+#[test]
+fn a_runaway_creator_fails_the_tick_and_nothing_commits() {
+    // One more than a system may take in a tick: the tick is refused, naming the system, and
+    // reality is exactly as it was — none of the ids it was handed name anything.
+    let domains: [&dyn Domain; 1] = [&Owner];
+    let systems: Vec<Box<dyn System>> = vec![Box::new(Maker(
+        "test.runaway",
+        kernel::system::IDS_PER_SYSTEM_PER_TICK + 1,
+    ))];
+    let mut store = MemoryStore::new();
+    let before = store.state_hash();
+    let err =
+        run_tick(&mut store, &domains, &systems, 1, 5, &mut Vec::new()).expect_err("a runaway");
+    assert!(
+        matches!(err, kernel::tick::TickError::IdsExhausted(s) if s == SystemId::new("test.runaway")),
+        "{err:?}"
+    );
+    assert_eq!(store.state_hash(), before);
+    assert_eq!(store.tick(), 0);
+}

@@ -308,7 +308,7 @@ impl RealityStore for MemoryStore {
         // Keys sort entity-first, so one range walk visits exactly this entity's facts
         // (Vol. V Ch. 2 §2.1, clause 5) — no scan of the rest of reality.
         let mut out = Vec::new();
-        let start = FactKey::new(entity, FactType::new(""));
+        let start = FactKey::new(entity, FactType::MIN);
         for (key, values) in self.facts.range(start..) {
             if key.entity != entity {
                 break;

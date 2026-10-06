@@ -103,6 +103,7 @@ const SHELTER_READS: &[FactType] = &[
     MATERIAL_THERMAL_CAPACITY,
 ];
 const DANGER_READS: &[FactType] = &[
+    PORTAL_DANGER,
     HAS_PORTAL,
     PORTAL_DANGER_OVERRIDE,
     CONTAINED_IN,
@@ -906,6 +907,13 @@ impl System for PortalDanger {
                         fall.clamp(0, MAX_DANGER)
                     }
                 };
+                // Written when it changes, so a still world chronicles nothing here.
+                let held = view
+                    .read(FactKey::new(portal, PORTAL_DANGER))
+                    .and_then(|f| f.value.as_int());
+                if held == Some(danger) {
+                    continue;
+                }
                 out.push(Proposal::new(
                     self.id(),
                     FactKey::new(portal, PORTAL_DANGER),

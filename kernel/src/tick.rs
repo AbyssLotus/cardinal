@@ -105,7 +105,27 @@ pub enum TickError {
     Resolve(ResolveError),
     /// The resolved batch failed a domain coherence check (Validate stage — §3.1).
     Validate(ValidationError),
+    /// The tick asked for is not the one after the committed tick (Vol. V Ch. 3: tick N reads
+    /// N − 1). Reality advances one tick at a time; it is never skipped, repeated, or rewound.
+    NotNext {
+        /// The tick reality has committed.
+        committed: u64,
+        /// The tick that was asked for.
+        requested: u64,
+    },
+    /// A system asked for more new ids in one tick than one system may take (Amendment A-15):
+    /// a runaway, refused before anything it proposed could commit.
+    IdsExhausted(SystemId),
+    /// More systems, or a later tick, than runtime ids can number (Amendment A-15): ids are
+    /// `floor + tick·2²⁴ + slot·2¹⁴ + n`, so at most 1,024 systems and ticks below 2³⁸.
+    BeyondIds,
 }
+
+/// The most systems runtime ids can tell apart (Amendment A-15): 2¹⁰ slots.
+const MAX_SYSTEMS: usize = 1 << 10;
+/// The first tick runtime ids cannot number (Amendment A-15): 2³⁸ — at one-second ticks, more
+/// than eight thousand years.
+const MAX_TICK: u64 = 1 << 38;
 
 /// Advance committed reality by one tick through the seven ordered stages
 /// (Vol. V Ch. 3 §3.1).
@@ -124,6 +144,18 @@ pub fn run_tick<S: RealityStore>(
     seed: u64,
     chronicle: &mut Vec<ChronicleEntry>,
 ) -> Result<(), TickError> {
+    // 0. CONTINUITY — reality advances exactly one tick at a time (Vol. V Ch. 3: tick N reads
+    //    N − 1), and within what runtime ids can number (Amendment A-15).
+    if tick != store.tick() + 1 {
+        return Err(TickError::NotNext {
+            committed: store.tick(),
+            requested: tick,
+        });
+    }
+    if systems.len() > MAX_SYSTEMS || tick >= MAX_TICK {
+        return Err(TickError::BeyondIds);
+    }
+
     // 1. SCHEDULE — due systems in a deterministic order (sorted by id). Under hermetic
     //    evaluation execution order does not change committed reality, so a stable id sort is
     //    a valid order; the DAG scheduler is deferred until parallelism (Vol. V Ch. 3 §3.2).
@@ -153,6 +185,9 @@ pub fn run_tick<S: RealityStore>(
             let slot = ids.iter().position(|id| *id == sys.id()).unwrap_or(0) as u64;
             let ctx = TickContext::new(tick, seed, sys.id().code(), slot);
             let emitted = sys.evaluate(&scoped, &ctx);
+            if ctx.exhausted() {
+                return Err(TickError::IdsExhausted(sys.id()));
+            }
             // An undeclared read taints the whole evaluation: the system may have acted on a
             // silently-empty view, so its proposals cannot be trusted (Vol. V Ch. 3 §3.5).
             if let Some(fact_type) = scoped.violation() {

@@ -196,6 +196,8 @@ pub struct TickContext {
     slot: u64,
     // How many new ids it has taken this tick.
     created: Cell<u64>,
+    // Whether it asked for more than one system may take in a tick.
+    exhausted: Cell<bool>,
 }
 
 /// The first id the kernel ever issues at run time (Amendment A-15). Authored worlds number their
@@ -216,6 +218,7 @@ impl TickContext {
             system_code,
             slot,
             created: Cell::new(0),
+            exhausted: Cell::new(false),
         }
     }
 
@@ -224,18 +227,22 @@ impl TickContext {
     /// Deterministic — the same system in the same world creates the same ids on every replay —
     /// and disjoint between systems and ticks, so no two systems can ever collide.
     ///
-    /// # Panics
-    ///
-    /// If one system asks for more than [`IDS_PER_SYSTEM_PER_TICK`] in a tick — a runaway, not a
-    /// world.
+    /// A system that asks for more than [`IDS_PER_SYSTEM_PER_TICK`] in a tick — a runaway, not a
+    /// world — fails the tick (`TickError::IdsExhausted`): nothing it proposed commits, so the
+    /// placeholder it is handed past the limit never names anything.
     pub fn new_entity(&self) -> EntityId {
         let n = self.created.get();
-        assert!(
-            n < IDS_PER_SYSTEM_PER_TICK && self.slot < 1 << 10,
-            "too many new entities from one system in one tick"
-        );
+        if n >= IDS_PER_SYSTEM_PER_TICK {
+            self.exhausted.set(true);
+            return EntityId::from_raw(u64::MAX);
+        }
         self.created.set(n + 1);
         EntityId::from_raw(RUNTIME_ID_FLOOR + (self.tick << 24) + (self.slot << 14) + n)
+    }
+
+    /// Whether this system asked for more new ids than it may take this tick.
+    pub(crate) fn exhausted(&self) -> bool {
+        self.exhausted.get()
     }
 
     /// The current tick — the one being computed.
