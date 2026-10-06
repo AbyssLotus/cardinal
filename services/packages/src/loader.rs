@@ -867,6 +867,8 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         if let Some(projector) = domain.spatial_projector() {
             store.install_spatial_index(projector);
         }
+        // And each domain's agenda (Amendment A-22).
+        store.install_agenda(&domain.agenda());
     }
 
     Ok(LoadedWorld {

@@ -93,6 +93,31 @@ pub trait CommittedView {
         let _ = (fact_type, since);
         None
     }
+
+    /// The entities due by `fact_type` — an agenda fact (Amendment A-22), whose value is the tick
+    /// an entity is next due — at or before tick `upto`, in ascending order of id. A store with an
+    /// agenda index answers in proportion to the answer; without one, by scanning; the same
+    /// either way.
+    fn due(&self, fact_type: FactType, upto: u64) -> Vec<EntityId> {
+        due_by_scan(self, fact_type, upto)
+    }
+}
+
+/// Who is due by `fact_type` at or before `upto`, found by reading every holder (Amendment A-22):
+/// the answer every agenda index must agree with.
+pub fn due_by_scan<V: CommittedView + ?Sized>(
+    view: &V,
+    fact_type: FactType,
+    upto: u64,
+) -> Vec<EntityId> {
+    view.entities_with(fact_type)
+        .into_iter()
+        .filter(|e| {
+            view.read_all(FactKey::new(*e, fact_type))
+                .iter()
+                .any(|f| matches!(f.value, Value::Int(t) if t <= upto.min(i64::MAX as u64) as i64))
+        })
+        .collect()
 }
 
 /// A committed view scoped to a system's declared read set (Vol. V Ch. 3 §3.1).
@@ -191,6 +216,14 @@ impl CommittedView for ScopedView<'_> {
             declared &= self.check(*fact_type);
         }
         declared.then_some(index)
+    }
+
+    fn due(&self, fact_type: FactType, upto: u64) -> Vec<EntityId> {
+        if self.check(fact_type) {
+            self.inner.due(fact_type, upto)
+        } else {
+            Vec::new()
+        }
     }
 
     fn changed_since(&self, fact_type: FactType, since: u64) -> Option<Vec<EntityId>> {

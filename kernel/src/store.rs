@@ -121,6 +121,9 @@ pub struct MemoryStore {
     // `change_window` of them. Never part of the digest: it is memory of commits, not reality.
     changes: VecDeque<(u64, Written)>,
     change_window: usize,
+    // For each agenda fact type installed (Amendment A-22), who is due when: `(tick, entity)`,
+    // so who is due by a tick is one range walk. Never part of the digest: it is an index.
+    agenda: BTreeMap<FactType, BTreeSet<(i64, EntityId)>>,
 }
 
 impl Default for MemoryStore {
@@ -133,6 +136,7 @@ impl Default for MemoryStore {
             tick: 0,
             changes: VecDeque::new(),
             change_window: CHANGE_WINDOW,
+            agenda: BTreeMap::new(),
         }
     }
 }
@@ -179,6 +183,27 @@ impl MemoryStore {
         self.change_window = ticks;
         while self.changes.len() > ticks {
             self.changes.pop_front();
+        }
+    }
+
+    /// Index `fact_types` as agenda facts (Amendment A-22): each one's value is the tick an entity
+    /// is next due. Indexes what is already held and keeps up with every seed and commit after.
+    pub fn install_agenda(&mut self, fact_types: &[FactType]) {
+        for &ft in fact_types {
+            let mut due = BTreeSet::new();
+            for entity in self.by_type.get(&ft).into_iter().flatten() {
+                for value in self
+                    .facts
+                    .get(&FactKey::new(*entity, ft))
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Value::Int(t) = value.0 {
+                        due.insert((*t, *entity));
+                    }
+                }
+            }
+            self.agenda.insert(ft, due);
         }
     }
 
@@ -233,6 +258,11 @@ impl MemoryStore {
     /// Add one value at `key` — the shared insertion path of seeding and commit. Does not touch
     /// the spatial index; callers re-place what they changed.
     fn insert_value(&mut self, key: FactKey, fact: Fact) {
+        if let (Some(due), None, Value::Int(t)) =
+            (self.agenda.get_mut(&key.fact_type), key.about, fact.value)
+        {
+            due.insert((t, key.entity));
+        }
         let values = self.facts.entry(key).or_default();
         if values.insert(fact.value, fact.provenance).is_none() {
             // A genuinely new triple: fold it into the digest and the type index. Re-seeding
@@ -261,6 +291,11 @@ impl MemoryStore {
         if let Some(values) = self.facts.remove(&key) {
             for value in values.keys() {
                 self.hasher.remove_fact(&triple_bytes(key, value));
+                if let (Some(due), None, Value::Int(t)) =
+                    (self.agenda.get_mut(&key.fact_type), key.about, value)
+                {
+                    due.remove(&(*t, key.entity));
+                }
             }
             if !self.holds_any(key.entity, key.fact_type) {
                 if let Some(entities) = self.by_type.get_mut(&key.fact_type) {
@@ -336,6 +371,20 @@ impl CommittedView for MemoryStore {
 
     fn spatial(&self) -> Option<&dyn SpatialQuery> {
         self.spatial.as_ref().map(|ix| ix as &dyn SpatialQuery)
+    }
+
+    fn due(&self, fact_type: FactType, upto: u64) -> Vec<EntityId> {
+        let Some(due) = self.agenda.get(&fact_type) else {
+            return crate::system::due_by_scan(self, fact_type, upto);
+        };
+        let upto = upto.min(i64::MAX as u64) as i64;
+        let mut out: Vec<EntityId> = due
+            .range(..=(upto, EntityId::from_raw(u64::MAX)))
+            .map(|(_, e)| *e)
+            .collect();
+        out.sort_unstable();
+        out.dedup();
+        out
     }
 
     fn changed_since(&self, fact_type: FactType, since: u64) -> Option<Vec<EntityId>> {

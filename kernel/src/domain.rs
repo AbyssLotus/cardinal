@@ -67,6 +67,13 @@ pub trait Domain {
         Cardinality::One
     }
 
+    /// The fact types this domain keeps as agenda facts (Amendment A-22): each one's value is the
+    /// tick an entity is next due for its attention. Whatever assembles a world installs them in
+    /// the store's agenda index. Defaults to none.
+    fn agenda(&self) -> Vec<FactType> {
+        Vec::new()
+    }
+
     /// The systems this domain contributes to the tick.
     fn systems(&self) -> Vec<Box<dyn System>>;
 

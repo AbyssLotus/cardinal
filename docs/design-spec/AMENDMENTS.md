@@ -582,3 +582,32 @@ this way (A-3).
 **Rationale.** `docs/audits/world-scale.md`, phase 1, and §7: work done only for what changed is
 how a world of a million does a city's work, not a million people's. Finding where a tick's time
 goes took an outside profiler; the engine should say.
+
+---
+
+## A-22 — The agenda (2026-10)
+
+**Edits:**
+- Vol. V Ch. 2 §2.1 (the store answers who is due)
+- Vol. V Ch. 3 §3.2 (scheduling by what is due)
+- Vol. I Ch. 4 §7.2 (advance to the next due boundary: built)
+
+**Change.**
+- **Agenda facts.** A domain may declare fact types whose value is a tick: the tick at which an
+  entity is next due for that domain's attention.
+  - A resident's plan step ends then.
+  - A level reaches its line then.
+  - A making is ready then.
+- **Who is due.** The committed view answers *which entities are due, by this fact type, at or
+  before tick t?*, in ascending order of id.
+  - A store may keep an index of agenda facts, so the answer costs time in proportion to its
+    size, not to how many entities hold the fact.
+  - The answer must be the same with the index or without it; it is tested both ways.
+- **Using it.** A system that finds everything it must do through what is due (and, A-21, what
+  changed) does no work for entities with nothing due. The world goes on for them: their levels
+  move, their plans run (A-20), and what is not computed until it matters is computed exactly
+  then.
+
+**Rationale.** `docs/audits/world-scale.md` §8: the city tier's million residents must cost nothing
+until something is due. The spec has asked for this since Vol. I ("the scheduler should advance
+directly to the next due boundary"); this is its kernel primitive.
