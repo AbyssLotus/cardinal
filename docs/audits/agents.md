@@ -1,8 +1,8 @@
 # Agents: What the Spec Requires, What Exists, and a Build Plan
 
-> **Status (2026-10-02): phases 1–3 are built** — A-7, A-8, A-9; gates in
-> `tests/reference/tests/{perception,minds}.rs` and `kernel/tests/pairs.rs`. See §7 for what
-> building them changed in this plan.
+> **Status (2026-10-05): phases 1–4 are built** — A-7 to A-10; gates in
+> `tests/reference/tests/{perception,minds,needs}.rs` and `kernel/tests/pairs.rs`. See §7 and §8
+> for what building them changed in this plan.
 
 *2026-10-02, on branch `feat/agents` (based on `feat/overlapping-regions`, PR #22). This plan
 covers minds that act on what they believe: the sweep's M13 (decision systems) and M14 (the
@@ -259,4 +259,29 @@ The project owner chose, on 2026-10-02:
 - **Sight costs test time.** With sight refreshed every second for 26 people, the engine suite
   takes about 16 s in a debug build, up from 5 s. Refreshing only for bodies whose surroundings
   changed is the obvious next optimisation.
+
+---
+
+## 8. What building phase 4 changed
+
+- **Death is a level, not a flag** (Vol. III Ch. 2: life is maintained state). Health reaching
+  zero is the event, chronicled with its cause. Every Living system skips an organism at zero.
+- **Death stops the body as well as the metabolism.**
+  - Living removes the organism's sight range (its own fact) and cancels its travel intent (an
+    intent anyone may propose).
+  - Without that, a frozen courier kept seeing, and kept walking wherever he had been going.
+- **The dead feel their death.** Perception counts as a mind anyone who has felt their own
+  health, so the courier, losing his senses, still writes "health 0" to his beliefs. His mind
+  then stops.
+- **Bob's choice between bed and hearth became something else.** Ashford has no beds yet; kinds
+  of thing are sweep item M5. So a mind rests where it is when it has nowhere to go, and the gate
+  is about *when* rather than *where*:
+  - **Erin** lies down tired around noon and gets up rested in the late afternoon.
+  - **The cold gets her up.** On a bitter night it wakes her long before she is rested, and she
+    goes in.
+  - **The guard's routine waits.** Exhausted, he lets the gate wait until he is no longer tired.
+- **A routine waits on fatigue; the cold does not.** Tired minds drop routine options but keep
+  warmth ones.
+- **Rest is exact only to rounding.** 12.5% an hour is 208⅓ units per ten-minute tick, so
+  unbiased rounding lands within a few units of exact over a night, not on it.
 

@@ -90,6 +90,8 @@ descends_from
 
 Kinship is permanent history. A marriage may end; *having been married* never does. Lineage makes inheritance, feuds, dynasties, and genealogy possible.
 
+**Lovers** *(Amendment A-11)*. Two persons become lovers when each is fond enough of the other: past a line the world declares, on both sides. They part when both have grown cool, below a lower line. The bond is a fact about the pair, held both ways, with its history in the chronicle. What it makes the lovers want is Living's (needs that arise, Vol. III Ch. 2). How fond each is of the other is information (Ruling 2).
+
 ## Household
 
 The smallest economic-social unit: persons who dwell together and pool holdings.
@@ -114,6 +116,16 @@ A settlement has members, a place, internal structure, and a name that travels. 
 A socially recognized position filled by a person: the village has *a* smith, and Bren *is* him.
 
 Roles create expectation. Others plan around the role's existence, which is precisely what makes a role-holder's death a social event and not merely a biological one.
+
+*Amendment A-18.* The first roles are jobs, declared by the world from a closed set of mechanisms:
+
+```text
+job 960 (the orchard round)    carry apples from the apple tree to the kitchen; keep 6 there; 6:00–18:00
+job 961 (the baking)           make apple pies for the kitchen; keep 2 there; 8:00–20:00
+role  Carol → 960,  Bob → 961
+```
+
+A *carry* job brings things of a material from a source to a store; a *make* job keeps a store supplied by a recipe (Vol. III Ch. 4 §4.4). The holder knows their job as they know themselves, and works it in its hours when nothing presses harder.
 
 ## Reputation
 

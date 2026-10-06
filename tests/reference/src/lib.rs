@@ -58,6 +58,14 @@ pub mod id {
     pub const STONE: u64 = 111;
     pub const TABLE: u64 = 120;
     pub const LAMP: u64 = 121;
+    pub const HEARTH: u64 = 122;
+    pub const FLOUR_BIN: u64 = 123;
+    pub const APPLE: u64 = 3000;
+    pub const TREE: u64 = 3100;
+    pub const VIALS: [u64; 4] = [3001, 3002, 3003, 3004];
+    pub const BOTTLE: u64 = 3005;
+    pub const BILBERRIES: u64 = 3104;
+    pub const MILLERS_LOAVES: u64 = 3109;
     pub const WAGON: u64 = 130;
     pub const CART: u64 = 140;
     pub const DOOR_OUT: u64 = 1001;
@@ -119,6 +127,12 @@ pub mod id {
     pub const GLASS: u64 = 701;
     pub const IRON: u64 = 702;
     pub const GRANITE: u64 = 703;
+    pub const APPLE_STUFF: u64 = 704;
+    pub const POPPY: u64 = 705;
+    pub const FLOUR: u64 = 706;
+    pub const PIE: u64 = 707;
+    // Recipes.
+    pub const APPLE_PIE: u64 = 950;
     // People, animals, and things that move.
     pub const ALICE: u64 = 2001;
     pub const BOB: u64 = 2002;
@@ -131,6 +145,7 @@ pub mod id {
     pub const FINN: u64 = 2013;
     pub const GWEN: u64 = 2014;
     pub const STEWARD: u64 = 2015;
+    pub const NED: u64 = 2016;
     pub const WARDROBE: u64 = 2020;
     pub const RIDER: u64 = 2030;
     pub const HAL: u64 = 2040;
@@ -163,19 +178,37 @@ pub fn package() -> WorldPackage {
 type Order = (EntityId, FactType, Change);
 
 /// The front door: proposes, on the next tick, whatever orders the test queued. A stand-in for
-/// players and minds — it writes only intents, which are open to anyone (Ruling 13).
+/// a player — it writes only intents, which are open to anyone (Ruling 13), and direction
+/// (Amendment A-14): a mind it commands is directed first, and commanded the tick after, so the
+/// mind has stood aside before the command arrives.
 struct FrontDoor {
     orders: Rc<RefCell<Vec<Order>>>,
 }
 
-const FRONT_DOOR_WRITES: &[FactType] = &[TRAVEL_TO, TRAVEL_SPEED, ACT_OPEN, ACT_CLOSE, ACT_FACE];
+const FRONT_DOOR_READS: &[FactType] = &[minds::schema::WALK_SPEED, minds::schema::DIRECTED];
+
+const FRONT_DOOR_WRITES: &[FactType] = &[
+    TRAVEL_TO,
+    TRAVEL_SPEED,
+    ACT_OPEN,
+    ACT_CLOSE,
+    ACT_FACE,
+    living::schema::REST,
+    physical::schema::ACT_TAKE,
+    physical::schema::ACT_DROP,
+    physical::schema::ACT_CONSUME,
+    physical::schema::ACT_PICK,
+    economy::schema::ACT_MAKE,
+    economy::schema::ACT_CLAIM,
+    minds::schema::DIRECTED,
+];
 
 impl System for FrontDoor {
     fn id(&self) -> SystemId {
         SystemId::new("frontdoor.orders")
     }
     fn reads(&self) -> &'static [FactType] {
-        &[]
+        FRONT_DOOR_READS
     }
     fn writes(&self) -> &'static [FactType] {
         FRONT_DOOR_WRITES
@@ -183,21 +216,46 @@ impl System for FrontDoor {
     fn cadence(&self) -> Cadence {
         Cadence::EveryTick
     }
-    fn evaluate(&self, _view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
-        // Queued orders, in the order given, as this tick's proposals.
-        self.orders
-            .borrow_mut()
-            .drain(..)
-            .map(|(who, fact, change)| {
-                Proposal::new(
-                    self.id(),
-                    FactKey::new(who, fact),
-                    ctx.basis_tick(),
-                    change,
-                    Cause::new("ordered"),
-                )
-            })
-            .collect()
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+        let propose = |who: EntityId, fact: FactType, change: Change| {
+            Proposal::new(
+                self.id(),
+                FactKey::new(who, fact),
+                ctx.basis_tick(),
+                change,
+                Cause::new("ordered"),
+            )
+        };
+        // A mind not yet directed is directed now, and its orders wait a tick; everything else
+        // is proposed as given.
+        let undirected = |who: EntityId| {
+            view.read(FactKey::new(who, minds::schema::WALK_SPEED))
+                .is_some()
+                && view
+                    .read(FactKey::new(who, minds::schema::DIRECTED))
+                    .map(|f| f.value)
+                    != Some(Value::Bool(true))
+        };
+        let mut out = Vec::new();
+        let mut waiting = Vec::new();
+        let mut directing: Vec<EntityId> = Vec::new();
+        for (who, fact, change) in self.orders.borrow_mut().drain(..) {
+            if fact != minds::schema::DIRECTED && undirected(who) {
+                if !directing.contains(&who) {
+                    directing.push(who);
+                    out.push(propose(
+                        who,
+                        minds::schema::DIRECTED,
+                        Change::Set(Value::Bool(true)),
+                    ));
+                }
+                waiting.push((who, fact, change));
+            } else {
+                out.push(propose(who, fact, change));
+            }
+        }
+        self.orders.borrow_mut().extend(waiting);
+        out
     }
 }
 
@@ -214,9 +272,16 @@ pub struct City {
 }
 
 impl City {
-    /// Ashford as shipped, under seed 1.
+    /// Ashford as shipped — everyone with a mind of their own (Amendment A-14) — under seed 1.
     pub fn new() -> Self {
         Self::from(package())
+    }
+
+    /// Ashford without minds: everyone stays put and does only what a test commands. For tests of
+    /// space, sight, ground, and the body, where a city going about its business would only be in
+    /// the way.
+    pub fn quiet() -> Self {
+        Self::from(without_minds(package()))
     }
 
     /// Ashford from an adjusted package, under seed 1.
@@ -300,6 +365,61 @@ impl City {
         self
     }
 
+    /// Ask `who` to take hold of `thing` (Appendix A, Ruling 16).
+    pub fn take(&mut self, who: u64, thing: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_TAKE, Value::Entity(e(thing)));
+        self
+    }
+
+    /// Ask `who` to put down `thing` where it stands.
+    pub fn drop_(&mut self, who: u64, thing: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_DROP, Value::Entity(e(thing)));
+        self
+    }
+
+    /// Ask `who` to pick from `deposit` — a fruit tree (Amendment A-15).
+    pub fn pick(&mut self, who: u64, deposit: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_PICK, Value::Entity(e(deposit)));
+        self
+    }
+
+    /// Ask `who` to make `recipe` — bake a pie at the hearth (Amendment A-17).
+    pub fn make(&mut self, who: u64, recipe: u64) -> &mut Self {
+        self.order(who, economy::schema::ACT_MAKE, Value::Entity(e(recipe)));
+        self
+    }
+
+    /// Ask `who` to claim `thing`, which no one owns (Amendment A-19).
+    pub fn claim(&mut self, who: u64, thing: u64) -> &mut Self {
+        self.order(who, economy::schema::ACT_CLAIM, Value::Entity(e(thing)));
+        self
+    }
+
+    /// Ask `who` to consume `thing` — eat it, drink it.
+    pub fn consume(&mut self, who: u64, thing: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_CONSUME, Value::Entity(e(thing)));
+        self
+    }
+
+    /// Stop directing `who`: its own mind decides again (Amendment A-14).
+    pub fn release(&mut self, who: u64) -> &mut Self {
+        self.orders
+            .borrow_mut()
+            .push((e(who), minds::schema::DIRECTED, Change::Tombstone));
+        self
+    }
+
+    /// Whether `who` is being directed.
+    pub fn directed(&self, who: u64) -> bool {
+        self.read(who, minds::schema::DIRECTED) == Some(Value::Bool(true))
+    }
+
+    /// Ask `who` to lie down and rest, or to get up (Appendix A, Ruling 15).
+    pub fn rest(&mut self, who: u64, yes: bool) -> &mut Self {
+        self.order(who, living::schema::REST, Value::Bool(yes));
+        self
+    }
+
     /// Ask `who` to face compass `degrees`.
     pub fn face(&mut self, who: u64, degrees: i64) -> &mut Self {
         self.order(who, ACT_FACE, Value::Int(degrees * 100));
@@ -349,6 +469,21 @@ impl Default for City {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// `package` without decision systems: nobody acts unless commanded.
+pub fn without_minds(mut package: WorldPackage) -> WorldPackage {
+    package.manifest.domains.retain(|d| d != "minds");
+    package
+}
+
+/// `package` in which nobody grows hungry: for tests of other drives — warmth, love, a habit —
+/// that run past the hours when hunger would send people to the orchard (Amendment A-16).
+pub fn well_fed(mut package: WorldPackage) -> WorldPackage {
+    if let Some(rules) = package.living_rules.as_mut() {
+        rules.hunger_per_hour = 0;
+    }
+    package
 }
 
 /// Ashford's package with ticks of `seconds` (Amendment A-1: the same city at any resolution).

@@ -92,6 +92,14 @@ mod tests {
                 hop_cost: 20,
                 routine_value: 300,
                 switch_margin: 100,
+                tired_above: 7_000,
+                rested_below: 1_500,
+                need_above: 3_000,
+                need_weight: 20,
+                hungry_above: 4_000,
+                work_value: 250,
+                sleep_from_seconds: 22 * 3600,
+                sleep_to_seconds: 6 * 3600,
             },
         })
     }
@@ -118,6 +126,13 @@ mod tests {
             "physical.travel.to",
             "physical.travel.speed",
             "physical.act.open",
+            "physical.act.take",
+            "physical.act.consume",
+            "physical.act.pick",
+            "physical.act.drop",
+            "economy.act.make",
+            "economy.act.claim",
+            "living.act.rest",
         ];
         for system in domain().systems() {
             for fact in system.writes() {

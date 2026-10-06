@@ -10,7 +10,7 @@ use kernel::system::{Cadence, CommittedView, System, TickContext};
 use kernel::value::Value;
 use physical::schema::{OPAQUE, TEMPERATURE};
 use reference::id::*;
-use reference::{e, package, with_tick_seconds, City};
+use reference::{e, package, with_tick_seconds, without_minds, City};
 
 /// What `who` believes about `about`, of kind `fact`.
 fn belief(city: &City, who: u64, fact: FactType, about: u64) -> Option<Fact> {
@@ -41,7 +41,7 @@ fn watching(city: &City, who: u64) -> Vec<u64> {
 /// seen by and perceived through: sight reads the light committed a tick before, perception the
 /// view committed a tick before that.
 fn at_noon() -> City {
-    let mut city = City::from(with_tick_seconds(600));
+    let mut city = City::from(without_minds(with_tick_seconds(600)));
     city.run(74);
     city
 }
@@ -134,7 +134,7 @@ fn drawn_curtains_take_the_yard_out_of_sight_but_not_out_of_mind() {
 fn dave_still_believes_bob_is_in_the_kitchen_after_he_has_gone() {
     // Dave knows from the start that Bob is in the kitchen. Bob goes down to the cellar; Dave,
     // upstairs, cannot see it happen.
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.go(BOB, CELLAR, 140);
     city.run_until(40, |c| !c.travelling(BOB));
     assert_eq!(city.room_of(BOB), CELLAR);
@@ -158,14 +158,18 @@ fn hal_on_the_moor_knows_nothing_of_ashford() {
         .into_iter()
         .map(|(x, _)| x.raw())
         .collect();
-    assert_eq!(about, vec![HAL], "only where he himself stands");
+    assert_eq!(
+        about,
+        vec![HIGHMOOR, HAL, BILBERRIES],
+        "only the moor he stands on, its bilberries, and himself"
+    );
     // And the courier, who knows only the yard, has no idea how warm the kitchen is.
     assert!(belief(&city, COURIER, WARMTH_OF, KITCHEN).is_none());
 }
 
 #[test]
 fn everyone_knows_where_they_stand_and_how_warm_it_is() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.run(2);
     let s = city.store();
     let vale = s
@@ -198,7 +202,7 @@ fn everyone_knows_where_they_stand_and_how_warm_it_is() {
 
 #[test]
 fn the_courier_knows_when_his_way_is_shut() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.close(BOB, DOOR_IN);
     city.run(2);
     city.go(COURIER, KITCHEN, 140);
@@ -235,7 +239,7 @@ fn perceiving_never_disturbs_reality() {
     // The information layer reads and never writes reality: Ashford with and without it moves
     // and warms identically.
     fn trajectory(pkg: &packages::WorldPackage) -> Vec<Vec<Option<Value>>> {
-        let mut city = City::from(pkg.clone());
+        let mut city = City::from(without_minds(pkg.clone()));
         city.go(BOB, BEDROOM, 140).go(CAT, KITCHEN, 300);
         (0..60)
             .map(|_| {
@@ -254,4 +258,26 @@ fn perceiving_never_disturbs_reality() {
     without.information_rules = None;
     without.knows = Vec::new();
     assert_eq!(trajectory(&with), trajectory(&without));
+}
+
+#[test]
+fn dave_sees_that_bob_is_not_in_the_kitchen() {
+    // Dave believes from the start that Bob is in the kitchen. At midday Bob goes down to the
+    // cellar and Dave comes down to the kitchen: in its light he does not go on believing Bob is
+    // there — he sees that he is not, or sees where he went.
+    let mut city = at_noon();
+    city.go(BOB, CELLAR, 140).go(DAVE, KITCHEN, 140);
+    city.run(6);
+    assert_eq!((city.room_of(BOB), city.room_of(DAVE)), (CELLAR, KITCHEN));
+    assert_ne!(thinks_is_in(&city, DAVE, BOB), Some(KITCHEN));
+    let why = city
+        .chronicle
+        .iter()
+        .rev()
+        .find(|c| c.subject() == e(DAVE) && c.fact_type() == PLACE_OF && c.about() == Some(e(BOB)))
+        .map(|c| c.cause());
+    assert!(
+        why == Some(Cause::new("not_there")) || why == Some(Cause::new("seen")),
+        "{why:?}"
+    );
 }

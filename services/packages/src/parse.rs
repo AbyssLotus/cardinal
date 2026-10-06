@@ -6,10 +6,11 @@
 //! pure data — this reads declarations, it never executes them (Vol. IV Ch. 1, invariant 6).
 
 use crate::model::{
-    AdjacencySpec, BodySpec, ClockRules, ContainmentSpec, ExposureSpec, FacingSpec, Flag, FlagSpec,
-    InformationRules, LivingRules, MadeOfSpec, Manifest, MaterialProperty, MaterialSpec,
-    MindsRules, MotionSpec, OrganismSpec, PhysicalRules, PortalDangerSpec, PortalSpec,
-    PositionSpec, RegionMembershipSpec, RegionSpec, TerrainSpec, TravelSpec, WorldPackage,
+    AdjacencySpec, BodySpec, ClockRules, ContainmentSpec, DepositSpec, ExposureSpec, FacingSpec,
+    Flag, FlagSpec, InformationRules, JobSpec, JobWork, LivingRules, MadeOfSpec, Manifest,
+    MaterialProperty, MaterialSpec, MindsRules, MotionSpec, NeedKindSpec, OrganismSpec,
+    PhysicalRules, PortalDangerSpec, PortalSpec, PositionSpec, RecipeSpec, RegionMembershipSpec,
+    RegionSpec, ResourcesRules, SocietyRules, TerrainSpec, TravelSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -88,6 +89,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut indoor_coupling_seconds: Option<u64> = None;
     let mut sight_step_seconds: Option<u64> = None;
     let mut sight_min_illumination: Option<i64> = None;
+    let mut carry_limit_kg: Option<i64> = None;
     let mut perception_step_seconds: Option<u64> = None;
     let mut warmth_resolution: Option<i64> = None;
     let mut senses: Vec<(u64, i64)> = Vec::new();
@@ -104,6 +106,45 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut set_point: Option<i64> = None;
     let mut warm_response_seconds: Option<u64> = None;
     let mut cold_response_seconds: Option<u64> = None;
+    let mut tire_per_hour: Option<i64> = None;
+    let mut rest_per_hour: Option<i64> = None;
+    let mut hypothermia_below: Option<i64> = None;
+    let mut cold_harm: Option<i64> = None;
+    let mut safe_fall: Option<i64> = None;
+    let mut fall_harm: Option<i64> = None;
+    let mut heal_per_hour: Option<i64> = None;
+    let mut need_resolution: Option<i64> = None;
+    let mut tired_above: Option<i64> = None;
+    let mut rested_below: Option<i64> = None;
+    let mut fatigue: Vec<(u64, i64)> = Vec::new();
+    let mut affection_step: Option<u64> = None;
+    let mut affection_per_hour: Option<i64> = None;
+    let mut affection_fade: Option<i64> = None;
+    let mut need_above: Option<i64> = None;
+    let mut need_weight: Option<i64> = None;
+    let mut hungry_above: Option<i64> = None;
+    let mut work_value: Option<i64> = None;
+    let mut sleep_hours: Option<(i64, i64)> = None;
+    let mut courtship_step: Option<u64> = None;
+    let mut bond_above: Option<i64> = None;
+    let mut part_below: Option<i64> = None;
+    let mut temperament: Vec<(u64, [i64; 3])> = Vec::new();
+    let mut need_kinds: Vec<NeedKindSpec> = Vec::new();
+    let mut dependence: Vec<(u64, u64, i64)> = Vec::new();
+    let mut deposits: Vec<DepositSpec> = Vec::new();
+    let mut recipes: Vec<RecipeSpec> = Vec::new();
+    let mut jobs: Vec<JobSpec> = Vec::new();
+    let mut roles: Vec<(u64, u64)> = Vec::new();
+    let mut owners: Vec<(u64, u64)> = Vec::new();
+    let mut curiosity: Vec<(u64, i64)> = Vec::new();
+    let mut likes: Vec<(u64, u64, i64)> = Vec::new();
+    let mut home: Vec<(u64, u64)> = Vec::new();
+    let mut regrow_step: Option<u64> = None;
+    let mut dependence_fade: Option<i64> = None;
+    let mut hunger_per_hour: Option<i64> = None;
+    let mut starving_above: Option<i64> = None;
+    let mut starving_harm: Option<i64> = None;
+    let mut hunger: Vec<(u64, i64)> = Vec::new();
     let mut regions: Vec<RegionSpec> = Vec::new();
     let mut organisms: Vec<OrganismSpec> = Vec::new();
     let mut containment: Vec<ContainmentSpec> = Vec::new();
@@ -235,6 +276,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "sight_min_illumination" => {
                     sight_min_illumination = Some(parse_num(value, line_no)?)
                 }
+                "carry_limit_kg" => carry_limit_kg = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -249,6 +291,17 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "set_point_centi_c" => set_point = Some(parse_num(value, line_no)?),
                 "warm_response_seconds" => warm_response_seconds = Some(parse_num(value, line_no)?),
                 "cold_response_seconds" => cold_response_seconds = Some(parse_num(value, line_no)?),
+                "tire_per_hour" => tire_per_hour = Some(parse_num(value, line_no)?),
+                "rest_per_hour" => rest_per_hour = Some(parse_num(value, line_no)?),
+                "hypothermia_below_centi_c" => hypothermia_below = Some(parse_num(value, line_no)?),
+                "cold_harm_per_degree_hour" => cold_harm = Some(parse_num(value, line_no)?),
+                "safe_fall_cm" => safe_fall = Some(parse_num(value, line_no)?),
+                "fall_harm_per_metre" => fall_harm = Some(parse_num(value, line_no)?),
+                "heal_per_hour" => heal_per_hour = Some(parse_num(value, line_no)?),
+                "dependence_fade_per_day" => dependence_fade = Some(parse_num(value, line_no)?),
+                "hunger_per_hour" => hunger_per_hour = Some(parse_num(value, line_no)?),
+                "starving_above" => starving_above = Some(parse_num(value, line_no)?),
+                "starving_harm_per_hour" => starving_harm = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -261,6 +314,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     perception_step_seconds = Some(parse_num(value, line_no)?)
                 }
                 "warmth_resolution_centi_c" => warmth_resolution = Some(parse_num(value, line_no)?),
+                "need_resolution" => need_resolution = Some(parse_num(value, line_no)?),
+                "affection_step_seconds" => affection_step = Some(parse_num(value, line_no)?),
+                "affection_per_hour" => affection_per_hour = Some(parse_num(value, line_no)?),
+                "affection_fade_per_day" => affection_fade = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -277,6 +334,13 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "hop_cost" => hop_cost = Some(parse_num(value, line_no)?),
                 "routine_value" => routine_value = Some(parse_num(value, line_no)?),
                 "switch_margin" => switch_margin = Some(parse_num(value, line_no)?),
+                "tired_above" => tired_above = Some(parse_num(value, line_no)?),
+                "rested_below" => rested_below = Some(parse_num(value, line_no)?),
+                "need_above" => need_above = Some(parse_num(value, line_no)?),
+                "need_weight" => need_weight = Some(parse_num(value, line_no)?),
+                "hungry_above" => hungry_above = Some(parse_num(value, line_no)?),
+                "work_value" => work_value = Some(parse_num(value, line_no)?),
+                "sleep_hours" => sleep_hours = Some(parse_hours(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -284,6 +348,73 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     ))
                 }
             },
+            "rules.society" => match key {
+                "courtship_step_seconds" => courtship_step = Some(parse_num(value, line_no)?),
+                "bond_above" => bond_above = Some(parse_num(value, line_no)?),
+                "part_below" => part_below = Some(parse_num(value, line_no)?),
+                other => {
+                    return Err(ParseError::at(
+                        line_no,
+                        format!("unknown society rule {other:?}"),
+                    ))
+                }
+            },
+            "temperament" => {
+                let mind: u64 = parse_num(key, line_no)?;
+                temperament.push((mind, parse_ints::<3>(value, line_no, "a, b, c")?));
+            }
+            "rules.resources" => match key {
+                "regrow_step_seconds" => regrow_step = Some(parse_num(value, line_no)?),
+                other => {
+                    return Err(ParseError::at(
+                        line_no,
+                        format!("unknown resources rule {other:?}"),
+                    ))
+                }
+            },
+            "deposits" => {
+                let id: u64 = parse_num(key, line_no)?;
+                deposits.push(parse_deposit(id, value, line_no)?);
+            }
+            "recipes" => {
+                let id: u64 = parse_num(key, line_no)?;
+                recipes.push(parse_recipe(id, value, line_no)?);
+            }
+            "jobs" => {
+                let id: u64 = parse_num(key, line_no)?;
+                jobs.push(parse_job(id, value, line_no)?);
+            }
+            "roles" => roles.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
+            "owners" => owners.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
+            "curiosity" => curiosity.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
+            "home" => home.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
+            "likes" => {
+                // mind = material:worth, material:worth
+                let mind: u64 = parse_num(key, line_no)?;
+                for part in value.split(',') {
+                    let (m, w) = part.split_once(':').ok_or_else(|| {
+                        ParseError::at(line_no, format!("expected material:worth, got {part:?}"))
+                    })?;
+                    likes.push((mind, parse_num(m, line_no)?, parse_num(w, line_no)?));
+                }
+            }
+            "hunger" => {
+                let organism: u64 = parse_num(key, line_no)?;
+                hunger.push((organism, parse_num(value, line_no)?));
+            }
+            "dependence" => {
+                let organism: u64 = parse_num(key, line_no)?;
+                let [material, level] = parse_ints::<2>(value, line_no, "material, level")?;
+                dependence.push((organism, material as u64, level));
+            }
+            "need_kinds" => {
+                let id: u64 = parse_num(key, line_no)?;
+                need_kinds.push(parse_need_kind(id, value, line_no)?);
+            }
+            "fatigue" => {
+                let organism: u64 = parse_num(key, line_no)?;
+                fatigue.push((organism, parse_num(value, line_no)?));
+            }
             "minds" => {
                 let mind: u64 = parse_num(key, line_no)?;
                 minds.push((mind, parse_num(value, line_no)?));
@@ -601,6 +732,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             sight_min_illumination,
             "rules.physical.sight_min_illumination",
         )?,
+        carry_limit_kg: require(carry_limit_kg, "rules.physical.carry_limit_kg")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -621,10 +753,31 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             hop_cost: require(hop_cost, "rules.minds.hop_cost")?,
             routine_value: require(routine_value, "rules.minds.routine_value")?,
             switch_margin: require(switch_margin, "rules.minds.switch_margin")?,
+            tired_above: require(tired_above, "rules.minds.tired_above")?,
+            rested_below: require(rested_below, "rules.minds.rested_below")?,
+            need_above: require(need_above, "rules.minds.need_above")?,
+            need_weight: require(need_weight, "rules.minds.need_weight")?,
+            hungry_above: require(hungry_above, "rules.minds.hungry_above")?,
+            work_value: require(work_value, "rules.minds.work_value")?,
+            sleep_hours: require(sleep_hours, "rules.minds.sleep_hours")?,
         }),
     };
-    let information_rules = match (perception_step_seconds, warmth_resolution) {
-        (None, None) => None,
+    let resources_rules = regrow_step.map(|regrow_step_seconds| ResourcesRules {
+        regrow_step_seconds,
+    });
+    let society_rules = match (courtship_step, bond_above, part_below) {
+        (None, None, None) => None,
+        _ => Some(SocietyRules {
+            courtship_step_seconds: require(
+                courtship_step,
+                "rules.society.courtship_step_seconds",
+            )?,
+            bond_above: require(bond_above, "rules.society.bond_above")?,
+            part_below: require(part_below, "rules.society.part_below")?,
+        }),
+    };
+    let information_rules = match (perception_step_seconds, warmth_resolution, need_resolution) {
+        (None, None, None) => None,
         _ => Some(InformationRules {
             perception_step_seconds: require(
                 perception_step_seconds,
@@ -633,6 +786,19 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             warmth_resolution_centi_c: require(
                 warmth_resolution,
                 "rules.information.warmth_resolution_centi_c",
+            )?,
+            need_resolution: require(need_resolution, "rules.information.need_resolution")?,
+            affection_step_seconds: require(
+                affection_step,
+                "rules.information.affection_step_seconds",
+            )?,
+            affection_per_hour: require(
+                affection_per_hour,
+                "rules.information.affection_per_hour",
+            )?,
+            affection_fade_per_day: require(
+                affection_fade,
+                "rules.information.affection_fade_per_day",
             )?,
         }),
     };
@@ -657,6 +823,26 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 cold_response_seconds,
                 "rules.living.cold_response_seconds",
             )?,
+            tire_per_hour: require(tire_per_hour, "rules.living.tire_per_hour")?,
+            rest_per_hour: require(rest_per_hour, "rules.living.rest_per_hour")?,
+            hypothermia_below_centi_c: require(
+                hypothermia_below,
+                "rules.living.hypothermia_below_centi_c",
+            )?,
+            cold_harm_per_degree_hour: require(
+                cold_harm,
+                "rules.living.cold_harm_per_degree_hour",
+            )?,
+            safe_fall_cm: require(safe_fall, "rules.living.safe_fall_cm")?,
+            fall_harm_per_metre: require(fall_harm, "rules.living.fall_harm_per_metre")?,
+            heal_per_hour: require(heal_per_hour, "rules.living.heal_per_hour")?,
+            dependence_fade_per_day: require(
+                dependence_fade,
+                "rules.living.dependence_fade_per_day",
+            )?,
+            hunger_per_hour: require(hunger_per_hour, "rules.living.hunger_per_hour")?,
+            starving_above: require(starving_above, "rules.living.starving_above")?,
+            starving_harm_per_hour: require(starving_harm, "rules.living.starving_harm_per_hour")?,
         }),
     };
 
@@ -667,6 +853,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         living_rules,
         information_rules,
         minds_rules,
+        society_rules,
+        resources_rules,
         regions,
         organisms,
         containment,
@@ -689,7 +877,218 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         senses,
         knows,
         minds,
+        temperament,
+        need_kinds,
+        deposits,
+        recipes,
+        jobs,
+        roles,
+        owners,
+        curiosity,
+        likes,
+        home,
+        hunger,
+        dependence,
+        fatigue,
         routines,
+    })
+}
+
+/// Parse a deposit: `made_of:M, size:XxYxZ, per_day:N, cap:N, stock:N` (Amendment A-15). Every
+/// field is required.
+fn parse_deposit(id: u64, value: &str, line_no: usize) -> Result<DepositSpec, ParseError> {
+    let (mut made_of, mut size, mut per_day, mut cap, mut stock) = (None, None, None, None, None);
+    for part in value.split(',') {
+        let (k, v) = part
+            .split_once(':')
+            .ok_or_else(|| ParseError::at(line_no, format!("expected key:value, got {part:?}")))?;
+        match k.trim() {
+            "made_of" => made_of = Some(parse_num(v.trim(), line_no)?),
+            "size" => {
+                let dims = v
+                    .trim()
+                    .split('x')
+                    .map(|n| parse_num(n, line_no))
+                    .collect::<Result<Vec<i64>, _>>()?;
+                let [x, y, z] = dims[..] else {
+                    return Err(ParseError::at(line_no, "a size is XxYxZ"));
+                };
+                size = Some([x, y, z]);
+            }
+            "per_day" => per_day = Some(parse_num(v.trim(), line_no)?),
+            "cap" => cap = Some(parse_num(v.trim(), line_no)?),
+            "stock" => stock = Some(parse_num(v.trim(), line_no)?),
+            other => {
+                return Err(ParseError::at(
+                    line_no,
+                    format!("unknown deposit field {other:?}"),
+                ))
+            }
+        }
+    }
+    let missing = |name: &str| ParseError::at(line_no, format!("deposit {id} lacks {name}"));
+    Ok(DepositSpec {
+        id,
+        made_of: made_of.ok_or_else(|| missing("made_of"))?,
+        size: size.ok_or_else(|| missing("size"))?,
+        per_day: per_day.ok_or_else(|| missing("per_day"))?,
+        cap: cap.ok_or_else(|| missing("cap"))?,
+        stock: stock.ok_or_else(|| missing("stock"))?,
+    })
+}
+
+/// Parse a recipe: `needs:MxN MxN, makes:M, size:XxYxZ, at:E, takes:S` (Amendment A-17) — so
+/// many things of each material, the product's material and size, the workplace, and the
+/// seconds in the making. Every field is required.
+fn parse_recipe(id: u64, value: &str, line_no: usize) -> Result<RecipeSpec, ParseError> {
+    let (mut needs, mut makes, mut size, mut at, mut takes) = (None, None, None, None, None);
+    let pair = |s: &str| -> Result<(i64, i64), ParseError> {
+        let (a, b) = s
+            .split_once('x')
+            .ok_or_else(|| ParseError::at(line_no, format!("expected MxN, got {s:?}")))?;
+        Ok((parse_num(a, line_no)?, parse_num(b, line_no)?))
+    };
+    for part in value.split(',') {
+        let (k, v) = part
+            .split_once(':')
+            .ok_or_else(|| ParseError::at(line_no, format!("expected key:value, got {part:?}")))?;
+        match k.trim() {
+            "needs" => {
+                let mut list = Vec::new();
+                for item in v.split_whitespace() {
+                    let (material, count) = pair(item)?;
+                    if material < 0 || count <= 0 {
+                        return Err(ParseError::at(line_no, "a recipe needs some of a material"));
+                    }
+                    list.push((material as u64, count));
+                }
+                needs = Some(list);
+            }
+            "makes" => makes = Some(parse_num(v.trim(), line_no)?),
+            "size" => {
+                let dims = v
+                    .trim()
+                    .split('x')
+                    .map(|n| parse_num(n, line_no))
+                    .collect::<Result<Vec<i64>, _>>()?;
+                let [x, y, z] = dims[..] else {
+                    return Err(ParseError::at(line_no, "a size is XxYxZ"));
+                };
+                size = Some([x, y, z]);
+            }
+            "at" => at = Some(parse_num(v.trim(), line_no)?),
+            "takes" => takes = Some(parse_num(v.trim(), line_no)?),
+            other => {
+                return Err(ParseError::at(
+                    line_no,
+                    format!("unknown recipe field {other:?}"),
+                ))
+            }
+        }
+    }
+    let missing = |name: &str| ParseError::at(line_no, format!("recipe {id} lacks {name}"));
+    Ok(RecipeSpec {
+        id,
+        needs: needs.ok_or_else(|| missing("needs"))?,
+        makes: makes.ok_or_else(|| missing("makes"))?,
+        size: size.ok_or_else(|| missing("size"))?,
+        at: at.ok_or_else(|| missing("at"))?,
+        takes_seconds: takes.ok_or_else(|| missing("takes"))?,
+    })
+}
+
+/// Parse a job: `carry:M, from:E, to:P, keep:N, hours:A-B` or `make:R, to:P, keep:N, hours:A-B`
+/// (Amendment A-18). The mechanism is the engine's closed set; every field it needs is required.
+fn parse_job(id: u64, value: &str, line_no: usize) -> Result<JobSpec, ParseError> {
+    let (mut carry, mut make, mut from, mut to, mut keep, mut hours) =
+        (None, None, None, None, None, None);
+    for part in value.split(',') {
+        let (k, v) = part
+            .split_once(':')
+            .ok_or_else(|| ParseError::at(line_no, format!("expected key:value, got {part:?}")))?;
+        let v = v.trim();
+        match k.trim() {
+            "carry" => carry = Some(parse_num(v, line_no)?),
+            "make" => make = Some(parse_num(v, line_no)?),
+            "from" => from = Some(parse_num(v, line_no)?),
+            "to" => to = Some(parse_num(v, line_no)?),
+            "keep" => keep = Some(parse_num(v, line_no)?),
+            "hours" => hours = Some(parse_hours(v, line_no)?),
+            other => {
+                return Err(ParseError::at(
+                    line_no,
+                    format!("unknown job field {other:?}"),
+                ))
+            }
+        }
+    }
+    let missing = |name: &str| ParseError::at(line_no, format!("job {id} lacks {name}"));
+    let work = match (carry, make) {
+        (Some(material), None) => JobWork::Carry {
+            material,
+            from: from.ok_or_else(|| missing("from"))?,
+        },
+        (None, Some(recipe)) => JobWork::Make { recipe },
+        _ => {
+            return Err(ParseError::at(
+                line_no,
+                format!("job {id} must either carry or make"),
+            ))
+        }
+    };
+    Ok(JobSpec {
+        id,
+        work,
+        to: to.ok_or_else(|| missing("to"))?,
+        keep: keep.ok_or_else(|| missing("keep"))?,
+        hours: hours.ok_or_else(|| missing("hours"))?,
+    })
+}
+
+/// Parse a kind of need: `arises:bond|dependence, met_by:presence|dose, rise:N, ease:N, harm:N`
+/// (Amendment A-11). Every field is required; the mechanisms are the engine's closed set.
+fn parse_need_kind(id: u64, value: &str, line_no: usize) -> Result<NeedKindSpec, ParseError> {
+    let (mut arises, mut met_by, mut rise, mut ease, mut harm) = (None, None, None, None, None);
+    let mut above = None;
+    for part in value.split(',') {
+        let (k, v) = part
+            .split_once(':')
+            .ok_or_else(|| ParseError::at(line_no, format!("expected key:value, got {part:?}")))?;
+        match (k.trim(), v.trim()) {
+            ("arises", "bond") => arises = Some(1),
+            ("arises", "dependence") => arises = Some(2),
+            ("met_by", "presence") => met_by = Some(1),
+            ("met_by", "dose") => met_by = Some(2),
+            ("rise", n) => rise = Some(parse_num(n, line_no)?),
+            ("ease", n) => ease = Some(parse_num(n, line_no)?),
+            ("harm", n) => harm = Some(parse_num(n, line_no)?),
+            ("above", n) => above = Some(parse_num(n, line_no)?),
+            (k, v) => {
+                return Err(ParseError::at(
+                    line_no,
+                    format!("unknown need-kind field {k}:{v}"),
+                ))
+            }
+        }
+    }
+    let field = |v: Option<i64>, name: &str| {
+        v.ok_or_else(|| ParseError::at(line_no, format!("need kind {id} lacks {name}")))
+    };
+    let arises = field(arises, "arises")?;
+    // A kind that arises from dependence must say past what dependence it arises.
+    let above = if arises == 2 {
+        field(above, "above")?
+    } else {
+        above.unwrap_or(0)
+    };
+    Ok(NeedKindSpec {
+        id,
+        above,
+        arises,
+        met_by: field(met_by, "met_by")?,
+        rise: field(rise, "rise")?,
+        ease: field(ease, "ease")?,
+        harm: field(harm, "harm")?,
     })
 }
 
@@ -771,6 +1170,10 @@ fn parse_material_properties(
             "flammability" => MaterialProperty::Flammability,
             "conductivity" => MaterialProperty::Conductivity,
             "toxicity" => MaterialProperty::Toxicity,
+            "edible" => MaterialProperty::Edible,
+            "potency" => MaterialProperty::Potency,
+            "habit" => MaterialProperty::Habit,
+            "nutrition" => MaterialProperty::Nutrition,
             other => {
                 return Err(ParseError::at(
                     line_no,
@@ -908,6 +1311,20 @@ fn parse_num<T: FromStr>(value: &str, line_no: usize) -> Result<T, ParseError> {
         .map_err(|_| ParseError::at(line_no, format!("expected a number, got {value:?}")))
 }
 
+/// Parse hours of the day `FROM-TO`, each a whole hour 0–24; the window wraps past midnight when
+/// `FROM > TO`.
+fn parse_hours(value: &str, line_no: usize) -> Result<(i64, i64), ParseError> {
+    let (a, b) = value
+        .trim()
+        .split_once('-')
+        .ok_or_else(|| ParseError::at(line_no, "hours are FROM-TO"))?;
+    let (a, b): (i64, i64) = (parse_num(a, line_no)?, parse_num(b, line_no)?);
+    if !(0..=24).contains(&a) || !(0..=24).contains(&b) {
+        return Err(ParseError::at(line_no, "hours lie within a day"));
+    }
+    Ok((a, b))
+}
+
 fn require<T>(opt: Option<T>, what: &str) -> Result<T, ParseError> {
     opt.ok_or_else(|| ParseError::at(0, format!("missing required field {what}")))
 }
@@ -948,6 +1365,7 @@ reach_cm = 75
 indoor_coupling_seconds = 14400
 sight_step_seconds = 1
 sight_min_illumination = 50
+carry_limit_kg = 25
 [regions]
 1 = 1500
 ";
@@ -976,6 +1394,57 @@ sight_min_illumination = 50
         assert_eq!(pkg.made_of.len(), 1);
         assert_eq!(pkg.made_of[0].object_id, 1);
         assert_eq!(pkg.made_of[0].material_id, 700);
+    }
+
+    #[test]
+    fn a_recipe_parses_what_it_needs_makes_where_and_how_long() {
+        let text = format!(
+            "{HEADER}\
+[recipes]
+950 = needs:704x2 706x1, makes:707, size:10x10x5, at:122, takes:3600   # a pie
+"
+        );
+        let pkg = parse_world(&text).expect("parses");
+        let r = &pkg.recipes[0];
+        assert_eq!(r.id, 950);
+        assert_eq!(r.needs, vec![(704, 2), (706, 1)]);
+        assert_eq!(
+            (r.makes, r.size, r.at, r.takes_seconds),
+            (707, [10, 10, 5], 122, 3600)
+        );
+    }
+
+    #[test]
+    fn a_recipe_without_a_workplace_is_refused() {
+        let text = format!(
+            "{HEADER}\
+[recipes]
+950 = needs:704x2, makes:707, size:10x10x5, takes:3600
+"
+        );
+        let err = parse_world(&text).expect_err("no workplace");
+        assert!(err.reason.contains("lacks at"), "got: {}", err.reason);
+    }
+
+    #[test]
+    fn wants_parse_likes_homes_owners_and_curiosity() {
+        let text = format!(
+            "{HEADER}\
+[owners]
+121 = 2002
+[curiosity]
+2011 = 100
+[likes]
+2005 = 701:150, 702:20
+[home]
+2005 = 104
+"
+        );
+        let pkg = parse_world(&text).expect("parses");
+        assert_eq!(pkg.owners, vec![(121, 2002)]);
+        assert_eq!(pkg.curiosity, vec![(2011, 100)]);
+        assert_eq!(pkg.likes, vec![(2005, 701, 150), (2005, 702, 20)]);
+        assert_eq!(pkg.home, vec![(2005, 104)]);
     }
 
     #[test]

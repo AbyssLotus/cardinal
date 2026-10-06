@@ -94,7 +94,7 @@ integration suite in one fictional city instead of a world per feature.
 | D4 | Fixed (A-5). Walled rooms are sheltered: no sky weather, daylight through openings by area, air that follows the outside with a lag. | `climate.rs` |
 | D5 | Fixed. A speedless or immobile traveller is reported blocked. | `movement.rs` |
 | D6 | Fixed. Body heat reads the nearest enclosing place with air, through carts and bags. | `living.rs` (the rider) |
-| D7 | Open, by design: it needs the health model (M10). | — |
+| D7 | Fixed (Amendment A-10). Body heat below the world's line harms health; falls beyond a safe drop harm it; health heals slowly; death at zero stops the body and the mind. Fatigue and rest arrive with it. | `needs.rs` |
 | D8 | Improved. 1,000 walkers in an open yard: planning tick 7 ms (was 1.2 s), walking 0.6 ms/tick. With 200 crates in the yard: planning tick 164 ms, walking 18 ms/tick — each leg around an obstacle costs about 0.2 ms to start. Shared, incrementally updated grids (M17) remain the full fix. | measured, release build |
 | D9 | Improved. "Who is within 3 m": 2 µs among 10 rooms, 27 µs among 1,000 (was 121 µs). Far rooms' contents are skipped, but the search still checks each sibling room's bounds, so cost still grows with room count. Room bounds in a spatial index of their own (M18) remain the full fix. | measured, release build |
 | D10 | Fixed. Legs over terrain are kept to half a sample spacing, short enough that a walker never sinks more than 2 cm into the hillside mid-stride. | `movement.rs` (the villager) |

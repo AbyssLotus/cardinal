@@ -20,12 +20,12 @@ pub mod validate;
 pub mod version;
 
 pub use loader::{
-    engine_version, information_config, living_config, load, minds_config, physical_config,
-    LoadError, LoadedWorld,
+    economy_config, engine_version, information_config, living_config, load, minds_config,
+    physical_config, resources_config, society_config, LoadError, LoadedWorld,
 };
 pub use model::{
-    ClockRules, InformationRules, LivingRules, Manifest, MindsRules, PhysicalRules, RegionSpec,
-    WorldPackage,
+    ClockRules, InformationRules, LivingRules, Manifest, MindsRules, NeedKindSpec, PhysicalRules,
+    RecipeSpec, RegionSpec, SocietyRules, WorldPackage,
 };
 pub use parse::{parse_world, ParseError};
 pub use validate::{validate, Layer, Problem};

@@ -13,17 +13,18 @@ use living::schema::BODY_HEAT;
 use living::LivingDomain;
 use physical::schema::{POSITION, TEMPERATURE};
 use reference::id::*;
-use reference::{e, package, with_tick_seconds, City};
+use reference::{e, package, well_fed, with_tick_seconds, without_minds, City};
 
 fn heat(city: &City, who: u64) -> i64 {
     city.int(who, BODY_HEAT).unwrap()
 }
 
-/// Living alone over a copy of Ashford's reality — the air held where the world seeds it — for
-/// `days` days of ticks of `tick_seconds`; the body heat of each of `who` at the end.
+/// Living alone over a copy of Ashford's reality — the air held where the world seeds it, and
+/// nobody hungry — for `days` days of ticks of `tick_seconds`; the body heat of each of `who` at
+/// the end.
 fn settled(tick_seconds: u64, days: u64, who: &[u64]) -> Vec<i64> {
-    let pkg = with_tick_seconds(tick_seconds);
-    let mut store = City::from(pkg.clone()).store().clone();
+    let pkg = well_fed(with_tick_seconds(tick_seconds));
+    let mut store = City::from(without_minds(pkg.clone())).store().clone();
     let domain = LivingDomain::new(packages::living_config(&pkg).expect("Ashford has living"));
     let domains: [&dyn Domain; 1] = [&domain];
     let systems: Vec<Box<dyn System>> = domain.systems();
@@ -58,23 +59,23 @@ fn a_body_settles_where_its_air_puts_it_at_any_tick_length() {
 
 #[test]
 fn hal_on_the_moor_feels_the_cold_and_ida_in_the_fen_does_not() {
-    let mut city = City::from(with_tick_seconds(600));
+    let mut city = City::from(without_minds(with_tick_seconds(600)));
     city.run(2 * 144);
-    assert!(heat(&city, HAL) < heat(&city, FINN));
-    assert!(heat(&city, FINN) < heat(&city, IDA));
+    assert!(heat(&city, HAL) < heat(&city, CAROL));
+    assert!(heat(&city, CAROL) < heat(&city, IDA));
 }
 
 #[test]
 fn the_rider_feels_the_air_the_cart_rolls_through() {
     // The rider is in the cart, not in any place with a climate of its own: they feel the air
-    // of Old Town, which is the Vale's — as Finn, standing in the yard, does.
-    let mut city = City::from(with_tick_seconds(600));
+    // of Old Town, which is the Vale's — as Carol, up on the shed roof in the yard, does.
+    let mut city = City::from(without_minds(with_tick_seconds(600)));
     city.run(2 * 144);
     assert!(
-        (heat(&city, RIDER) - heat(&city, FINN)).abs() <= 2,
-        "rider {} vs Finn {}",
+        (heat(&city, RIDER) - heat(&city, CAROL)).abs() <= 2,
+        "rider {} vs Carol {}",
         heat(&city, RIDER),
-        heat(&city, FINN)
+        heat(&city, CAROL)
     );
 }
 
@@ -84,7 +85,7 @@ fn living_never_disturbs_physical_reality() {
     // air and everything in it moves identically — Living reads temperature and containment
     // and writes only body heat.
     fn trajectory(pkg: &packages::WorldPackage) -> Vec<Vec<Option<kernel::value::Value>>> {
-        let mut city = City::from(pkg.clone());
+        let mut city = City::from(without_minds(pkg.clone()));
         (0..120)
             .map(|_| {
                 city.run(1);
@@ -109,9 +110,10 @@ fn living_never_disturbs_physical_reality() {
 #[test]
 fn a_body_with_no_air_around_it_is_left_alone() {
     // Erin, taken out of the world (her containment cleared): no air reaches her, so Living has
-    // nothing to say about her body heat — no proposal, no change.
+    // nothing to say about her body heat — no proposal, no change. (She still tires: fatigue
+    // needs no air.)
     let pkg = with_tick_seconds(600);
-    let mut store = City::from(pkg.clone()).store().clone();
+    let mut store = City::from(without_minds(pkg.clone())).store().clone();
     let mut batch = CommitBatch::new(1);
     batch.resolutions.push(Resolution::Clear {
         key: FactKey::new(e(ERIN), physical::schema::CONTAINED_IN),
@@ -135,7 +137,9 @@ fn a_body_with_no_air_around_it_is_left_alone() {
             .and_then(|f| f.value.as_int())
     };
     assert_eq!(body_heat(ERIN), Some(3_700));
-    assert!(chronicle.iter().all(|c| c.subject() != e(ERIN)));
+    assert!(chronicle
+        .iter()
+        .all(|c| c.subject() != e(ERIN) || c.fact_type() != BODY_HEAT));
     assert_ne!(
         body_heat(ALICE),
         Some(3_700),

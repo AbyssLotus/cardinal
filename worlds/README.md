@@ -43,7 +43,11 @@ the Reach                          (no climate; the root)
 Its people perceive and decide. Everyone has a sight range (`[senses]`); some know things from
 the start (`[knows]` — Erin knows the kitchen, still warm from last night's stove; the courier
 knows only the yard); and three have minds (`[minds]`, `[routines]`): Erin, the courier, and the
-harbour guard, who keeps the gate by day and the well in the evening.
+harbour guard, who keeps the gate by day and the well in the evening. Finn and Gwen, well matched
+(`[temperament]`), fall in love on the doorstep, and longing (`[need_kinds]`) follows. Ned, the
+manor's lodger, starts a little dependent on poppy (`[dependence]`), and four vials of tincture
+wait on a shelf in the undercroft. There is an apple on the kitchen floor, and a lamp light
+enough to carry.
 
 Ashford is written in the engine's current single-file format: one `.world` file of
 `[sections]` (manifest, clock, rules, places, containment, positions, portals, bodies,

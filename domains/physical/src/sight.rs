@@ -82,14 +82,18 @@ pub fn line_of_sight(view: &dyn CommittedView, observer: EntityId, target: Entit
     let tall = height(view, target);
     let marks = [[t[0], t[1], t[2] + tall], [t[0], t[1], t[2] + tall / 2]];
 
-    // The containers each end is inside, below the common one.
+    // The containers each end is inside, below the common one. When one end holds the other — a
+    // thing in the hand, the cart one rides in — the common one is that end itself, and there is
+    // nothing in between.
     let inside = |e: EntityId| -> Vec<EntityId> {
         let chain = ancestry(view, e, CONTAINED_IN);
         let stop = chain
             .iter()
             .position(|c| *c == common)
             .unwrap_or(chain.len());
-        chain[1..stop].to_vec()
+        chain
+            .get(1..stop)
+            .map_or_else(Vec::new, <[EntityId]>::to_vec)
     };
     let (side_o, side_t) = (inside(observer), inside(target));
     let mut ignore = vec![observer, target];
@@ -237,7 +241,10 @@ pub fn lit(view: &dyn CommittedView, entity: EntityId, min: i64) -> bool {
     ambient(view, entity, ILLUMINATION).map_or(true, |(_, light)| light >= min)
 }
 
-/// What `observer` could see within `range`: in sight, and lit — in ascending id order.
+/// What `observer` could see within `range`: in sight, and lit — in ascending id order — and the
+/// place it stands in, when that is lit (Amendment A-11): seeing the room is how a mind knows its
+/// view is good enough to tell that someone is not there. And whatever it holds, which it knows
+/// by touch (Amendment A-13).
 pub fn in_view(
     view: &dyn CommittedView,
     observer: EntityId,
@@ -247,11 +254,19 @@ pub fn in_view(
     if range <= 0 {
         return BTreeSet::new();
     }
-    within(view, observer, range)
+    let mut seen: BTreeSet<EntityId> = within(view, observer, range)
         .into_iter()
         .map(|(e, _)| e)
         .filter(|e| lit(view, *e, min_illumination) && line_of_sight(view, observer, *e))
-        .collect()
+        .collect();
+    if let Some(here) = crate::index::container_of(view, observer) {
+        if lit(view, here, min_illumination) {
+            seen.insert(here);
+        }
+    }
+    // What one holds, one knows by touch, light or dark (Amendment A-13).
+    seen.extend(contents(view, observer));
+    seen
 }
 
 // Sight reads where things are (the placement facts the index mirrors), what blocks a line

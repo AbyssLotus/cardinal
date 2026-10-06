@@ -140,6 +140,9 @@ The deterministic result of applying an extraction action to a deposit — a fun
 
 ---
 
+
+*Amendment A-15.* A deposit may be a thing in the world, such as a fruit tree, holding a stock that regrows at a declared rate up to a cap. Picking from it is an act Physical Reality carries out within reach and reports. Resources then judges the yield: one unit leaves the stock, and a new item, made of the deposit's material and of its declared size, arrives in the picker's hand. A bare deposit yields nothing.
+
 # Designer Note
 ## Scarcity Must Be Real
 

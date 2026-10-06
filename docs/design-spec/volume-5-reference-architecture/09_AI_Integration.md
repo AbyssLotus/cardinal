@@ -92,6 +92,10 @@ May a model decide what an NPC does? The architecture's answer: yes, in exactly 
   it walks to the opening and opens it.
 - **What it leaves behind.** A trace of what it chose, why, and how strongly.
 
+**Direction** *(Amendment A-14)*. Every organism may have a mind, and every mind acts on its own unless it is *directed*: bound to an outside controller — a player, a recorded model, a test — whose commands arrive as intents through the input door. While directed, the entity's own mind stands aside. It still perceives, its body still needs and tires, and the world still judges every act. A direction is taken up the tick after it is given, so a controller and a mind never ask for two things at once. Released, the mind decides for itself again.
+
+**What it lives by** *(Amendments A-16, A-18)*. A mind weighs every pressure on one scale: the cold it feels, the routine of the hour, a longing or craving, hunger, and its work. Hunger sends it to food it believes in; it takes or picks it, and eats. Its work, in the hours its job keeps, sends it to gather what the job needs and bring it to the job's store, or to make what the store lacks at the workplace. Each plan is recomputed from beliefs at every step, so an emptied shelf or a shut door is met by the next thought. *(Amendment A-19.)* When nothing presses, its wants fill the hours: a curious mind goes to see places it knows a way to but has never stood in, and a mind that likes a material picks up what no one owns that is made of it, claims it, and keeps it at home. It never reaches for what it believes is someone else's.
+
 **The default.** Utility-based deterministic decision systems (the current engine's agents) remain the reference for the population at large — cheap, testable, tunable by rules. Model-backed minds are a *garnish for depth* (a named character's dialogue-driven choices, recorded as inputs), not the crowd's machinery. A thousand LLM wolves is a cost model and a replay problem; one LLM chancellor, recorded, is a feature.
 
 ---

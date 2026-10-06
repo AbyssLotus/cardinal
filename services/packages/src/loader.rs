@@ -12,8 +12,9 @@
 //! store by their published ids, and the loader simply enables both and seeds their facts,
 //! including the physical containment links that place organisms in regions.
 
-use crate::model::{Flag, MaterialProperty, WorldPackage};
+use crate::model::{Flag, JobWork, MaterialProperty, WorldPackage};
 use crate::version::Version;
+use economy::{EconomyConfig, EconomyDomain};
 use information::schema as info;
 use information::{InformationConfig, InformationDomain};
 use kernel::domain::Domain;
@@ -26,7 +27,10 @@ use kernel::system::{CommittedView, System};
 use kernel::tick::{run_tick, TickError};
 use kernel::time::SimClock;
 use kernel::value::Value;
-use living::schema::{BODY_HEAT, SIGHT_RANGE};
+use living::schema::{
+    BODY_HEAT, DEPENDENCE, FATIGUE, FULL, HEALTH, KIND_ABOVE, KIND_ARISES, KIND_EASE, KIND_HARM,
+    KIND_MET_BY, KIND_RISE, SIGHT_RANGE,
+};
 use living::{LivingConfig, LivingDomain};
 use minds::schema as mind;
 use minds::{MindRules, MindsConfig, MindsDomain};
@@ -38,6 +42,8 @@ use physical::schema::{
     POSITION, SOLID, TEMPERATURE, TERRAIN_SAMPLE, TERRAIN_SPACING, TRAVEL_SPEED, TRAVEL_TO,
 };
 use physical::{PhysicalConfig, PhysicalDomain};
+use resources::{ResourcesConfig, ResourcesDomain};
+use society::{SocietyConfig, SocietyDomain};
 use std::fmt;
 
 /// Why a world package could not be loaded.
@@ -59,6 +65,10 @@ pub enum LoadError {
     InformationRulesMissing,
     /// Minds were selected but the package supplied no `[rules.minds]` block.
     MindsRulesMissing,
+    /// Society was selected but the package supplied no `[rules.society]` block.
+    SocietyRulesMissing,
+    /// Resources was selected but the package supplied no `[rules.resources]` block.
+    ResourcesRulesMissing,
     /// A selected domain has no implementation wired into the loader yet.
     UnsupportedDomain(String),
     /// The package failed validation (Vol. IV Ch. 7 §7.1): every problem found, each naming its
@@ -85,6 +95,12 @@ impl fmt::Display for LoadError {
             ),
             LoadError::MindsRulesMissing => {
                 write!(f, "`minds` selected but no [rules.minds] provided")
+            }
+            LoadError::SocietyRulesMissing => {
+                write!(f, "`society` selected but no [rules.society] provided")
+            }
+            LoadError::ResourcesRulesMissing => {
+                write!(f, "`resources` selected but no [rules.resources] provided")
             }
             LoadError::UnsupportedDomain(d) => {
                 write!(f, "selected domain `{d}` is not implemented yet")
@@ -122,6 +138,11 @@ impl LoadedWorld {
     /// The committed reality store, for read-only inspection.
     pub fn store(&self) -> &MemoryStore {
         &self.store
+    }
+
+    /// The systems those domains contribute to every tick, for read-only inspection.
+    pub fn systems(&self) -> &[Box<dyn System>] {
+        &self.systems
     }
 
     /// Advance the loaded world by one tick under `seed`, appending to `chronicle`
@@ -168,6 +189,46 @@ pub fn living_config(package: &WorldPackage) -> Option<LivingConfig> {
         set_point_centi_c: rules.set_point_centi_c,
         warm_response_seconds: rules.warm_response_seconds,
         cold_response_seconds: rules.cold_response_seconds,
+        tire_per_hour: rules.tire_per_hour,
+        rest_per_hour: rules.rest_per_hour,
+        hypothermia_below_centi_c: rules.hypothermia_below_centi_c,
+        cold_harm_per_degree_hour: rules.cold_harm_per_degree_hour,
+        safe_fall_cm: rules.safe_fall_cm,
+        fall_harm_per_metre: rules.fall_harm_per_metre,
+        heal_per_hour: rules.heal_per_hour,
+        dependence_fade_per_day: rules.dependence_fade_per_day,
+        hunger_per_hour: rules.hunger_per_hour,
+        starving_above: rules.starving_above,
+        starving_harm_per_hour: rules.starving_harm_per_hour,
+    })
+}
+
+/// Resources' configuration a package declares — or `None` without `[rules.resources]`.
+pub fn resources_config(package: &WorldPackage) -> Option<ResourcesConfig> {
+    let r = package.resources_rules?;
+    Some(ResourcesConfig {
+        clock: SimClock::new(package.clock.tick_ms),
+        regrow_step_seconds: r.regrow_step_seconds,
+    })
+}
+
+/// Economy's configuration for a package: it has no tunable rules yet, only the world's clock
+/// (Amendment A-17).
+pub fn economy_config(package: &WorldPackage) -> EconomyConfig {
+    EconomyConfig {
+        clock: SimClock::new(package.clock.tick_ms),
+    }
+}
+
+/// Society's configuration a package declares, exactly as [`load`] configures it — or `None` if
+/// the package has no `[rules.society]`.
+pub fn society_config(package: &WorldPackage) -> Option<SocietyConfig> {
+    let r = package.society_rules?;
+    Some(SocietyConfig {
+        clock: SimClock::new(package.clock.tick_ms),
+        courtship_step_seconds: r.courtship_step_seconds,
+        bond_above: r.bond_above,
+        part_below: r.part_below,
     })
 }
 
@@ -185,6 +246,14 @@ pub fn minds_config(package: &WorldPackage) -> Option<MindsConfig> {
             hop_cost: r.hop_cost,
             routine_value: r.routine_value,
             switch_margin: r.switch_margin,
+            tired_above: r.tired_above,
+            rested_below: r.rested_below,
+            need_above: r.need_above,
+            need_weight: r.need_weight,
+            hungry_above: r.hungry_above,
+            work_value: r.work_value,
+            sleep_from_seconds: r.sleep_hours.0 * 3600,
+            sleep_to_seconds: r.sleep_hours.1 * 3600,
         },
     })
 }
@@ -197,6 +266,10 @@ pub fn information_config(package: &WorldPackage) -> Option<InformationConfig> {
         clock: SimClock::new(package.clock.tick_ms),
         perception_step_seconds: rules.perception_step_seconds,
         warmth_resolution_centi_c: rules.warmth_resolution_centi_c,
+        need_resolution: rules.need_resolution,
+        affection_step_seconds: rules.affection_step_seconds,
+        affection_per_hour: rules.affection_per_hour,
+        affection_fade_per_day: rules.affection_fade_per_day,
     })
 }
 
@@ -229,6 +302,7 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
         indoor_coupling_seconds: r.indoor_coupling_seconds,
         sight_step_seconds: r.sight_step_seconds,
         sight_min_illumination: r.sight_min_illumination,
+        carry_limit_kg: r.carry_limit_kg,
     }
 }
 
@@ -266,12 +340,18 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     let mut has_living = false;
     let mut has_information = false;
     let mut has_minds = false;
+    let mut has_society = false;
+    let mut has_resources = false;
+    let mut has_economy = false;
     for d in &package.manifest.domains {
         match d.as_str() {
             "physical" => has_physical = true,
             "living" => has_living = true,
             "information" => has_information = true,
             "minds" => has_minds = true,
+            "society" => has_society = true,
+            "resources" => has_resources = true,
+            "economy" => has_economy = true,
             other => return Err(LoadError::UnsupportedDomain(other.to_string())),
         }
     }
@@ -497,6 +577,22 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         );
     }
 
+    // The world begins with its light (Amendment A-16): each region lit as the sun stands at the
+    // first moment, so a world that opens at midnight opens dark, and nobody sees by a light
+    // that is not there.
+    let physical = physical_config(package);
+    for (region, light) in physical::systems::light_by_region(
+        &store,
+        physical.clock.ms_at(0),
+        physical.day_length_seconds.saturating_mul(1000),
+        physical.illumination_peak,
+    ) {
+        store.seed(
+            FactKey::new(region, physical::schema::ILLUMINATION),
+            seeded(Value::Int(light)),
+        );
+    }
+
     // 3b. Living Systems (optional): configured from package rules. Living reads organism
     //     containment and region temperature by id — no wiring between domains is needed.
     if has_living {
@@ -505,9 +601,53 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         systems.extend(living.systems());
         domains.push(Box::new(living));
         for o in &package.organisms {
+            let organism = EntityId::from_raw(o.id);
             store.seed(
-                FactKey::new(EntityId::from_raw(o.id), BODY_HEAT),
+                FactKey::new(organism, BODY_HEAT),
                 seeded(Value::Int(o.body_heat_centi_c)),
+            );
+            // Every organism begins in full health, and rested unless the package says it
+            // starts tired (Amendment A-10).
+            let tired = package
+                .fatigue
+                .iter()
+                .find(|(who, _)| *who == o.id)
+                .map_or(0, |(_, f)| *f);
+            store.seed(FactKey::new(organism, FATIGUE), seeded(Value::Int(tired)));
+            store.seed(FactKey::new(organism, HEALTH), seeded(Value::Int(FULL)));
+            let hungry = package
+                .hunger
+                .iter()
+                .find(|(who, _)| *who == o.id)
+                .map_or(0, |(_, h)| *h);
+            store.seed(
+                FactKey::new(organism, living::schema::HUNGER),
+                seeded(Value::Int(hungry)),
+            );
+        }
+        // The kinds of need that can arise, each an entity carrying its rules (Amendment A-11).
+        for k in &package.need_kinds {
+            let kind = EntityId::from_raw(k.id);
+            for (fact, v) in [
+                (KIND_ARISES, k.arises),
+                (KIND_MET_BY, k.met_by),
+                (KIND_RISE, k.rise),
+                (KIND_EASE, k.ease),
+                (KIND_HARM, k.harm),
+                (KIND_ABOVE, k.above),
+            ] {
+                store.seed(FactKey::new(kind, fact), seeded(Value::Int(v)));
+            }
+        }
+        // Dependences the world's people start with (Amendment A-13).
+        for &(organism, material, level) in &package.dependence {
+            store.seed(
+                FactKey::pair(
+                    EntityId::from_raw(organism),
+                    DEPENDENCE,
+                    EntityId::from_raw(material),
+                ),
+                seeded(Value::Int(level)),
             );
         }
         // Sensory capability is Living's (Amendment A-8).
@@ -516,6 +656,65 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 FactKey::new(EntityId::from_raw(organism), SIGHT_RANGE),
                 seeded(Value::Int(range)),
             );
+        }
+    }
+
+    // Deposits are seeded before anyone's starting knowledge, so a mind that knows a tree knows
+    // what it bears and how much (Amendment A-16).
+    if has_resources {
+        for d in &package.deposits {
+            let deposit = EntityId::from_raw(d.id);
+            let unit = resources::schema::UNIT;
+            for (fact, v) in [
+                (resources::schema::STOCK, Value::Int(d.stock * unit)),
+                (
+                    resources::schema::YIELD_MADE_OF,
+                    Value::Entity(EntityId::from_raw(d.made_of)),
+                ),
+                (resources::schema::YIELD_SIZE, Value::Vec3(d.size)),
+                (resources::schema::YIELD_PER_DAY, Value::Int(d.per_day)),
+                (resources::schema::YIELD_CAP, Value::Int(d.cap)),
+            ] {
+                store.seed(FactKey::new(deposit, fact), seeded(v));
+            }
+        }
+    }
+
+    // Recipes too, so a mind told of a recipe knows what it needs, makes, and where
+    // (Amendment A-18); and owners, so a mind told of a thing knows whose it is (Amendment A-19).
+    if has_economy {
+        for &(thing, owner) in &package.owners {
+            store.seed(
+                FactKey::new(EntityId::from_raw(thing), economy::schema::OWNER),
+                seeded(Value::Entity(EntityId::from_raw(owner))),
+            );
+        }
+        for r in &package.recipes {
+            let recipe = EntityId::from_raw(r.id);
+            for &(material, count) in &r.needs {
+                store.seed(
+                    FactKey::pair(
+                        recipe,
+                        economy::schema::RECIPE_NEEDS,
+                        EntityId::from_raw(material),
+                    ),
+                    seeded(Value::Int(count)),
+                );
+            }
+            for (fact, v) in [
+                (
+                    economy::schema::RECIPE_MAKES,
+                    Value::Entity(EntityId::from_raw(r.makes)),
+                ),
+                (economy::schema::RECIPE_SIZE, Value::Vec3(r.size)),
+                (
+                    economy::schema::RECIPE_AT,
+                    Value::Entity(EntityId::from_raw(r.at)),
+                ),
+                (economy::schema::RECIPE_TAKES, Value::Int(r.takes_seconds)),
+            ] {
+                store.seed(FactKey::new(recipe, fact), seeded(v));
+            }
         }
     }
 
@@ -545,6 +744,35 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 seeded(Value::Int(speed)),
             );
         }
+        // Wants (Amendment A-19): curiosity, likes, and a home.
+        for &(who, worth) in &package.curiosity {
+            store.seed(
+                FactKey::new(EntityId::from_raw(who), mind::CURIOSITY),
+                seeded(Value::Int(worth)),
+            );
+        }
+        for &(who, material, worth) in &package.likes {
+            store.seed(
+                FactKey::pair(
+                    EntityId::from_raw(who),
+                    mind::LIKES,
+                    EntityId::from_raw(material),
+                ),
+                seeded(Value::Int(worth)),
+            );
+        }
+        for &(who, place) in &package.home {
+            store.seed(
+                FactKey::new(EntityId::from_raw(who), mind::HOME),
+                seeded(Value::Entity(EntityId::from_raw(place))),
+            );
+        }
+        for &(who, [a, b, c]) in &package.temperament {
+            store.seed(
+                FactKey::new(EntityId::from_raw(who), mind::TEMPERAMENT),
+                seeded(Value::Vec3([a, b, c])),
+            );
+        }
         for &(who, from, to, target) in &package.routines {
             store.seed(
                 FactKey::pair(
@@ -553,6 +781,59 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                     EntityId::from_raw(target),
                 ),
                 seeded(Value::Vec3([from * 3600, to * 3600, 0])),
+            );
+        }
+    }
+
+    // 3f. Resources (optional; Amendment A-15): deposits that regrow and yield.
+    if has_resources {
+        let resources = ResourcesDomain::new(
+            resources_config(package).ok_or(LoadError::ResourcesRulesMissing)?,
+        );
+        systems.extend(resources.systems());
+        domains.push(Box::new(resources));
+    }
+
+    // 3g. Economy (optional; Amendment A-17): making what the recipes seeded above describe.
+    if has_economy {
+        let economy = EconomyDomain::new(economy_config(package));
+        systems.extend(economy.systems());
+        domains.push(Box::new(economy));
+    }
+
+    // 3e. Society (optional; Amendment A-11): bonds between persons.
+    if has_society {
+        let society =
+            SocietyDomain::new(society_config(package).ok_or(LoadError::SocietyRulesMissing)?);
+        systems.extend(society.systems());
+        domains.push(Box::new(society));
+        // Jobs and who holds them (Amendment A-18).
+        for job in &package.jobs {
+            let id = EntityId::from_raw(job.id);
+            let at = |raw: u64| Value::Entity(EntityId::from_raw(raw));
+            let mut facts = vec![
+                (society::schema::JOB_TO, at(job.to)),
+                (society::schema::JOB_KEEP, Value::Int(job.keep)),
+                (
+                    society::schema::JOB_HOURS,
+                    Value::Vec3([job.hours.0 * 3600, job.hours.1 * 3600, 0]),
+                ),
+            ];
+            match job.work {
+                JobWork::Carry { material, from } => {
+                    facts.push((society::schema::JOB_CARRIES, at(material)));
+                    facts.push((society::schema::JOB_FROM, at(from)));
+                }
+                JobWork::Make { recipe } => facts.push((society::schema::JOB_MAKES, at(recipe))),
+            }
+            for (fact, v) in facts {
+                store.seed(FactKey::new(id, fact), seeded(v));
+            }
+        }
+        for &(who, job) in &package.roles {
+            store.seed(
+                FactKey::new(EntityId::from_raw(who), society::schema::ROLE),
+                seeded(Value::Entity(EntityId::from_raw(job))),
             );
         }
     }
@@ -586,6 +867,45 @@ fn starting_knowledge(
     for thing in things.iter().map(|t| EntityId::from_raw(*t)) {
         if let Some(place) = read(thing, CONTAINED_IN) {
             out.push((FactKey::pair(mind, info::PLACE_OF, thing), place));
+        }
+        if let Some(held) = store
+            .read(FactKey::new(thing, resources::schema::STOCK))
+            .and_then(|f| f.value.as_int())
+        {
+            let units = Value::Int(held / resources::schema::UNIT);
+            out.push((FactKey::pair(mind, info::STOCK, thing), units));
+        }
+        for m in store.read_all(FactKey::new(thing, MADE_OF)) {
+            out.push((FactKey::pair(mind, info::MADE_OF, thing), m.value));
+            if let Value::Entity(material) = m.value {
+                if let Some(fed) = read(material, physical::schema::MATERIAL_NUTRITION) {
+                    out.push((FactKey::pair(mind, info::NUTRITION, material), fed));
+                }
+            }
+        }
+        if let Some(yields) = read(thing, resources::schema::YIELD_MADE_OF) {
+            out.push((FactKey::pair(mind, info::YIELDS, thing), yields));
+            if let Value::Entity(material) = yields {
+                if let Some(fed) = read(material, physical::schema::MATERIAL_NUTRITION) {
+                    out.push((FactKey::pair(mind, info::NUTRITION, material), fed));
+                }
+            }
+        }
+        if let Some(owner) = read(thing, economy::schema::OWNER) {
+            out.push((FactKey::pair(mind, info::OWNER, thing), owner));
+        }
+        if let Some(makes) = read(thing, economy::schema::RECIPE_MAKES) {
+            out.push((FactKey::pair(mind, info::RECIPE_MAKES, thing), makes));
+            if let Some(at) = read(thing, economy::schema::RECIPE_AT) {
+                out.push((FactKey::pair(mind, info::RECIPE_AT, thing), at));
+            }
+            for (material, count) in store.read_about(thing, economy::schema::RECIPE_NEEDS) {
+                let needs = [material.raw() as i64, count.value.as_int().unwrap_or(0), 0];
+                out.push((
+                    FactKey::pair(mind, info::RECIPE_NEEDS, thing),
+                    Value::Vec3(needs),
+                ));
+            }
         }
         if let Some(leads) = read(thing, LEADS_TO) {
             out.push((FactKey::pair(mind, info::LEADS_TO, thing), leads));
@@ -636,5 +956,9 @@ fn material_fact(property: MaterialProperty) -> FactType {
         MaterialProperty::Flammability => MATERIAL_FLAMMABILITY,
         MaterialProperty::Conductivity => MATERIAL_CONDUCTIVITY,
         MaterialProperty::Toxicity => MATERIAL_TOXICITY,
+        MaterialProperty::Edible => physical::schema::MATERIAL_EDIBLE,
+        MaterialProperty::Potency => physical::schema::MATERIAL_POTENCY,
+        MaterialProperty::Habit => physical::schema::MATERIAL_HABIT,
+        MaterialProperty::Nutrition => physical::schema::MATERIAL_NUTRITION,
     }
 }

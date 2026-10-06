@@ -111,6 +111,31 @@ Needs are measurements, never behaviors.
 
 A system elsewhere may translate a critical need into a goal. Living Systems only guarantees that the need exists, decays deterministically, and responds to satisfaction.
 
+*Amendment A-10.* The first needs beyond warmth:
+
+- **Fatigue** rises while an organism is awake and falls while it rests, each at a rate the world declares. **Resting** is an intent any decider may propose. Living Systems carries it out only for a body that is still; a body in motion is not resting, whatever it was asked.
+- **Health** is the continuous measure of being alive. It falls under harm and recovers slowly when nothing harms it. The first harms:
+  - cold: body heat below a line the world declares, per degree and hour;
+  - falls: each fall Physical Reality reports, per metre beyond a safe drop.
+
+  Each harm is applied here, by the owner, from facts others report (Appendix A, Ruling 9).
+- **Hunger** *(Amendment A-16)*.
+  - Hunger rises at a rate the world declares.
+  - Eating lowers it by the food's nutrition, a material property.
+  - Past a line the world declares it is starvation, and harms health.
+  - Like every need, it is a measurement. Finding food is a mind's business, and picking or
+    taking it is Physical Reality's.
+- **Needs that arise** *(Amendment A-11)*. Some needs are not there from the start. They come into being from what happens, and each is *about* something: Gwen's longing for Finn, Bob's craving for poppy. A world declares the **kinds** of such need, built from mechanisms the engine knows. Each kind sets:
+  - **what makes it arise:** a bond to someone (Society's), or a dependence on something (A-13);
+  - **what meets it:** that someone's presence (in the same place, or in view), or a dose of that something;
+  - **its rates:** how fast it grows while unmet, how fast it eases while met, and how much health it costs at its height.
+
+  A need of an arisen kind ends when what made it arise is gone.
+- **Dependence** *(Amendment A-13)*. Taking in a substance builds dependence on it, by as much as the substance is habit-forming (a property of the material, never its name). Dependence fades a little each day without it.
+  - **Craving.** A kind of need that arises from dependence comes into being once dependence passes the kind's line. It grows faster the deeper the dependence. Each dose eases it by the kind's measure. It ends when dependence falls back below the line.
+  - **Withdrawal.** Unmet, the craving harms as its kind declares. Nothing in the engine knows "poppy" or "drink"; it knows potency, habit, and dose.
+- **Death** is health reaching zero: an event in the chronicle, with its cause. It is not a flag. From then on the organism's metabolism, fatigue, and healing stop. Its senses go, and the travel it had asked for is cancelled. Its identity and history remain.
+
 ## Metabolism
 
 Metabolism is the transformation contract at the center of the domain:

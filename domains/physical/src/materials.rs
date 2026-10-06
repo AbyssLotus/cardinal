@@ -71,6 +71,35 @@ pub fn conductivity(view: &dyn CommittedView, material: EntityId) -> Option<i64>
     property(view, material, MATERIAL_CONDUCTIVITY)
 }
 
+/// How far a material can be taken into a body, 0..=10000 ([`crate::schema::MATERIAL_EDIBLE`]).
+pub fn edible(view: &dyn CommittedView, material: EntityId) -> Option<i64> {
+    property(view, material, crate::schema::MATERIAL_EDIBLE)
+}
+
+/// Whether `object` can be consumed: it is made of something, and everything it is made of is
+/// edible (Amendment A-12).
+pub fn is_edible(view: &dyn CommittedView, object: EntityId) -> bool {
+    let materials = materials_of(view, object);
+    !materials.is_empty()
+        && materials
+            .iter()
+            .all(|m| edible(view, *m).is_some_and(|e| e > 0))
+}
+
+/// What `object` weighs, in grams (Amendment A-12): its volume — a body's size is its half-width,
+/// half-depth, and height — times the density of the densest material it is made of, the same
+/// dominant-constituent estimate as thermal mass. `None` when the world does not know: it has no
+/// size, or is made of nothing with a density.
+pub fn weight_g(view: &dyn CommittedView, object: EntityId) -> Option<i64> {
+    let [hx, hy, h] = crate::index::size_of(view, object)?;
+    let density = materials_of(view, object)
+        .into_iter()
+        .filter_map(|m| density(view, m))
+        .max()?;
+    let volume_cm3 = (2 * hx as i128) * (2 * hy as i128) * h as i128;
+    Some((volume_cm3 * density as i128 / 1000).min(i64::MAX as i128) as i64)
+}
+
 /// A material's toxicity, 0..=10000 ([`crate::schema::MATERIAL_TOXICITY`]).
 pub fn toxicity(view: &dyn CommittedView, material: EntityId) -> Option<i64> {
     property(view, material, MATERIAL_TOXICITY)

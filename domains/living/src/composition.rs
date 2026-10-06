@@ -88,9 +88,11 @@ mod tests {
     }
 }
 
-/// Compose proposals for a declared capability such as sight range (Amendment A-8): one `Set`
-/// or `Create` replaces it, a `Tombstone` removes it (blindness), and two competing sets are a
-/// conflict. Capabilities are declared state today; nothing yet adjusts them by degrees.
+/// Compose proposals for a single-valued piece of state — a capability such as sight range
+/// (Amendment A-8), fatigue, health, or the rest intent (Amendment A-10): one `Set` or `Create`
+/// replaces it, a `Tombstone` removes it, and two competing sets are a conflict. Each of these
+/// has exactly one writer per organism per step — the system that owns its rule, or the decider
+/// whose intent it is.
 pub fn compose_capability(
     current: Option<Value>,
     changes: &[Change],
@@ -99,10 +101,10 @@ pub fn compose_capability(
         [] => current
             .map(Resolved::Write)
             .ok_or(ResolveError::new("no capability to keep")),
-        [Change::Set(v) | Change::Create(v)] if v.as_int().is_some() => Ok(Resolved::Write(*v)),
+        [Change::Set(v) | Change::Create(v)] => Ok(Resolved::Write(*v)),
         [Change::Tombstone] => Ok(Resolved::Tombstone),
         [_] => Err(ResolveError::new(
-            "a capability is set as an integer or removed",
+            "this state is set or removed, never adjusted",
         )),
         _ => Err(ResolveError::new(
             "competing capability proposals with no declared tie-break",

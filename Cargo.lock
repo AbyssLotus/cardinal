@@ -95,11 +95,14 @@ dependencies = [
 name = "packages"
 version = "0.0.0"
 dependencies = [
+ "economy",
  "information",
  "kernel",
  "living",
  "minds",
  "physical",
+ "resources",
+ "society",
 ]
 
 [[package]]
@@ -120,12 +123,15 @@ dependencies = [
 name = "reference"
 version = "0.0.0"
 dependencies = [
+ "economy",
  "information",
  "kernel",
  "living",
  "minds",
  "packages",
  "physical",
+ "resources",
+ "society",
 ]
 
 [[package]]

@@ -192,17 +192,50 @@ pub struct TickContext {
     tick: u64,
     seed: u64,
     system_code: u32,
+    // The system's place among all registered systems, sorted by id: its slot for new ids.
+    slot: u64,
+    // How many new ids it has taken this tick.
+    created: Cell<u64>,
 }
 
+/// The first id the kernel ever issues at run time (Amendment A-15). Authored worlds number their
+/// entities below it; everything created while the world runs is numbered above it.
+pub const RUNTIME_ID_FLOOR: u64 = 1 << 62;
+
+/// How many new ids one system may take in one tick.
+pub const IDS_PER_SYSTEM_PER_TICK: u64 = 1 << 14;
+
 impl TickContext {
-    /// Create a context for a system (identified by `system_code`) at `tick` under world
-    /// `seed`. Kernel-internal — only the tick loop builds contexts.
-    pub(crate) fn new(tick: u64, seed: u64, system_code: u32) -> Self {
+    /// Create a context for a system (identified by `system_code`, in `slot` among all systems
+    /// sorted by id) at `tick` under world `seed`. Kernel-internal — only the tick loop builds
+    /// contexts.
+    pub(crate) fn new(tick: u64, seed: u64, system_code: u32, slot: u64) -> Self {
         Self {
             tick,
             seed,
             system_code,
+            slot,
+            created: Cell::new(0),
         }
+    }
+
+    /// A new entity id, never issued before and never to be issued again (Amendment A-15; Vol. V
+    /// Ch. 2 §2.1, clause 4): `floor + tick·2²⁴ + slot·2¹⁴ + n`, the system's `n`th this tick.
+    /// Deterministic — the same system in the same world creates the same ids on every replay —
+    /// and disjoint between systems and ticks, so no two systems can ever collide.
+    ///
+    /// # Panics
+    ///
+    /// If one system asks for more than [`IDS_PER_SYSTEM_PER_TICK`] in a tick — a runaway, not a
+    /// world.
+    pub fn new_entity(&self) -> EntityId {
+        let n = self.created.get();
+        assert!(
+            n < IDS_PER_SYSTEM_PER_TICK && self.slot < 1 << 10,
+            "too many new entities from one system in one tick"
+        );
+        self.created.set(n + 1);
+        EntityId::from_raw(RUNTIME_ID_FLOOR + (self.tick << 24) + (self.slot << 14) + n)
     }
 
     /// The current tick — the one being computed.

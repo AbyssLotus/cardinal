@@ -120,8 +120,19 @@ reference engine is being built here, from the specification, in roadmap order
 - [x] Agents, first slice ([plan](docs/audits/agents.md)): facts about a pair (A-7); sight by
       daylight, beliefs, and memory (A-8); minds that choose from what they believe — warmth
       and routines — and act through intents (A-9)
-- [ ] Agents, next: needs beyond warmth, talking and rumour, model-backed minds as recorded
-      inputs
+- [x] Agents, needs: fatigue and rest, health harmed by cold and falls, death that stops the
+      body and mind (A-10)
+- [x] Needs that arise ([plan](docs/audits/needs-that-arise.md)): love that grows from time
+      together and the longing it brings (A-11); taking, carrying, and consuming things (A-12);
+      substances, dependence, craving, and withdrawal (A-13)
+- [x] Autonomous agents ([plan](docs/audits/autonomous-agents.md)): everyone acts unless
+      directed (A-14); things come into being, with deterministic runtime ids (A-15); hunger
+      (A-16); making things from recipes (A-17); jobs — the orchard round and the baking — and
+      sleep (A-18); wants — curiosity, and claiming and keeping things (A-19); a week in Ashford
+      with nobody directed, and nobody starving
+- [ ] Hardening, from the hostile audit: tick continuity, a sealed mutation path, multi-cause
+      provenance, adversarial and benchmark gates
+- [ ] Agents, next: talking and rumour, model-backed minds as recorded inputs
 - [ ] Persistence: chronicle tail + snapshots, two-road recovery (Vol. V Ch. 7)
 - [ ] Hybrid store hot tier; residency ladder; parallel evaluation (Vol. V Ch. 2, Ch. 5)
 - [ ] Presentation stream for clients (text narrator, 3D viewer) (Vol. V Ch. 5–6, Ch. 9)

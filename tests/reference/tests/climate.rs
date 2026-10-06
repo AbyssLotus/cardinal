@@ -15,7 +15,7 @@ use physical::schema::{
 };
 use physical::PhysicalDomain;
 use reference::id::*;
-use reference::{e, with_tick_seconds, City};
+use reference::{e, with_tick_seconds, without_minds, City};
 
 /// The climates Ashford declares that are open to the sky.
 const OUTDOOR: [u64; 3] = [VALE, HIGHMOOR, SOUTHFEN];
@@ -27,7 +27,7 @@ fn isolated(
     ticks: u64,
     mut each: impl FnMut(u64, &MemoryStore),
 ) -> MemoryStore {
-    let city = City::from(pkg.clone());
+    let city = City::from(without_minds(pkg.clone()));
     let mut store = city.store().clone();
     let domain = PhysicalDomain::new(packages::physical_config(&pkg));
     let domains: [&dyn Domain; 1] = [&domain];
@@ -128,7 +128,7 @@ fn a_decade_of_weather_stays_within_the_climate() {
     let mut pkg = with_tick_seconds(3_600);
     pkg.physical_rules.environment_step_seconds = 6 * 3_600;
     let start: Vec<i64> = {
-        let c = City::from(pkg.clone());
+        let c = City::from(without_minds(pkg.clone()));
         OUTDOOR.iter().map(|id| temp(c.store(), *id)).collect()
     };
     let mut worst = 0;
@@ -148,7 +148,7 @@ fn a_decade_of_weather_stays_within_the_climate() {
 
 #[test]
 fn weather_runs_on_climates_and_everything_else_inherits_it() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.run(60); // one environment step
     let s = city.store();
     // The weather has stepped on the declared climates...
@@ -192,7 +192,7 @@ fn weather_runs_on_climates_and_everything_else_inherits_it() {
 #[test]
 fn indoors_is_lit_only_through_its_openings() {
     // Ten-minute ticks; noon is tick 72.
-    let mut city = City::from(with_tick_seconds(600));
+    let mut city = City::from(without_minds(with_tick_seconds(600)));
     city.run(72);
     let light = |city: &City, id| city.int(id, ILLUMINATION).unwrap_or(0);
     assert_eq!(light(&city, VALE), 10_000, "full sun outdoors");
@@ -247,7 +247,7 @@ fn indoor_air_follows_the_outdoors_slowly_and_stone_slowest() {
 
 #[test]
 fn pressure_falls_with_height_and_the_wind_blows_toward_the_moor() {
-    let mut city = City::from(with_tick_seconds(600));
+    let mut city = City::from(without_minds(with_tick_seconds(600)));
     city.run(3);
     let p = |id| city.int(id, PRESSURE).unwrap();
     // 1 decapascal per metre: Southfen (5 m) > the Vale (50 m) > Highmoor (400 m).

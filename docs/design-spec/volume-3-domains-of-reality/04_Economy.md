@@ -87,6 +87,8 @@ holds  money.col × 312
 
 Holdings are relationships between owners and goods, with quantity. Every economic event is ultimately a rearrangement of holdings.
 
+*Amendment A-19.* The first holdings are owners of things. The world declares who owns what at the start. A thing no one owns can be *claimed*: a decider proposes it, and Economy grants it if the claimant carries the thing and no one owns it already (Appendix A, Ruling 18). Where a thing is and whose it is are separate facts. Carrying someone else's lamp does not make it yours.
+
 ## Transfer
 
 The atomic economic operation. Goods or money move from one holding to another, conservatively — nothing is created or destroyed by movement.
@@ -121,6 +123,18 @@ produces: item.bread × 4
 ```
 
 Recipes are world-package data. The engine guarantees only that production is conservative, deterministic, and consumes real inputs from real holdings.
+
+*Amendment A-17.* The first production is a maker at a workplace:
+
+```text
+recipe 900 (a pie)
+needs:  apple × 2, flour × 1      carried by the maker
+at:     the hearth                the maker stands where it is
+takes:  1 h                       the maker need not wait
+makes:  pie, 12 × 12 × 5 cm       into the maker's hand, or onto the hearth
+```
+
+A decider proposes *make this recipe*; Economy judges it (Appendix A, Ruling 17). The inputs leave the world when the making begins. The product arrives when the time has passed: in the maker's hand if they stand at the workplace, and otherwise at the workplace, set down in front of it. A maker has one thing in the making at a time. A request without the inputs, away from the workplace, or with something already in the making is refused, and the refusal recorded.
 
 ## Money
 

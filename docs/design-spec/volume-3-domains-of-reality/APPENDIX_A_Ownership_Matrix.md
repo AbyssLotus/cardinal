@@ -72,7 +72,9 @@ precedent: when a new boundary question arises, argue from them.
 | Food webs and carrying capacity | Ecology | Resources, Society |
 | Migration and succession (habitat) | Ecology | Physical Reality, Society |
 | Observation, knowledge, memory, belief (individual) | Information layer (Vol. II Ch. 4) | decision systems, all |
-| Goals, commitments, routines, decision traces (per mind) *(A-9)* | Decision systems (minds) | Information, observability |
+| Goals, commitments, routines, decision traces (per mind) *(A-9)*; temperament *(A-11)* | Decision systems (minds) | Information, observability |
+| Needs that arise, and their kinds (per organism, each about something) *(A-11)* | Living Systems | Information, decision systems |
+| Bonds between persons (lovers) *(A-11)* | Society | Living Systems, Information |
 | Events and the chronicle | Persistence/History (Vol. II Ch. 5) | all; tooling |
 
 Categories marked as world-package *data* (recipes, technique definitions, cultural
@@ -265,6 +267,93 @@ where to travel, what to open, which way to face.
 keeps the pipeline whole. A mind that read reality would walk to food it never saw, which is
 the omniscient familiar of Vol. V Ch. 9. Reading beliefs only, two minds in one reality can choose
 differently because they know different things.
+
+## Ruling 15 — Resting: deciders choose when, Living Systems decides whether
+
+*Amendment A-10 (2026-10).*
+
+**Dispute:** Fatigue is Living's, but lying down to rest is a choice. Who writes that an
+organism rests?
+
+**Decision:**
+- **The decider proposes.** A decision system (a player's validated action, an NPC's choice)
+  proposes a *rest* intent.
+- **Living Systems disposes.** It carries the intent out as recovery, and only for a body that
+  is still. A body that is travelling or falling does not rest, whatever it was asked.
+- **Harm follows the same pattern.** A fall is reported by Physical Reality. The cold is the
+  body's own heat. Both become harm to health only under Living Systems' rules (Ruling 9).
+
+**Reason:** Ruling 4 keeps biology from deciding; Ruling 13 keeps deciders from writing what
+others own. A mind may want to sleep while walking; its body does not sleep until it stops.
+
+## Ruling 16 — Handling: deciders choose what, Physical Reality decides whether
+
+*Amendment A-12 (2026-10).*
+
+**Dispute:** Picking something up, putting it down, and eating or drinking it change where a
+thing is, and whether it is anywhere at all. Who writes that?
+
+**Decision:** A decider proposes an intent: *take* this, *drop* that, *consume* this. Physical
+Reality alone carries it out, and only when the world allows:
+- **Take.** The thing must be within reach, and its weight must be known and bearable. The world
+  knows a thing's weight from what it is made of and how big it is. A person, made of nothing
+  the world declares, is not picked up.
+- **Drop.** What is dropped falls where the dropper stands.
+- **Consume.** Only what is carried, and only what is made of something a body can take in. The
+  thing then leaves the world, keeping its identity and history, and Physical reports what was
+  consumed. What a consumed thing does to a body is Living Systems' to judge from that report
+  (Ruling 9).
+
+*Amendment A-15:* the same holds for things coming into the world and leaving it:
+- **Arriving.** A domain that brings a thing into being — a picked apple, a baked pie — asks for it
+  to arrive, in a place or in someone's hand, or at a fixture such as a hearth, where it is set
+  down just in front of it (Amendment A-18).
+- **Leaving.** A domain that uses a thing up asks for it to leave.
+- **Picking** is an act like taking. Physical Reality carries it out within reach of a deposit
+  (a fruit tree, a seam), and reports it. What the picking yields is Resources' to judge from
+  that report.
+
+**Reason:** Ruling 13's pattern for a new kind of act. If a decider could write where a thing is,
+it would be a second authority on space. If the eater could make the thing vanish, matter would
+leave the world without Physical Reality knowing.
+
+---
+
+## Ruling 17 — Making: deciders choose what, Economy decides whether
+
+*Amendment A-17 (2026-10).*
+
+**Dispute:** Baking a pie uses up apples and flour and brings a pie into the world. Who judges
+that it happens, and who changes the world?
+
+**Decision:** A decider proposes an intent: *make* this recipe. Economy, which owns production,
+judges it: the maker must stand where the recipe's workplace is, carrying what the recipe needs,
+with nothing else in the making. Economy then asks Physical Reality for the inputs to leave the
+world, and, when the time in the making has passed, for the product to arrive (Ruling 16): in the
+maker's hand if they stand at the workplace, otherwise at the workplace itself. A request Economy cannot
+honour is refused, and the refusal recorded.
+
+**Reason:** Ruling 16's pattern again. Economy owns recipes and production (§4.4), so it is the
+one to judge them. Physical Reality still alone changes where things are, so making never
+becomes a second authority on space, and nothing is made from inputs that are not really there.
+
+## Ruling 18 — Claiming: deciders choose what, Economy decides whether
+
+*Amendment A-19 (2026-10).*
+
+**Dispute:** A person picks up a glass bottle no one owns and keeps it. Who decides that it is
+now theirs?
+
+**Decision:** A decider proposes an intent: *claim* this thing. Economy, which owns holdings,
+judges it. The claimant must carry the thing, and no one may own it already; then the claimant
+owns it. A claim on something already owned is refused, and the refusal recorded. Taking a thing
+is still Physical Reality's (Ruling 16), and taking does not make it yours. A mind does not take
+what it believes another owns. A player, directing someone, may, and Economy still records whose
+the thing is.
+
+**Reason:** Ruling 16's pattern again. Ownership is a holding, and holdings are Economy's
+(§4.4). Keeping where a thing is apart from whose it is lets theft exist without the engine
+pretending it cannot.
 
 ---
 

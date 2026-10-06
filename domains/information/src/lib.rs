@@ -31,6 +31,16 @@ pub struct InformationConfig {
     /// The least change of warmth, in centidegrees, a mind notices — of the air around it or of
     /// its own body.
     pub warmth_resolution_centi_c: i64,
+    /// The least change of fatigue or health, in hundredths of a percent, a mind notices
+    /// (Amendment A-10).
+    pub need_resolution: i64,
+    /// How often fondness grows or fades, in seconds of simulated time (Amendment A-11).
+    pub affection_step_seconds: u64,
+    /// Fondness gained per hour in another's sight, at full compatibility, in hundredths of a
+    /// percent.
+    pub affection_per_hour: i64,
+    /// Fondness lost per day out of another's sight.
+    pub affection_fade_per_day: i64,
 }
 
 /// The information layer, plugged into the kernel as the owner of observation, belief, and
@@ -56,7 +66,10 @@ impl Domain for InformationDomain {
     }
 
     fn cardinality(&self, fact_type: FactType) -> Cardinality {
-        if fact_type == schema::IN_SIGHT {
+        if fact_type == schema::IN_SIGHT
+            || fact_type == schema::MADE_OF
+            || fact_type == schema::RECIPE_NEEDS
+        {
             Cardinality::Many
         } else {
             Cardinality::One
@@ -65,10 +78,19 @@ impl Domain for InformationDomain {
 
     fn systems(&self) -> Vec<Box<dyn System>> {
         let c = self.config;
-        vec![Box::new(systems::Perception::new(
-            c.clock.step(c.perception_step_seconds.saturating_mul(1000)),
-            c.warmth_resolution_centi_c,
-        ))]
+        vec![
+            Box::new(systems::Perception::new(
+                c.clock.step(c.perception_step_seconds.saturating_mul(1000)),
+                c.warmth_resolution_centi_c,
+                c.need_resolution,
+            )),
+            // Fondness grows with time in each other's sight (Amendment A-11).
+            Box::new(systems::Fondness::new(
+                c.clock.step(c.affection_step_seconds.saturating_mul(1000)),
+                c.affection_per_hour,
+                c.affection_fade_per_day,
+            )),
+        ]
     }
 
     fn compose(
@@ -90,7 +112,8 @@ impl Domain for InformationDomain {
     }
 
     fn validate_many(&self, fact_type: FactType, values: &[Value]) -> Result<(), ValidationError> {
-        if fact_type == schema::IN_SIGHT && values.iter().any(|v| !matches!(v, Value::Entity(_))) {
+        let sets = fact_type == schema::IN_SIGHT || fact_type == schema::MADE_OF;
+        if sets && values.iter().any(|v| !matches!(v, Value::Entity(_))) {
             return Err(ValidationError::new("one watches things, not numbers"));
         }
         Ok(())

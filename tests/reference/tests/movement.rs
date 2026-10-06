@@ -25,7 +25,7 @@ fn door_open(city: &City, door: u64) -> bool {
 
 #[test]
 fn with_the_door_shut_the_cat_comes_in_the_window_and_lands_under_it() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     // Bob, standing by it in the kitchen, shuts the front door; both its faces swing to.
     city.close(BOB, DOOR_IN);
     city.run(2);
@@ -58,7 +58,7 @@ fn with_the_door_shut_the_cat_comes_in_the_window_and_lands_under_it() {
 
 #[test]
 fn two_people_cannot_squeeze_through_one_doorway_at_once() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     // Finn and Gwen are both on the doorstep, and both are asked in on the same tick.
     city.go(FINN, KITCHEN, 140).go(GWEN, KITCHEN, 140);
     city.run(2);
@@ -70,7 +70,7 @@ fn two_people_cannot_squeeze_through_one_doorway_at_once() {
 
 #[test]
 fn carol_walks_off_the_shed_roof_and_falls() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     assert_eq!(
         height_above_ground(city.store(), e(CAROL)),
         250,
@@ -88,7 +88,7 @@ fn carol_walks_off_the_shed_roof_and_falls() {
 
 #[test]
 fn nell_steps_off_the_boulder_onto_the_hillside() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.go(NELL, MARKER, 140);
     city.run_until(40, |c| !c.travelling(NELL));
     // Off the 3 m boulder at the first half-spacing leg, and down onto the slope there, which
@@ -105,7 +105,7 @@ fn nell_steps_off_the_boulder_onto_the_hillside() {
 
 #[test]
 fn the_wardrobe_does_not_fit_any_way_in_but_the_courier_does() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.go(WARDROBE, KITCHEN, 100).go(COURIER, KITCHEN, 140);
     city.run(10);
     // 1.2 m wide: wider than the door (90 cm), the window, and the bulkhead (1 m).
@@ -116,7 +116,7 @@ fn the_wardrobe_does_not_fit_any_way_in_but_the_courier_does() {
 
 #[test]
 fn bob_goes_upstairs_and_the_engine_knows_how_high_he_is() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.go(BOB, BEDROOM, 140);
     city.run_until(30, |c| !c.travelling(BOB));
     assert_eq!(city.room_of(BOB), BEDROOM);
@@ -134,7 +134,7 @@ fn bob_goes_upstairs_and_the_engine_knows_how_high_he_is() {
 
 #[test]
 fn bob_walks_round_the_kitchen_table_not_through_it() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     // First to the low window, then across the kitchen to the lamp — the table is in the way.
     city.go(BOB, WINDOW_IN, 140);
     city.run_until(20, |c| !c.travelling(BOB));
@@ -161,7 +161,7 @@ fn bob_walks_round_the_kitchen_table_not_through_it() {
 
 #[test]
 fn bob_steps_out_into_the_yard() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.go(BOB, YARD, 140);
     city.run_until(10, |c| !c.travelling(BOB));
     assert_eq!(city.room_of(BOB), YARD);
@@ -175,7 +175,7 @@ fn bob_steps_out_into_the_yard() {
 
 #[test]
 fn the_villager_walks_home_up_the_hill_and_the_ladder() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     let table = body_box(city.store(), e(COTTAGE_TABLE)).unwrap();
     city.go(VILLAGER, LOFT, 120);
     let mut entered_kitchen = false;
@@ -206,7 +206,7 @@ fn the_villager_walks_home_up_the_hill_and_the_ladder() {
 
 #[test]
 fn the_hiker_finds_the_pass_round_the_cliff() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.go(HIKER, CAIRN, 200);
     let mut furthest_north = 0;
     for _ in 0..120 {
@@ -229,7 +229,7 @@ fn the_hiker_finds_the_pass_round_the_cliff() {
 
 #[test]
 fn the_manor_vault_cannot_be_reached_but_its_undercroft_can() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.go(STEWARD, VAULT, 140);
     city.run(3);
     assert!(city.blocked(STEWARD), "no opening leads into the vault");
@@ -241,7 +241,7 @@ fn the_manor_vault_cannot_be_reached_but_its_undercroft_can() {
 
 #[test]
 fn a_door_out_of_reach_stays_as_it_is() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     // Alice is upstairs and Erin out in the yard: neither can reach the front door.
     city.close(ALICE, DOOR_IN).close(ERIN, DOOR_OUT);
     city.run(2);
@@ -257,7 +257,7 @@ fn a_door_out_of_reach_stays_as_it_is() {
 
 #[test]
 fn travel_that_can_never_happen_is_reported_blocked() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     // No speed given; and a shed, which does not move.
     city.go(ERIN, KITCHEN, 0).go(SHED, KITCHEN, 100);
     city.run(2);
@@ -294,7 +294,7 @@ impl System for Teleporter {
 
 #[test]
 fn nothing_but_physical_reality_moves_a_body() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.attach(Box::new(Teleporter));
     let err = city.try_run().expect_err("the kernel refuses the rogue");
     assert_eq!(
@@ -313,7 +313,7 @@ fn ids<I: IntoIterator<Item = kernel::identity::EntityId>>(set: I) -> Vec<u64> {
 
 #[test]
 fn the_undercroft_reaches_the_grounds_only_through_the_hall() {
-    let city = City::new();
+    let city = City::quiet();
     let s = city.store();
     // One flight of stairs leads out of the undercroft, and only to the hall...
     assert_eq!(ids(destinations(s, e(UNDERCROFT))), vec![HALL]);
@@ -364,7 +364,7 @@ impl System for Mason {
 
 #[test]
 fn where_an_opening_leads_decides_where_you_can_get_to() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.attach(Box::new(Mason));
     city.run(1);
     let s = city.store();

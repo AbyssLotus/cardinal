@@ -150,7 +150,8 @@ pub fn run_tick<S: RealityStore>(
         let view: &dyn CommittedView = &*store;
         for sys in &due {
             let scoped = ScopedView::new(view, sys.reads());
-            let ctx = TickContext::new(tick, seed, sys.id().code());
+            let slot = ids.iter().position(|id| *id == sys.id()).unwrap_or(0) as u64;
+            let ctx = TickContext::new(tick, seed, sys.id().code(), slot);
             let emitted = sys.evaluate(&scoped, &ctx);
             // An undeclared read taints the whole evaluation: the system may have acted on a
             // silently-empty view, so its proposals cannot be trusted (Vol. V Ch. 3 §3.5).

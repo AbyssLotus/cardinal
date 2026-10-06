@@ -10,12 +10,14 @@ use kernel::value::Value;
 use minds::schema::{AT, GOAL, REASON, REASON_ROUTINE, REASON_WARMTH, SCORE, STEP, STEP_APPROACH};
 use physical::schema::PORTAL_OPEN;
 use reference::id::*;
-use reference::{e, with_tick_seconds, City};
+use reference::{e, well_fed, with_tick_seconds, City};
 
-/// Ashford at ten-minute ticks on a still day — no weather, only the sun — so what the minds
-/// feel follows the day and nothing else.
+/// Ashford at ten-minute ticks on a still day — no weather, only the sun — well fed, and with no
+/// one curious or wanting anything, so what the minds feel follows the day and nothing else.
 fn still() -> packages::WorldPackage {
-    let mut pkg = with_tick_seconds(600);
+    let mut pkg = well_fed(with_tick_seconds(600));
+    pkg.curiosity.clear();
+    pkg.likes.clear();
     pkg.physical_rules.temperature_variability_centi_c = 0;
     pkg
 }
@@ -101,11 +103,14 @@ fn the_courier_shivers_in_the_yard_he_knows_no_better() {
 
 #[test]
 fn erin_opens_the_shut_door_that_stands_in_her_way() {
-    // Bob shuts the front door as the day begins. That night, cold, Erin makes for the kitchen;
-    // her way is shut, so she walks to the door, opens it, and goes in.
-    let mut city = City::from(still());
+    // Bob shuts the front door as the day begins — and it is a day off, so his baking does not
+    // take him out through it. That night, cold, Erin makes for the kitchen; her way is shut, so
+    // she walks to the door, opens it, and goes in.
+    let mut pkg = still();
+    pkg.roles.clear();
+    let mut city = City::from(pkg);
     city.close(BOB, DOOR_IN);
-    city.run(2);
+    city.run(3); // directed, then commanded, then the door swings to
     assert_eq!(city.read(DOOR_OUT, PORTAL_OPEN), Some(Value::Bool(false)));
     let mut approached = false;
     for _ in 0..36 * HOUR {

@@ -451,31 +451,44 @@ impl System for DayNightCycle {
         self.step.cadence()
     }
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
-        let sun = daylight(
-            self.clock.ms_at(ctx.tick()),
-            self.day_ms,
-            self.peak_illumination,
-        );
-        all_climates(view)
+        let at_ms = self.clock.ms_at(ctx.tick());
+        light_by_region(view, at_ms, self.day_ms, self.peak_illumination)
             .into_iter()
-            .map(|region| {
-                // Open ground takes the sun as its exposure allows; a sheltered room takes only
-                // what its openings let in (Amendment A-5).
-                let share = if is_sheltered(view, region) {
-                    daylight_fraction(view, region)
-                } else {
-                    exposure_of(view, region)
-                };
+            .map(|(region, light)| {
                 Proposal::new(
                     self.id(),
                     FactKey::new(region, ILLUMINATION),
                     ctx.basis_tick(),
-                    Change::Set(Value::Int(attenuate(sun, share))),
+                    Change::Set(Value::Int(light)),
                     Cause::new("solar_position"),
                 )
             })
             .collect()
     }
+}
+
+/// The daylight every region has at `at_ms` of simulated time, over a day of `day_ms` with
+/// `peak` at midday: what [`DayNightCycle`] sets each step, and what a world begins with, so the
+/// first tick of a night is dark (Amendment A-16). Open ground takes the sun as its exposure
+/// allows; a sheltered room takes only what its openings let in (Amendment A-5).
+pub fn light_by_region(
+    view: &dyn CommittedView,
+    at_ms: u64,
+    day_ms: u64,
+    peak: i64,
+) -> Vec<(EntityId, i64)> {
+    let sun = daylight(at_ms, day_ms, peak);
+    all_climates(view)
+        .into_iter()
+        .map(|region| {
+            let share = if is_sheltered(view, region) {
+                daylight_fraction(view, region)
+            } else {
+                exposure_of(view, region)
+            };
+            (region, attenuate(sun, share))
+        })
+        .collect()
 }
 
 /// Weather driving humidity: each region's humidity is its baseline plus a mean-reverting

@@ -16,3 +16,6 @@ physical.workspace = true
 living.workspace = true
 information.workspace = true
 minds.workspace = true
+society.workspace = true
+resources.workspace = true
+economy.workspace = true
