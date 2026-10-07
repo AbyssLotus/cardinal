@@ -86,6 +86,9 @@ pub struct WorldPackage {
     pub fires: Vec<(u64, i64, bool)>,
     /// Storms the world declares (Amendment A-29): `(region, from hour, hours, wind cm/s)`.
     pub storms: Vec<(u64, i64, i64, i64)>,
+    /// Places' latitudes, where they differ from the world's (Amendment A-34): `(place,
+    /// hundredths of a degree north)`.
+    pub latitudes: Vec<(u64, i64)>,
     /// What each mind knows at the start (Amendment A-8; Vol. IV Ch. 5): `(mind, things)`.
     /// For each thing, where it is; for an opening, also where it leads and whether it is open;
     /// for a place, also how warm its air is.
@@ -413,6 +416,24 @@ pub struct PhysicalRules {
     pub gale_below: i64,
     /// How much wind, cm/s, each decapascal deeper brings.
     pub gale_per_decapascal: i64,
+    /// How many days a year lasts (Amendment A-34); zero, no year and no seasons.
+    pub year_days: u64,
+    /// How many days after the spring equinox the world begins.
+    pub start_day: u64,
+    /// The latitude of every place that declares none, hundredths of a degree north.
+    pub latitude_centi_deg: i64,
+    /// How far north and south of the equator the sun travels over the year, hundredths of a degree.
+    pub axial_tilt_centi_deg: i64,
+    /// Half the difference between midsummer's and midwinter's normal temperature, centidegrees.
+    pub seasonal_amplitude_centi_c: i64,
+    /// How many days the year's warmest and coldest lag midsummer and midwinter.
+    pub seasonal_lag_days: u64,
+    /// How long the moon's month lasts, in seconds; zero, no moon.
+    pub lunar_month_seconds: u64,
+    /// The moon's phase when the world begins, hundredths of a percent of its month: 0 new, 5000 full.
+    pub moon_phase_at_start: i64,
+    /// The light of a full moon overhead, hundredths of a percent of full daylight.
+    pub moonlight_peak: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).

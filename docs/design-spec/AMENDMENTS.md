@@ -1203,3 +1203,52 @@ soldiers are repairing").
 
 **Rationale.** A-29's "not yet": light, loose things blown about, and weather that brews its own
 storms.
+
+---
+
+## A-34 — The calendar: seasons, the sun's year, and the moon (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 (*Time and Change*: sunrise, sunset, and seasons built; the moon)
+- Vol. IV Ch. 2 §2.2 (world rules: the year, latitude, tilt, seasons, the moon)
+- Vol. IV (the world package: `[latitude]`)
+
+**Change.**
+- **The year** (world rules). A world declares how many days its year lasts (`year_days`; zero
+  means no year) and how many days after the spring equinox it begins (`start_day`). The sun's
+  declination follows the year as a sine of the world's axial tilt.
+- **Latitude** (Physical; world data). How far north a place lies, in hundredths of a degree. A
+  place declares one in `[latitude]` or inherits it down the nesting; else it lies at the world's.
+- **The sun.** Its height is `sin h = sin φ sin δ + cos φ cos δ cos(hour angle)`. Open ground is
+  lit at the world's peak times that height while the sun is up. So days lengthen toward
+  midsummer and shorten toward midwinter, noon stands lower in winter, and the far north has
+  midnight sun and polar night. With no year, at latitude zero, this is exactly the day the
+  engine had before.
+- **The seasons' warmth** (Physical). Every climate open to the sky warms toward midsummer and
+  cools toward midwinter by the world's `seasonal_amplitude_centi_c`, warmest
+  `seasonal_lag_days` after midsummer. It is reversed south of the equator, and damped by exposure
+  and thermal mass as the day's swing is. Like the day's swing, each step proposes the change in
+  the seasonal level, so it is exact at any tick length. A region's declared temperature is its
+  air on the world's first day.
+- **The moon.** A month of `lunar_month_seconds`; zero means no moon. It begins at
+  `moon_phase_at_start`. Its light at night is the world's `moonlight_peak` times how much of it
+  is lit times its height. It rises later each night, and a full moon stands opposite the sun.
+
+**In Ashford** (52° north, a 365-day year, beginning a month after the spring equinox, at new
+moon; `tests/reference/tests/climate.rs`):
+- The noon sun stands 49.6° high and lights open ground at 76% of its peak; the rooms by their
+  openings, in proportion.
+- The first day has fourteen hours of daylight; midsummer, two months on, sixteen and a half.
+- A year of seasons warms the Vale 7 °C by three months in and cools it 7 °C below its start by
+  nine; granite Highmoor answers less; a year on, both are back where they began. The same at
+  hour ticks and ten-minute ticks, exactly.
+- Under a full moon at midnight Erin can make out the apple tree across the yard; under the new
+  moon she cannot.
+- Dawn comes just before five: the hungry courier sets off for the tree an hour earlier than he
+  did when every day was an equinox.
+
+**Found:** a body lying down still sees. Before, dawn and the end of the sleeping hours fell
+together; now a late-April dawn shows a resting mind what it wants, and it gets up. That belongs
+with perception and is left to it.
+
+**Rationale.** `docs/audits/environment.md` §4, slice 1.

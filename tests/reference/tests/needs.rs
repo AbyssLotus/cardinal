@@ -238,8 +238,10 @@ fn sleeps(city: &mut City, who: u64, ticks: u64) -> Vec<(u64, bool, Cause)> {
 #[test]
 fn erin_sleeps_the_night_and_gets_up_at_six() {
     // She begins the night rested; within the sleeping hours, once a little tired, she lies down,
-    // and stays down until the hours end, rested.
-    let mut city = ashford(600, |_| {});
+    // and stays down until the hours end, rested. At the spring equinox, so first light comes as
+    // the sleeping hours end (Amendment A-34): by a later spring's dawn she would wake to what the
+    // light shows her.
+    let mut city = ashford(600, |p| p.physical_rules.start_day = 0);
     let rests = sleeps(&mut city, ERIN, 18 * HOUR);
     assert!(rests.len() >= 2, "{rests:?}");
     let (down, true, ref why) = rests[0] else {

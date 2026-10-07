@@ -36,6 +36,7 @@
 //! left" are all answerable without a write per tick.
 
 pub mod act;
+pub mod calendar;
 pub mod climate;
 pub mod composition;
 pub mod fire;
@@ -149,6 +150,8 @@ pub struct PhysicalConfig {
     pub wind: wind::WindRules,
     /// How a deep low brews a gale (Amendment A-33).
     pub gale: systems::Gale,
+    /// The world's year, its latitude, and its moon (Amendment A-34).
+    pub calendar: calendar::Calendar,
 }
 
 impl PhysicalConfig {
@@ -237,6 +240,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::WIND_TOWARD
             || fact_type == schema::ELEVATION
             || fact_type == schema::EXPOSURE
+            || fact_type == schema::LATITUDE
             || fact_type == schema::POSITION
             || fact_type == schema::BODY_SIZE
             || fact_type == schema::HEADING
@@ -358,8 +362,15 @@ impl Domain for PhysicalDomain {
             Box::new(systems::DayNightCycle::new(
                 c.clock,
                 step,
-                day_ms,
+                c.calendar,
                 c.illumination_peak,
+            )),
+            // The seasons' share of the temperature (Amendment A-34).
+            Box::new(systems::Seasons::new(
+                c.clock,
+                step,
+                c.calendar,
+                c.thermal_mass_reference,
             )),
             Box::new(systems::Precipitation::new(
                 step,
@@ -480,6 +491,8 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::EXPOSURE
         {
             composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
+        } else if fact_type == schema::LATITUDE {
+            composition::compose_bounded(current, changes, -9_000, 9_000)
         } else if fact_type == schema::PORTAL_DANGER || fact_type == schema::PORTAL_DANGER_OVERRIDE
         {
             composition::compose_bounded(current, changes, 0, schema::MAX_DANGER)

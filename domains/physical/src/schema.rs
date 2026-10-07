@@ -129,6 +129,11 @@ pub const PORTAL_DANGER_OVERRIDE: FactType = FactType::new("physical.space.porta
 /// darkness. A location with no exposure fact is treated as fully exposed.
 pub const EXPOSURE: FactType = FactType::new("physical.space.exposure");
 
+/// How far north of the equator a place lies, in hundredths of a degree (negative is south;
+/// Amendment A-34): how high the sun stands there, and when the seasons fall. World data,
+/// inherited down the nesting; a place with none lies at the world's latitude.
+pub const LATITUDE: FactType = FactType::new("physical.space.latitude");
+
 // ---- Constraints, ground, and travel (Vol. III Ch. 1 §1.11; Amendment A-4) --------------
 
 /// Whether a body is **solid**: nothing may pass through it or stand inside it (Vol. III Ch. 1

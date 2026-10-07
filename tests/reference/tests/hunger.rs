@@ -83,9 +83,10 @@ fn with_nothing_to_eat_hunger_starves() {
 #[test]
 fn what_one_has_never_seen_one_cannot_go_for() {
     // The courier is hungry from midnight, but has never seen the tree: in the dark he has no idea
-    // there is food in the yard. At dawn he sees it, and goes.
+    // there is food in the yard. At dawn he sees it, and goes. Ashford's late-April sun rises just
+    // before five (Amendment A-34).
     let mut city = still(|p| p.hunger.push((COURIER, 5_000)));
     let (when, target) = first_meal(&mut city, COURIER, 12 * HOUR).expect("he found it");
     assert_eq!(target, TREE);
-    assert!(when >= 6 * HOUR, "not before dawn: hour {}", when / HOUR);
+    assert!(when >= 5 * HOUR, "not before dawn: hour {}", when / HOUR);
 }

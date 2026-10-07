@@ -112,7 +112,17 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut wind_carry_cm_per_hour: Option<i64> = None;
     let mut gale_below: Option<i64> = None;
     let mut gale_per_decapascal: Option<i64> = None;
+    let mut year_days: Option<u64> = None;
+    let mut start_day: Option<u64> = None;
+    let mut latitude_centi_deg: Option<i64> = None;
+    let mut axial_tilt_centi_deg: Option<i64> = None;
+    let mut seasonal_amplitude_centi_c: Option<i64> = None;
+    let mut seasonal_lag_days: Option<u64> = None;
+    let mut lunar_month_seconds: Option<u64> = None;
+    let mut moon_phase_at_start: Option<i64> = None;
+    let mut moonlight_peak: Option<i64> = None;
     let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
+    let mut latitudes: Vec<(u64, i64)> = Vec::new();
     let mut burn_harm: Option<i64> = None;
     let mut smoke_harm: Option<i64> = None;
     let mut fire_warmth_per_hour: Option<i64> = None;
@@ -355,6 +365,17 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 }
                 "gale_below" => gale_below = Some(parse_num(value, line_no)?),
                 "gale_per_decapascal" => gale_per_decapascal = Some(parse_num(value, line_no)?),
+                "year_days" => year_days = Some(parse_num(value, line_no)?),
+                "start_day" => start_day = Some(parse_num(value, line_no)?),
+                "latitude_centi_deg" => latitude_centi_deg = Some(parse_num(value, line_no)?),
+                "axial_tilt_centi_deg" => axial_tilt_centi_deg = Some(parse_num(value, line_no)?),
+                "seasonal_amplitude_centi_c" => {
+                    seasonal_amplitude_centi_c = Some(parse_num(value, line_no)?)
+                }
+                "seasonal_lag_days" => seasonal_lag_days = Some(parse_num(value, line_no)?),
+                "lunar_month_seconds" => lunar_month_seconds = Some(parse_num(value, line_no)?),
+                "moon_phase_at_start" => moon_phase_at_start = Some(parse_num(value, line_no)?),
+                "moonlight_peak" => moonlight_peak = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -603,6 +624,18 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "strength" => {
                 let organism: u64 = parse_num(key, line_no)?;
                 strength.push((organism, parse_num(value, line_no)?));
+            }
+            "latitude" => {
+                // place = hundredths of a degree north (Amendment A-34)
+                let place: u64 = parse_num(key, line_no)?;
+                let latitude: i64 = parse_num(value, line_no)?;
+                if !(-9_000..=9_000).contains(&latitude) {
+                    return Err(ParseError::at(
+                        line_no,
+                        "a latitude lies between the poles, -9000 to 9000",
+                    ));
+                }
+                latitudes.push((place, latitude));
             }
             "storms" => {
                 // region = from hour, hours, wind cm/s
@@ -962,6 +995,18 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         )?,
         gale_below: require(gale_below, "rules.physical.gale_below")?,
         gale_per_decapascal: require(gale_per_decapascal, "rules.physical.gale_per_decapascal")?,
+        year_days: require(year_days, "rules.physical.year_days")?,
+        start_day: require(start_day, "rules.physical.start_day")?,
+        latitude_centi_deg: require(latitude_centi_deg, "rules.physical.latitude_centi_deg")?,
+        axial_tilt_centi_deg: require(axial_tilt_centi_deg, "rules.physical.axial_tilt_centi_deg")?,
+        seasonal_amplitude_centi_c: require(
+            seasonal_amplitude_centi_c,
+            "rules.physical.seasonal_amplitude_centi_c",
+        )?,
+        seasonal_lag_days: require(seasonal_lag_days, "rules.physical.seasonal_lag_days")?,
+        lunar_month_seconds: require(lunar_month_seconds, "rules.physical.lunar_month_seconds")?,
+        moon_phase_at_start: require(moon_phase_at_start, "rules.physical.moon_phase_at_start")?,
+        moonlight_peak: require(moonlight_peak, "rules.physical.moonlight_peak")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -1111,6 +1156,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         strength,
         fires,
         storms,
+        latitudes,
         knows,
         minds,
         temperament,
@@ -1676,6 +1722,15 @@ wind_hold_per_kg = 100
 wind_carry_cm_per_hour = 20000
 gale_below = 400
 gale_per_decapascal = 50
+year_days = 0
+start_day = 0
+latitude_centi_deg = 0
+axial_tilt_centi_deg = 0
+seasonal_amplitude_centi_c = 0
+seasonal_lag_days = 0
+lunar_month_seconds = 0
+moon_phase_at_start = 0
+moonlight_peak = 0
 [regions]
 1 = 1500
 ";

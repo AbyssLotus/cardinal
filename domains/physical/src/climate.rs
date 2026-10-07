@@ -124,3 +124,9 @@ pub fn daylight_fraction(view: &dyn CommittedView, room: EntityId) -> i64 {
     }
     ((lit * PERCENT_FULL as i128) / floor).clamp(0, PERCENT_FULL as i128) as i64
 }
+
+/// How far north `place` lies, in hundredths of a degree (Amendment A-34): its own latitude, or
+/// the nearest enclosing place's, or the world's `default`.
+pub fn latitude_of(view: &dyn CommittedView, place: EntityId, default: i64) -> i64 {
+    ambient(view, place, crate::schema::LATITUDE).map_or(default, |(_, l)| l)
+}

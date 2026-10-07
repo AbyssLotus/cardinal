@@ -76,6 +76,8 @@ const WEATHER_READS: &[FactType] = &[
 const WEATHER_WRITES: &[FactType] = &[TEMPERATURE, TEMPERATURE_ANOMALY];
 const ILLUMINATION_READS: &[FactType] = &[
     TEMPERATURE,
+    crate::schema::LATITUDE,
+    CONTAINED_IN,
     EXPOSURE,
     ENCLOSED,
     HAS_PORTAL,
@@ -134,20 +136,6 @@ const DANGER_WRITES: &[FactType] = &[PORTAL_DANGER];
 /// tick length (Amendment A-1). Systems that add to a field propose the *difference* between
 /// the wave at the two ends of their step, so summed deltas telescope back to the wave itself;
 /// systems that set an absolute level (the sun) use the level directly.
-/// The sun's light at simulated time `at_ms`, in `0..=peak`: its height in the sky — a cosine
-/// over the day, lowest at midnight and highest at noon — wherever it is above the horizon, and
-/// nothing between sunset (a quarter-day before midnight) and sunrise (a quarter-day after).
-/// Simulated time, not ticks, so the same at any tick length (Amendment A-1); fixed-point, so
-/// the same on every platform.
-fn daylight(at_ms: u64, day_ms: u64, peak: i64) -> i64 {
-    let day = day_ms.max(1) as i128;
-    let phase = (at_ms as i128).rem_euclid(day);
-    let angle = (phase * kernel::fixed::FULL_TURN as i128 / day) as i64;
-    let (_, cos) = kernel::fixed::sin_cos(angle);
-    let height = (-cos).max(0) as i128;
-    (peak as i128 * height / kernel::fixed::TRIG_ONE as i128) as i64
-}
-
 fn wave(at_ms: u64, period_ms: u64, amp: i64) -> i64 {
     let period = period_ms.max(2) as i128;
     let phase = (at_ms as i128).rem_euclid(period);
@@ -422,25 +410,120 @@ impl System for TemperatureWeather {
     }
 }
 
+/// The seasons' share of temperature (Vol. III Ch. 1 §1.10, *Time and Change*; Amendment A-34):
+/// every climate open to the sky warms toward midsummer and cools toward midwinter, a lag
+/// behind the sun, by the world's declared swing — damped, like the day's, by exposure and
+/// thermal mass. Each step proposes the change in the damped seasonal level between its start
+/// and end, so the steps telescope to exactly the season's level at any tick length (as for
+/// [`DiurnalCycle`]). A region's declared temperature is its air on the world's first day; the
+/// seasons move it from there. A world with no year has no seasons, and this proposes nothing.
+pub struct Seasons {
+    clock: SimClock,
+    step: Step,
+    calendar: crate::calendar::Calendar,
+    thermal_mass_reference: i64,
+}
+
+impl Seasons {
+    /// The seasons `calendar` gives, stepping as `step` says; `thermal_mass_reference` as for the
+    /// day/night swing.
+    pub const fn new(
+        clock: SimClock,
+        step: Step,
+        calendar: crate::calendar::Calendar,
+        thermal_mass_reference: i64,
+    ) -> Self {
+        Self {
+            clock,
+            step,
+            calendar,
+            thermal_mass_reference,
+        }
+    }
+}
+
+const SEASONS_READS: &[FactType] = &[
+    TEMPERATURE,
+    EXPOSURE,
+    ENCLOSED,
+    MADE_OF,
+    MATERIAL_DENSITY,
+    MATERIAL_THERMAL_CAPACITY,
+    crate::schema::LATITUDE,
+    CONTAINED_IN,
+];
+
+impl System for Seasons {
+    fn id(&self) -> SystemId {
+        SystemId::new("physical.seasons")
+    }
+    fn reads(&self) -> &'static [FactType] {
+        SEASONS_READS
+    }
+    fn writes(&self) -> &'static [FactType] {
+        TEMPERATURE_W
+    }
+    fn cadence(&self) -> Cadence {
+        self.step.cadence()
+    }
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+        if self.calendar.year_days == 0 {
+            return Vec::new();
+        }
+        let now = self.clock.ms_at(ctx.tick());
+        let then = self.clock.ms_at(self.step.start_of(ctx.tick()));
+        let mut out = Vec::new();
+        for region in regions(view) {
+            let latitude = crate::climate::latitude_of(view, region, self.calendar.latitude);
+            let exposure = exposure_of(view, region);
+            let mass = thermal_damping(view, region, self.thermal_mass_reference);
+            let damped = |at| {
+                attenuate(
+                    attenuate(self.calendar.seasonal(at, latitude), exposure),
+                    mass,
+                )
+            };
+            let delta = damped(now) - damped(then);
+            if delta != 0 {
+                out.push(Proposal::new(
+                    self.id(),
+                    FactKey::new(region, TEMPERATURE),
+                    ctx.basis_tick(),
+                    Change::Delta(delta),
+                    Cause::new("season"),
+                ));
+            }
+        }
+        out
+    }
+}
+
 /// The sun crossing the sky: illumination set to its absolute level for the moment, following
-/// the sun's height — full at midday, falling to nothing at sunset, and dark all night until
-/// sunrise (Vol. III Ch. 1 §1.10, Time and Change; Amendment A-8), for every region.
-/// The sun's position is a pure function of simulated time; exposure scales it so a sealed cave
-/// stays dark even at noon.
+/// the sun's height — highest at noon, falling to nothing at sunset, and dark until sunrise but
+/// for the moon (Vol. III Ch. 1 §1.10, Time and Change; Amendments A-8, A-34), for every region.
+/// How high the sun stands, and how long it is up, follow the season and the region's latitude
+/// ([`crate::calendar`]). The sky is a pure function of simulated time; exposure scales it so a
+/// sealed cave stays dark even at noon.
 pub struct DayNightCycle {
     clock: SimClock,
     step: Step,
-    day_ms: u64,
+    calendar: crate::calendar::Calendar,
     peak_illumination: i64,
 }
 
 impl DayNightCycle {
-    /// Light each region up to `peak_illumination` at midday, over a day of `day_ms`.
-    pub const fn new(clock: SimClock, step: Step, day_ms: u64, peak_illumination: i64) -> Self {
+    /// Light each region by the sky `calendar` gives, up to `peak_illumination` with the sun
+    /// overhead.
+    pub const fn new(
+        clock: SimClock,
+        step: Step,
+        calendar: crate::calendar::Calendar,
+        peak_illumination: i64,
+    ) -> Self {
         Self {
             clock,
             step,
-            day_ms,
+            calendar,
             peak_illumination,
         }
     }
@@ -461,7 +544,7 @@ impl System for DayNightCycle {
     }
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let at_ms = self.clock.ms_at(ctx.tick());
-        light_by_region(view, at_ms, self.day_ms, self.peak_illumination)
+        light_by_region(view, at_ms, &self.calendar, self.peak_illumination)
             .into_iter()
             .map(|(region, light)| {
                 Proposal::new(
@@ -476,26 +559,28 @@ impl System for DayNightCycle {
     }
 }
 
-/// The daylight every region has at `at_ms` of simulated time, over a day of `day_ms` with
-/// `peak` at midday: what [`DayNightCycle`] sets each step, and what a world begins with, so the
-/// first tick of a night is dark (Amendment A-16). Open ground takes the sun as its exposure
-/// allows; a sheltered room takes only what its openings let in (Amendment A-5).
+/// The light every region has at `at_ms` of simulated time under the sky `calendar` gives,
+/// `peak` with the sun overhead: what [`DayNightCycle`] sets each step, and what a world begins
+/// with, so the first tick of a night is dark (Amendment A-16). Open ground takes the sky as its
+/// exposure allows; a sheltered room takes only what its openings let in (Amendment A-5). Each
+/// region sees the sky from its own latitude (Amendment A-34).
 pub fn light_by_region(
     view: &dyn CommittedView,
     at_ms: u64,
-    day_ms: u64,
+    calendar: &crate::calendar::Calendar,
     peak: i64,
 ) -> Vec<(EntityId, i64)> {
-    let sun = daylight(at_ms, day_ms, peak);
     all_climates(view)
         .into_iter()
         .map(|region| {
+            let latitude = crate::climate::latitude_of(view, region, calendar.latitude);
+            let sky = calendar.sky_light(at_ms, latitude, peak);
             let share = if is_sheltered(view, region) {
                 daylight_fraction(view, region)
             } else {
                 exposure_of(view, region)
             };
-            (region, attenuate(sun, share))
+            (region, attenuate(sky, share))
         })
         .collect()
 }

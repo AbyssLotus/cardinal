@@ -393,6 +393,18 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             below: r.gale_below,
             per_decapascal: r.gale_per_decapascal,
         },
+        calendar: physical::calendar::Calendar {
+            day_ms: package.clock.day_seconds.saturating_mul(1000),
+            year_days: r.year_days,
+            start_day: r.start_day,
+            tilt: r.axial_tilt_centi_deg,
+            latitude: r.latitude_centi_deg,
+            seasonal_amplitude_centi_c: r.seasonal_amplitude_centi_c,
+            seasonal_lag_days: r.seasonal_lag_days,
+            lunar_month_ms: r.lunar_month_seconds.saturating_mul(1000),
+            moon_phase_at_start: r.moon_phase_at_start,
+            moonlight_peak: r.moonlight_peak,
+        },
     }
 }
 
@@ -707,6 +719,14 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         );
     }
 
+    // Latitudes, where a place's differs from the world's (Amendment A-34).
+    for &(place, latitude) in &package.latitudes {
+        store.seed(
+            FactKey::new(EntityId::from_raw(place), physical::schema::LATITUDE),
+            seeded(Value::Int(latitude)),
+        );
+    }
+
     // Fires burning at the start (Amendment A-28).
     for &(thing, fierce, kept) in &package.fires {
         let thing = EntityId::from_raw(thing);
@@ -729,7 +749,7 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     for (region, light) in physical::systems::light_by_region(
         &store,
         physical.clock.ms_at(0),
-        physical.day_length_seconds.saturating_mul(1000),
+        &physical.calendar,
         physical.illumination_peak,
     ) {
         store.seed(

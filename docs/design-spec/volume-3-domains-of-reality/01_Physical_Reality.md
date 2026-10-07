@@ -702,6 +702,8 @@ The Physical Reality domain should therefore avoid assuming fixed update rates o
 
 Instead it provides the shared context upon which specialized systems operate.
 
+*As built (Amendment A-34):* a world may declare a year, a latitude, and a moon. The sun's height follows the season and the place's latitude, so days lengthen toward midsummer, noon stands lower in winter, and the far north has midnight sun. Every climate open to the sky warms and cools with the seasons, a lag behind the sun. A moon with phases lights the night by the world's measure.
+
 ---
 
 # 1.11 Physical Constraints

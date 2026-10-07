@@ -1,7 +1,7 @@
 //! Ashford's climate (Vol. III Ch. 1 §1.9–1.10; Amendments A-1, A-5): weather simulated once
 //! per declared climate and inherited down the nesting; walled rooms sheltered, lit only through
 //! their openings, their air lagging the outside; and the same day, the same weather, at any
-//! tick length.
+//! tick length. And the year turns: seasons, longer and shorter days, and a moon (Amendment A-34).
 
 use kernel::domain::Domain;
 use kernel::events::ChronicleEntry;
@@ -191,20 +191,22 @@ fn weather_runs_on_climates_and_everything_else_inherits_it() {
 
 #[test]
 fn indoors_is_lit_only_through_its_openings() {
-    // Ten-minute ticks; noon is tick 72.
+    // Ten-minute ticks; noon is tick 72. Ashford begins a month after the spring equinox, at 52°
+    // north: the noon sun stands 49.6° high, and lights open ground at 76% of its peak
+    // (Amendment A-34).
     let mut city = City::from(without_minds(with_tick_seconds(600)));
     city.run(72);
     let light = |city: &City, id| city.int(id, ILLUMINATION).unwrap_or(0);
-    assert_eq!(light(&city, VALE), 10_000, "full sun outdoors");
+    assert_eq!(light(&city, VALE), 7_631, "the noon sun outdoors");
     // The kitchen: the open front door (90 cm × 2.05 m) and the low window (40 × 50 cm) onto
     // the yard, against a 10 m × 10 m floor — about 2% of daylight.
-    assert_eq!(light(&city, KITCHEN), 204);
-    assert_eq!(light(&city, BEDROOM), 80, "one shut glass window");
-    assert_eq!(light(&city, CELLAR), 120, "the open bulkhead");
+    assert_eq!(light(&city, KITCHEN), 155);
+    assert_eq!(light(&city, BEDROOM), 61, "one shut glass window");
+    assert_eq!(light(&city, CELLAR), 91, "the open bulkhead");
     assert_eq!(light(&city, VAULT), 0, "no openings at all");
     // The mine, by its declared exposure.
-    assert_eq!(light(&city, MINE_MOUTH), 4_000);
-    assert_eq!(light(&city, CABIN), 1_000);
+    assert_eq!(light(&city, MINE_MOUTH), 3_052);
+    assert_eq!(light(&city, CABIN), 763);
     assert_eq!(light(&city, GALLERY_DEEP), 0);
     // And at midnight, nothing is lit anywhere.
     city.run(72);
@@ -308,4 +310,113 @@ fn the_vale_is_its_normal_plus_its_weather_exactly() {
             assert_eq!(temp(s, VALE), 1_400 + anomaly.round() as i64, "tick {t}");
         },
     );
+}
+
+#[test]
+fn the_year_turns_warm_and_back_again() {
+    // A year of the seasons alone, a day a tick (Amendment A-34). Ashford begins a month after
+    // the spring equinox, at its year's mean. The Vale, open sky with nothing to store the heat,
+    // is warmest three months on — a month after midsummer — 7 °C up, and coldest half a year
+    // after that, 7 °C down; granite Highmoor answers less. A year on, both are where they began.
+    let (mut vale, mut moor) = (Vec::new(), Vec::new());
+    isolated(
+        with_tick_seconds(86_400),
+        &["physical.seasons"],
+        365,
+        |_, s| {
+            vale.push(temp(s, VALE));
+            moor.push(temp(s, HIGHMOOR));
+        },
+    );
+    // The middle of the days it stands at its best, in whole centidegrees.
+    let day_of = |v: &[i64], best: i64| {
+        let days: Vec<i64> = (0..v.len())
+            .filter(|d| v[*d] == best)
+            .map(|d| d as i64 + 1)
+            .collect();
+        (days[0] + days[days.len() - 1]) / 2
+    };
+    let (warm, cold) = (*vale.iter().max().unwrap(), *vale.iter().min().unwrap());
+    assert!(
+        (89..=93).contains(&day_of(&vale, warm)),
+        "{}",
+        day_of(&vale, warm)
+    );
+    assert!(
+        (272..=276).contains(&day_of(&vale, cold)),
+        "{}",
+        day_of(&vale, cold)
+    );
+    assert!(
+        (2_098..=2_100).contains(&warm) && (700..=702).contains(&cold),
+        "{warm} {cold}"
+    );
+    let swing = |v: &[i64]| v.iter().max().unwrap() - v.iter().min().unwrap();
+    assert!(swing(&moor) < swing(&vale), "stone answers less");
+    assert_eq!(vale[364], 1_400, "a year on");
+}
+
+#[test]
+fn the_seasons_are_the_same_at_any_tick_length() {
+    // Ten days of seasons at hour ticks and at ten-minute ticks: the same air, exactly.
+    let after = |tick_seconds: u64| {
+        let s = isolated(
+            with_tick_seconds(tick_seconds),
+            &["physical.seasons"],
+            10 * 86_400 / tick_seconds,
+            |_, _| {},
+        );
+        [temp(&s, VALE), temp(&s, HIGHMOOR), temp(&s, SOUTHFEN)]
+    };
+    let hourly = after(3_600);
+    assert_eq!(hourly, after(600));
+    assert!(hourly[0] > 1_400, "spring warms: {hourly:?}");
+}
+
+#[test]
+fn the_days_lengthen_toward_midsummer() {
+    // Late April at 52° north: fourteen hours of daylight. Two months on, at midsummer, sixteen
+    // and a half. (Without the moon, whose light would count as day.)
+    let mut lit = vec![0; 62];
+    let mut pkg = with_tick_seconds(600);
+    pkg.physical_rules.lunar_month_seconds = 0;
+    isolated(pkg, &["physical.day_night_cycle"], 62 * 144, |t, s| {
+        let light = s
+            .read(FactKey::new(e(VALE), ILLUMINATION))
+            .and_then(|f| f.value.as_int())
+            .unwrap_or(0);
+        if light > 0 {
+            lit[((t - 1) / 144) as usize] += 1;
+        }
+    });
+    let hours = |ticks: i64| ticks as f64 / 6.0;
+    assert!((13.8..=14.2).contains(&hours(lit[0])), "{}", hours(lit[0]));
+    assert!(
+        (16.3..=16.7).contains(&hours(lit[61])),
+        "{}",
+        hours(lit[61])
+    );
+}
+
+#[test]
+fn a_full_moon_lights_the_yard_and_a_new_moon_does_not() {
+    // Midnight, as the world begins. Under a full moon, standing 26° high in a late-April sky,
+    // Erin in the yard can make out the apple tree; under Ashford's own new moon she cannot.
+    let sees_the_tree = |phase: i64| {
+        let mut pkg = without_minds(with_tick_seconds(60));
+        pkg.physical_rules.moon_phase_at_start = phase;
+        let mut city = City::from(pkg);
+        city.run(2);
+        let lit = city.int(VALE, ILLUMINATION).unwrap_or(0);
+        let seen = city
+            .store()
+            .read_all(FactKey::new(e(ERIN), physical::schema::IN_VIEW))
+            .iter()
+            .any(|f| f.value == kernel::value::Value::Entity(e(TREE)));
+        (lit, seen)
+    };
+    let (full, seen) = sees_the_tree(5_000);
+    assert!(full >= 50, "moonlight {full}");
+    assert!(seen, "by the full moon");
+    assert_eq!(sees_the_tree(0), (0, false), "no moon");
 }
