@@ -69,7 +69,8 @@ geometry: fire and storm there are a later, aggregate slice.
 
 - **Built:** slice 1, integrity and breaking (A-27): `tests/reference/tests/breaking.rs`.
 - **Built:** slice 2, fire (A-28): `tests/reference/tests/fire.rs`.
-- **Next:** wind (A-29). Then minds that notice (A-30), and open ground in a ruin.
+- **Built:** slice 3, wind (A-29): `tests/reference/tests/wind.rs`.
+- **Next:** minds that notice (A-30), and open ground in a ruin.
 
 Two things the building found:
 - **A thing on a broken table must fall.** Gravity only drops bodies that move by themselves.

@@ -243,6 +243,11 @@ pub const PRESSURE: FactType = FactType::new("physical.environment.pressure");
 /// Magnitude only; direction is [`WIND_TOWARD`].
 pub const WIND_SPEED: FactType = FactType::new("physical.environment.wind_speed");
 
+/// A storm the world declares over a region (Amendment A-29): a set of `[from, to, wind]` — the
+/// seconds since the world began that it blows between, and its wind in centimetres per second.
+/// While it blows, the region's wind is at least the storm's.
+pub const STORM: FactType = FactType::new("physical.environment.storm");
+
 /// The neighbouring region the wind blows toward — wind's direction expressed *in the
 /// graph* rather than as a compass bearing, since space is representation-independent
 /// (Vol. III Ch. 1 §1.4; "downwind" is a spatial relation, §1.6). An entity ref to the

@@ -995,3 +995,48 @@ propose to.
 - fire at the city tier.
 
 **Rationale.** `docs/audits/mutable-world.md` §3.2.
+
+---
+
+## A-29 — Wind (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (a structure fails because its material cannot bear the stress: built for
+  wind) and §1.10 (storms the world declares)
+- Vol. IV (the world package: `[storms]`)
+
+**Change.**
+- **Storms** (Physical; world data). A world may declare storms over its regions:
+  `[storms] region = from hour, hours, wind cm/s`. While one blows, the region's wind is at
+  least the storm's. Otherwise wind is the pressure gradient's, as before.
+- **Wind load** (Physical). On the environment's cadence, every structure in the open bears the
+  wind of the region it stands in. A structure is a thing made of something, or a walled place's
+  outer walls. "In the open" means:
+  - it stands in a place, not inside another thing that shelters it (an apple in a crate, a
+    hammer in a hand); a ruin counts as a place;
+  - no walled place is around it.
+
+  The wind presses with its speed squared, over the world's `wind_force_divisor`, in the units of
+  hardness. Where that exceeds what the structure's weakest material bears, the structure loses
+  integrity: the world's `wind_damage_scale` per hour for each unit it exceeds by, more slowly by
+  the cube root of how much of it there is, as fire eats (A-28). Breaking is as any breaking
+  (A-27): a shed to its wreckage, a house to a ruin. What the house sheltered is in the open from
+  then on.
+- In calm weather nothing is looked at.
+
+**In Ashford** (`tests/reference/tests/wind.rs`):
+- A 40 m/s gale over the Vale presses at 50%. In four hours it brings down the timber shed and
+  Alice's timber house, and breaks the packing crate. The granite manor, the iron hammer, and the
+  glass bottle stand untouched.
+- The kitchen table stands out the gale behind the kitchen's walls, and bears it only once they
+  fall.
+- A 25 m/s wind presses at about 20%: it scatters the straw of the hay wagon and leaves the shed
+  without a mark.
+
+**Not yet:**
+- light, loose things blown about;
+- wind fanning a fire and carrying it downwind;
+- harm to people caught out in a storm;
+- weather that brews its own storms.
+
+**Rationale.** `docs/audits/mutable-world.md` §3.3: the user's "destroyed by winds".

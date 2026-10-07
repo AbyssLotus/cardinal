@@ -52,6 +52,7 @@ pub mod space;
 pub mod systems;
 pub mod terrain;
 pub mod travel;
+pub mod wind;
 
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
 use kernel::fact::{Cardinality, FactType};
@@ -141,6 +142,8 @@ pub struct PhysicalConfig {
     pub wreckage_height_cm: i64,
     /// How fire behaves (Amendment A-28).
     pub fire: fire::FireRules,
+    /// How wind bears on what stands in it (Amendment A-29).
+    pub wind: wind::WindRules,
 }
 
 impl PhysicalConfig {
@@ -278,6 +281,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::INTEGRITY
             || fact_type == schema::BROKEN
             || fact_type == schema::ACT_STRIKE
+            || fact_type == schema::STORM
             || fact_type == schema::BURNING
             || fact_type == schema::KEPT_FIRE
             || fact_type == schema::ACT_IGNITE
@@ -305,6 +309,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::MADE_OF
             || fact_type == schema::TERRAIN_SAMPLE
             || fact_type == schema::IN_VIEW
+            || fact_type == schema::STORM
         {
             Cardinality::Many
         } else {
@@ -356,6 +361,7 @@ impl Domain for PhysicalDomain {
                 memory_ms,
             )),
             Box::new(systems::WindSystem::new(
+                c.clock,
                 step,
                 c.wind_gradient_divisor,
                 schema::MAX_WIND,
@@ -375,6 +381,8 @@ impl Domain for PhysicalDomain {
                 c.move_rules(),
                 c.fire.ignite_intensity,
             )),
+            // What the wind tears at (Amendment A-29).
+            Box::new(wind::WindLoad::new(step, c.wind, c.fire.wall_thickness_cm)),
             // Fire: burning, spreading, and the heat it gives (Amendment A-28).
             Box::new(fire::Fire::new(
                 c.clock.step(c.fire.step_seconds.saturating_mul(1000)),
@@ -560,6 +568,11 @@ impl Domain for PhysicalDomain {
         // material-composition set (§1.9), must be an entity reference, never a scalar. This
         // is the coherence check the cardinality-one path gets from `compose`/`validate`,
         // applied to the whole resolved set.
+        if fact_type == schema::STORM && values.iter().any(|v| v.as_vec3().is_none()) {
+            return Err(ValidationError::new(
+                "a storm is from when, to when, and how hard it blows",
+            ));
+        }
         if fact_type == schema::ADJACENT_TO
             || fact_type == schema::HAS_PORTAL
             || fact_type == schema::IN_REGION

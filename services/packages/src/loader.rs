@@ -377,6 +377,10 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             douse_per_hour: r.douse_per_hour,
             wall_thickness_cm: r.wall_thickness_cm,
         },
+        wind: physical::wind::WindRules {
+            force_divisor: r.wind_force_divisor,
+            damage_scale: r.wind_damage_scale,
+        },
     }
 }
 
@@ -658,6 +662,15 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         store.seed(
             FactKey::new(EntityId::from_raw(m.location_id), IN_REGION),
             seeded(Value::Entity(EntityId::from_raw(m.region_id))),
+        );
+    }
+
+    // Storms the world declares (Amendment A-29): from when to when, in seconds, and how hard.
+    for &(region, from_hour, hours, wind) in &package.storms {
+        let (from, to) = (from_hour * 3600, (from_hour + hours) * 3600);
+        store.seed(
+            FactKey::new(EntityId::from_raw(region), physical::schema::STORM),
+            seeded(Value::Vec3([from, to, wind])),
         );
     }
 

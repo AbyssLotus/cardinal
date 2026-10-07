@@ -89,7 +89,14 @@ const HUMIDITY_READS: &[FactType] = &[TEMPERATURE, HUMIDITY_ANOMALY, EXPOSURE, E
 const HUMIDITY_WRITES: &[FactType] = &[HUMIDITY, HUMIDITY_ANOMALY];
 const PRESSURE_READS: &[FactType] = &[TEMPERATURE, PRESSURE_ANOMALY, ELEVATION, EXPOSURE, ENCLOSED];
 const PRESSURE_WRITES: &[FactType] = &[PRESSURE, PRESSURE_ANOMALY];
-const WIND_READS: &[FactType] = &[TEMPERATURE, ADJACENT_TO, PRESSURE, EXPOSURE, ENCLOSED];
+const WIND_READS: &[FactType] = &[
+    TEMPERATURE,
+    ADJACENT_TO,
+    PRESSURE,
+    EXPOSURE,
+    ENCLOSED,
+    crate::schema::STORM,
+];
 const WIND_WRITES: &[FactType] = &[WIND_SPEED, WIND_TOWARD];
 // Danger reads a portal's height above the ground, composed up its containers — their
 // positions (live, so their motion facts too) and headings.
@@ -638,6 +645,7 @@ impl System for PressureSystem {
 /// therefore lags pressure by one environment step, as effects chain across commits
 /// (Vol. III Ch. 12 §12.2).
 pub struct WindSystem {
+    clock: SimClock,
     step: Step,
     gradient_divisor: i64,
     max_wind: i64,
@@ -647,8 +655,9 @@ impl WindSystem {
     /// Configure wind. `gradient_divisor` scales speed per unit pressure difference (larger =
     /// gentler); `max_wind` clamps the speed (world-package rules). Wind is a function of the
     /// current pressure field, not a rate, so it simply steps with the rest of the environment.
-    pub const fn new(step: Step, gradient_divisor: i64, max_wind: i64) -> Self {
+    pub const fn new(clock: SimClock, step: Step, gradient_divisor: i64, max_wind: i64) -> Self {
         Self {
+            clock,
             step,
             gradient_divisor,
             max_wind,
@@ -703,10 +712,23 @@ impl System for WindSystem {
 
             let speed_key = FactKey::new(region, WIND_SPEED);
             let toward_key = FactKey::new(region, WIND_TOWARD);
+            // A storm the world declares blows at least its own wind while it lasts (Amendment
+            // A-29).
+            let now_s = (self.clock.ms_at(ctx.tick()) / 1000) as i64;
+            let storm = view
+                .read_all(FactKey::new(region, crate::schema::STORM))
+                .into_iter()
+                .filter_map(|f| f.value.as_vec3())
+                .filter(|[from, to, _]| *from <= now_s && now_s < *to)
+                .map(|[_, _, wind]| wind)
+                .max()
+                .unwrap_or(0)
+                .clamp(0, self.max_wind);
             match best {
                 Some((neighbour, np)) if np < my_pressure => {
-                    let speed =
-                        ((my_pressure - np) / self.gradient_divisor.max(1)).clamp(0, self.max_wind);
+                    let speed = ((my_pressure - np) / self.gradient_divisor.max(1))
+                        .clamp(0, self.max_wind)
+                        .max(storm);
                     out.push(Proposal::new(
                         self.id(),
                         speed_key,
@@ -723,12 +745,17 @@ impl System for WindSystem {
                     ));
                 }
                 _ => {
+                    let (speed, why) = if storm > 0 {
+                        (storm, "storm")
+                    } else {
+                        (0, "calm")
+                    };
                     out.push(Proposal::new(
                         self.id(),
                         speed_key,
                         ctx.basis_tick(),
-                        Change::Set(Value::Int(0)),
-                        Cause::new("calm"),
+                        Change::Set(Value::Int(speed)),
+                        Cause::new(why),
                     ));
                     out.push(Proposal::new(
                         self.id(),

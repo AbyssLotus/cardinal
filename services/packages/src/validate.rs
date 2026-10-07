@@ -176,6 +176,9 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     for &(thing, _, _) in &package.fires {
         must_exist(thing, thing, "the thing on fire");
     }
+    for &(region, _, _, _) in &package.storms {
+        must_exist(region, region, "the region a storm blows over");
+    }
     if let Some(m) = package.residents_rules.and_then(|r| r.meal_material) {
         must_exist(m, m, "the material meals are made of");
     }

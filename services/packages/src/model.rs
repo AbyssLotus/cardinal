@@ -84,6 +84,8 @@ pub struct WorldPackage {
     /// Fires burning at the start (Amendment A-28): `(thing, fierceness, kept)` — a kept fire is
     /// a tended hearth's, neither consuming nor dying down.
     pub fires: Vec<(u64, i64, bool)>,
+    /// Storms the world declares (Amendment A-29): `(region, from hour, hours, wind cm/s)`.
+    pub storms: Vec<(u64, i64, i64, i64)>,
     /// What each mind knows at the start (Amendment A-8; Vol. IV Ch. 5): `(mind, things)`.
     /// For each thing, where it is; for an opening, also where it leads and whether it is open;
     /// for a place, also how warm its air is.
@@ -388,6 +390,10 @@ pub struct PhysicalRules {
     pub douse_per_hour: i64,
     /// How thick a walled place's walls, floor, and roof are, in centimetres.
     pub wall_thickness_cm: i64,
+    /// The wind's pressure is its speed squared over this, in the units of hardness (A-29).
+    pub wind_force_divisor: i64,
+    /// Integrity lost per hour per unit of pressure beyond what a structure bears.
+    pub wind_damage_scale: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).

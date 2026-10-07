@@ -105,6 +105,9 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut rain_above: Option<i64> = None;
     let mut douse_per_hour: Option<i64> = None;
     let mut wall_thickness_cm: Option<i64> = None;
+    let mut wind_force_divisor: Option<i64> = None;
+    let mut wind_damage_scale: Option<i64> = None;
+    let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
     let mut burn_harm: Option<i64> = None;
     let mut fires: Vec<(u64, i64, bool)> = Vec::new();
     let mut strength: Vec<(u64, i64)> = Vec::new();
@@ -329,6 +332,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "rain_above" => rain_above = Some(parse_num(value, line_no)?),
                 "douse_per_hour" => douse_per_hour = Some(parse_num(value, line_no)?),
                 "wall_thickness_cm" => wall_thickness_cm = Some(parse_num(value, line_no)?),
+                "wind_force_divisor" => wind_force_divisor = Some(parse_num(value, line_no)?),
+                "wind_damage_scale" => wind_damage_scale = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -576,6 +581,19 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "strength" => {
                 let organism: u64 = parse_num(key, line_no)?;
                 strength.push((organism, parse_num(value, line_no)?));
+            }
+            "storms" => {
+                // region = from hour, hours, wind cm/s
+                let region: u64 = parse_num(key, line_no)?;
+                let [from, hours, wind] =
+                    parse_ints::<3>(value, line_no, "from hour, hours, wind")?;
+                if hours <= 0 || wind < 0 {
+                    return Err(ParseError::at(
+                        line_no,
+                        "a storm blows for a while, at a wind",
+                    ));
+                }
+                storms.push((region, from, hours, wind));
             }
             "fires" => {
                 // thing = fierceness[, kept]
@@ -908,6 +926,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         rain_above: require(rain_above, "rules.physical.rain_above")?,
         douse_per_hour: require(douse_per_hour, "rules.physical.douse_per_hour")?,
         wall_thickness_cm: require(wall_thickness_cm, "rules.physical.wall_thickness_cm")?,
+        wind_force_divisor: require(wind_force_divisor, "rules.physical.wind_force_divisor")?,
+        wind_damage_scale: require(wind_damage_scale, "rules.physical.wind_damage_scale")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -1055,6 +1075,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         senses,
         strength,
         fires,
+        storms,
         knows,
         minds,
         temperament,
@@ -1609,6 +1630,8 @@ ignite_intensity = 2000
 rain_above = 9000
 douse_per_hour = 40000
 wall_thickness_cm = 20
+wind_force_divisor = 3200
+wind_damage_scale = 16
 [regions]
 1 = 1500
 ";

@@ -110,32 +110,38 @@ impl Fire {
         div_dither(per_hour as i128 * self.step.dt_ms as i128, 3_600_000, rng) as i64
     }
 
-    /// How much of `thing` there is to burn, in kilograms: a walled place's walls, floor, and
-    /// roof; anything else, its weight.
+    /// How much of `thing` there is to burn, in kilograms.
     fn fuel_kg(&self, view: &dyn CommittedView, thing: EntityId) -> i64 {
+        structure_kg(view, thing, self.rules.wall_thickness_cm)
+    }
+
+    /// Whether `thing` lies open to the sky: no walled place holds it.
+    pub fn in_the_open(view: &dyn CommittedView, thing: EntityId) -> bool {
+        kernel::hierarchy::ancestry(view, thing, CONTAINED_IN)
+            .into_iter()
+            .skip(1)
+            .all(|p| !is_true(view, p, ENCLOSED) || view.read(FactKey::new(p, EXPOSURE)).is_some())
+    }
+}
+
+/// How much of `thing` there is as a structure, in kilograms (Amendments A-28, A-29): a walled
+/// place's walls, floor, and roof, `wall_thickness_cm` thick, of its densest material; anything
+/// else, its weight. What a fire has to eat, and what a wind has to tear down.
+pub fn structure_kg(view: &dyn CommittedView, thing: EntityId, wall_thickness_cm: i64) -> i64 {
+    if is_true(view, thing, ENCLOSED) {
         let density = crate::materials::materials_of(view, thing)
             .into_iter()
             .filter_map(|m| crate::materials::density(view, m))
             .max()
             .unwrap_or(0) as i128;
-        if is_true(view, thing, ENCLOSED) {
-            let Some([hw, hd, h]) = size_of(view, thing) else {
-                return 0;
-            };
-            let (w, d, h) = (2 * hw as i128, 2 * hd as i128, h as i128);
-            let shell_cm2 = 2 * (w + d) * h + 2 * w * d;
-            (shell_cm2 * self.rules.wall_thickness_cm as i128 * density / 1_000_000) as i64
-        } else {
-            crate::materials::weight_g(view, thing).unwrap_or(0) / 1000
-        }
-    }
-
-    /// Whether `thing` lies open to the sky: no walled place holds it.
-    fn in_the_open(view: &dyn CommittedView, thing: EntityId) -> bool {
-        kernel::hierarchy::ancestry(view, thing, CONTAINED_IN)
-            .into_iter()
-            .skip(1)
-            .all(|p| !is_true(view, p, ENCLOSED) || view.read(FactKey::new(p, EXPOSURE)).is_some())
+        let Some([hw, hd, h]) = size_of(view, thing) else {
+            return 0;
+        };
+        let (w, d, h) = (2 * hw as i128, 2 * hd as i128, h as i128);
+        let shell_cm2 = 2 * (w + d) * h + 2 * w * d;
+        (shell_cm2 * wall_thickness_cm as i128 * density / 1_000_000) as i64
+    } else {
+        crate::materials::weight_g(view, thing).unwrap_or(0) / 1000
     }
 }
 
@@ -158,7 +164,7 @@ pub fn can_catch(view: &dyn CommittedView, thing: EntityId) -> bool {
 }
 
 /// The integer cube root of `n`, rounded down.
-fn cube_root(n: i64) -> i64 {
+pub fn cube_root(n: i64) -> i64 {
     let mut r = (n.max(0) as f64).cbrt() as i64;
     while (r + 1).pow(3) <= n {
         r += 1;

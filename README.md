@@ -142,9 +142,9 @@ reference engine is being built here, from the specification, in roadmap order
       the seam all day as they commute
 - [x] A mutable world ([plan](docs/audits/mutable-world.md)): integrity, breaking, and striking
       by strength and tool (A-27); fire that burns, spreads by heat, lights the night, burns the
-      living, and is put out by rain (A-28)
-- [ ] Wind that wrecks what it can (A-29); minds that flee fire and break a way through (A-30);
-      walking into ruins and open places anywhere along their edge
+      living, and is put out by rain (A-28); storms that tear down what they can (A-29)
+- [ ] Minds that flee fire and break a way through (A-30); walking into ruins and open places
+      anywhere along their edge; wind that carries fire and loose things
 - [ ] Carrying things across the seam; city generation at scale; the hot store; parallel shards
 - [ ] Hardening, from the hostile audit: a sealed mutation path, multi-cause provenance,
       benchmark gates in CI

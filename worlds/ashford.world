@@ -70,6 +70,8 @@ ignite_intensity = 2000             # how a fire starts
 rain_above = 9000                   # humidity past which it rains on what is in the open
 douse_per_hour = 40000              # and rain puts a fire out within the quarter hour
 wall_thickness_cm = 20              # a room's walls, floor, and roof: what of it burns
+wind_force_divisor = 3200           # a 40 m/s gale presses at 50%: past timber, short of granite (A-29)
+wind_damage_scale = 16              # and tears down a timber shed within the couple of hours it blows
 
 [rules.living]
 metabolism_step_seconds = 60
