@@ -991,7 +991,7 @@ propose to.
 **Not yet:**
 - smoke;
 - fire warming the air (it reports heat to bodies; the climate's temperature is untouched);
-- minds that flee fire or put it out (A-30);
+- minds that flee fire or put it out;
 - fire at the city tier.
 
 **Rationale.** `docs/audits/mutable-world.md` §3.2.
@@ -1040,3 +1040,166 @@ propose to.
 - weather that brews its own storms.
 
 **Rationale.** `docs/audits/mutable-world.md` §3.3: the user's "destroyed by winds".
+
+---
+
+## A-30 — Open ground (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.5 (movement between places: built for places without walls)
+- Vol. IV (the world package: the loader marks places)
+
+**Change.**
+- **Place** (Physical; world data). That an entity is a place one can be in, rather than a thing:
+  a climate region, a declared place, a room. The loader marks every one.
+- **Open ground.** A place without walls (a garden plot, a street, a ruin) is walked into and out
+  of anywhere along its edge, not only through its openings:
+  - **Into it**, from the place around it: one walks to the nearest point of its footprint, or
+    stands where one is if already over it. For a place with no size, one walks to where it is.
+  - **Out of it**, into the place around it: one walks to the nearest point of its edge, or, for a
+    place with no size, from its middle.
+  - Each is chronicled as a crossing (`entered`, `left`), as a doorway is.
+- **The way between places** is found breadth first, as before, now over three kinds of step:
+  through an opening, into an open place, out of one. Openings come before edges, and openings in
+  ascending id, so the answer is deterministic. Edges are taken only along the two lines of
+  containers, up from where one is and down toward where one is going, so a search across a
+  city's open ground does not wander into every street in it. Routes are remembered for the
+  tick.
+- A walled place is still entered only by its doors. A ruin (A-27) is open ground: what was a
+  house is walked into where its wall stood.
+- Before this, travel crossed only openings: two open places side by side, with no opening
+  between them, had no way between them.
+
+**In Ashford** (`tests/reference/tests/open_ground.rs`):
+- Erin walks from the yard into a 4 m garden plot across its edge, stands within it, and walks out
+  again.
+- She walks to a spot in the yard with no size, and is in it.
+- With the kitchen's front door shut and its walls standing, she has no way in.
+- With its walls brought down, she walks into the ruin over the rubble, not through its doorway
+  (narrowed for the test), and up to the table inside.
+
+**Rationale.** `docs/audits/mutable-world.md` §3, slice 5.
+
+---
+
+## A-31 — Collapse and mending (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (structures fail: what falls strikes; what is broken can be made whole)
+- Vol. III Ch. 2 §2.4 (harm: struck by what falls)
+- Appendix A (Ruling 9: damage and repair compose on one integrity)
+
+**Change.**
+- **Impact** (Physical; a report). When a walled place breaks into a ruin, every body inside it that
+  moves by itself is struck, as by a fall from as high as the walls stood. The report carries the
+  tick it happened. Living Systems judges it as it judges a fall (A-10), once per impact.
+- **What it was** (Physical; only its own systems write it). Breaking (A-27) records what a thing
+  or place was: its height, and whether it was solid, opaque, and walled.
+- **Mending** (Physical; Ruling 13). A decider proposes that a body mend a thing (`act.mend`). It is
+  carried out if all three hold:
+  - the thing is damaged;
+  - it is within reach, or it is the place the body stands in, or, for an opening, one of its faces
+    is within reach;
+  - the body holds a tool no softer than the thing's weakest material.
+
+  Otherwise it is refused. Each go restores the world's `mend_scale` from a hundred kilograms,
+  less, the more there is to mend (a walled place's walls, floor, and roof, as fire counts them).
+  Mending and damage to one thing in one tick both apply: integrity is additive (A-27).
+- **Made whole.** A broken thing whose integrity comes back whole is what it was again: as tall,
+  as solid, as opaque, and walled if it was walled. A ruin made whole has the doors and windows
+  that broke with it whole again, opaque, and able to be shut. Found among what changed, as
+  breaking is.
+
+**In Ashford** (`tests/reference/tests/mending.rs`):
+- The kitchen comes down on Bob. He is struck as by a 2.8 m fall, and hurt. Dave, upstairs, is
+  not in the kitchen and is untouched.
+- Carol smashes the crate. With bare hands she mends nothing. With the iron hammer, a few goes
+  make it whole: 40 cm tall and solid again, with nothing left to mend.
+- Bob, in the kitchen ruin with the hammer, rebuilds it (with a quicker `mend_scale`). It is
+  walled again, its front door is whole, and he can shut it.
+
+**Rationale.** `docs/audits/mutable-world.md` §1 (composition: "fire consuming a wall that
+soldiers are repairing").
+
+---
+
+## A-32 — Fire in the air (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 (environment: fire warms the air, fills it with smoke, and is fanned by wind)
+- Vol. III Ch. 2 §2.4 (harm: smoke)
+
+**Change.**
+- **Warmth.** A fire inside a walled place warms its air: the world's `fire_warmth_per_hour`
+  centidegrees at full fierceness for a hundred cubic metres, less in a bigger place. A kept
+  fire (A-28) warms as any other.
+- **Smoke** (Physical; only its own systems write it). How thick the smoke is in a walled place:
+  - It rises from every fire burning there that is not kept, by the world's `smoke_per_hour` at
+    full fierceness for a hundred cubic metres. A kept fire's smoke goes up its chimney.
+  - It clears by the world's `smoke_clear_per_hour` share of itself, and as much again for each of
+    the place's openings that stands open.
+  - In the open, or once a place's walls fall, there is none.
+- **Smoke and sight.** In a smoky place one sees only as far as the smoke lets one: at full smoke,
+  not at all.
+- **Smoke and breath** (Living). Health is lost at the world's `smoke_harm_per_hour`, in
+  proportion to the smoke where one stands, counted with burns.
+- **Fanning.** In the open, the wind fans a fire: at the world's `fire_fan_wind_cm_s`, to twice
+  what its fuel alone allows (never past full), and it carries the fire's heat twice as far.
+
+**In Ashford** (`tests/reference/tests/fire_air.rs`):
+- Six hours of a kept hearth warm the kitchen by more than 3 °C, with no smoke.
+- The kitchen table, set alight, fills the kitchen with smoke, thicker with the doors and window
+  shut than open.
+- At midnight in the shut-up kitchen, Bob sees the lamp by firelight, then loses it in the smoke,
+  and is hurt breathing it.
+- The burning hay wagon stays short of full in the Vale's breeze. A 10 m/s wind fans it to full.
+
+**Not yet:**
+- warmth carried from room to room, and smoke drifting through open doors to the next room.
+
+**Rationale.** A-28's "not yet": smoke, and fire warming the air.
+
+---
+
+## A-33 — Wind that moves things, and gales (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (loose things blown about) and §1.10 (storms the weather makes)
+- Appendix A (Ruling 13: a push is anyone's to give)
+
+**Change.**
+- **A push** (Physical; Ruling 13). A proposal that a thing move by `[x, y]` centimetres in its
+  place's frame (`act.push`). It is open to anyone (the wind, a shove), and pushes in one tick add
+  up. Physical Reality carries it out last of all it does in a tick, then clears it. A thing is
+  not pushed if, that tick:
+  - someone took hold of it;
+  - it broke or fell;
+  - it is already moving (it finishes that move first).
+
+  In a place with a size, a push stops at the place's edge.
+- **Carried off by the wind.** On the environment's cadence, a loose thing (one that is not solid)
+  standing in the open is carried downwind if the wind's pressure exceeds what its weight holds
+  (the world's `wind_hold_per_kg` for each kilogram). It is carried the world's
+  `wind_carry_cm_per_hour` per hour, scaled by how far the wind overwhelms its hold:
+  - downwind means toward the region the wind blows to, where both have a place in a common
+    frame;
+  - otherwise it goes a gust's way, drawn from the thing's own random stream.
+- **Gales from deep lows** (Physical; world rules). Where a region's pressure falls more than the
+  world's `gale_below` decapascals under normal, its wind rises by the world's
+  `gale_per_decapascal` cm/s for each decapascal deeper. It is the same as a declared storm's
+  (A-29): the wind is at least the gale's.
+
+**In Ashford** (`tests/reference/tests/wind.rs`):
+- In a 40 m/s gale the torch is carried more than 10 m across the yard, and stays in it. The crate,
+  solid, does not move.
+- A shove given the bottle moves it exactly as far as it was pushed, and the push is spent.
+- With weather that swings hard and a low gale threshold, a gale brews within two days with no
+  storm declared. With Ashford's own weather, in the same two days, none does.
+
+**Not yet:**
+- people pushed or knocked down by the wind;
+- fire carried downwind as embers;
+- storms and fire at the city tier.
+
+**Rationale.** A-29's "not yet": light, loose things blown about, and weather that brews its own
+storms.

@@ -96,6 +96,7 @@ const WIND_READS: &[FactType] = &[
     EXPOSURE,
     ENCLOSED,
     crate::schema::STORM,
+    PRESSURE_ANOMALY,
 ];
 const WIND_WRITES: &[FactType] = &[WIND_SPEED, WIND_TOWARD];
 // Danger reads a portal's height above the ground, composed up its containers — their
@@ -649,18 +650,36 @@ pub struct WindSystem {
     step: Step,
     gradient_divisor: i64,
     max_wind: i64,
+    gale: Gale,
+}
+
+/// How a deep low brews a gale (Amendment A-33), world rules: below `below` decapascals under its
+/// normal pressure, a region's wind rises by `per_decapascal` cm/s for every decapascal deeper.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Gale {
+    /// How far under normal, in decapascals, the pressure must fall before a gale brews.
+    pub below: i64,
+    /// How much wind, in cm/s, each decapascal deeper brings.
+    pub per_decapascal: i64,
 }
 
 impl WindSystem {
     /// Configure wind. `gradient_divisor` scales speed per unit pressure difference (larger =
     /// gentler); `max_wind` clamps the speed (world-package rules). Wind is a function of the
     /// current pressure field, not a rate, so it simply steps with the rest of the environment.
-    pub const fn new(clock: SimClock, step: Step, gradient_divisor: i64, max_wind: i64) -> Self {
+    pub const fn new(
+        clock: SimClock,
+        step: Step,
+        gradient_divisor: i64,
+        max_wind: i64,
+        gale: Gale,
+    ) -> Self {
         Self {
             clock,
             step,
             gradient_divisor,
             max_wind,
+            gale,
         }
     }
 }
@@ -724,6 +743,11 @@ impl System for WindSystem {
                 .max()
                 .unwrap_or(0)
                 .clamp(0, self.max_wind);
+            // A deep low brews its own gale (Amendment A-33).
+            let low = -anomaly_level(anomaly_of(view, region, PRESSURE_ANOMALY));
+            let gale =
+                ((low - self.gale.below).max(0) * self.gale.per_decapascal).clamp(0, self.max_wind);
+            let storm = storm.max(gale);
             match best {
                 Some((neighbour, np)) if np < my_pressure => {
                     let speed = ((my_pressure - np) / self.gradient_divisor.max(1))

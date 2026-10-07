@@ -9,6 +9,33 @@ use kernel::domain::{ResolveError, Resolved};
 use kernel::proposal::Change;
 use kernel::value::Value;
 
+/// Compose pushes given a thing in one tick (Amendment A-33): they add up, as forces do. Clearing
+/// the last tick's push, in the tick new ones arrive, leaves the new ones standing.
+pub fn compose_push(changes: &[Change]) -> Result<Resolved, ResolveError> {
+    let mut sum = [0i64; 3];
+    let mut pushed = false;
+    for change in changes {
+        match change {
+            Change::Set(v) | Change::Create(v) => {
+                let p = v
+                    .as_vec3()
+                    .ok_or(ResolveError::new("a push is a distance"))?;
+                for i in 0..3 {
+                    sum[i] = sum[i].saturating_add(p[i]);
+                }
+                pushed = true;
+            }
+            Change::Tombstone | Change::Retire => {}
+            _ => return Err(ResolveError::new("a push is given or cleared")),
+        }
+    }
+    Ok(if pushed {
+        Resolved::Write(Value::Vec3(sum))
+    } else {
+        Resolved::Tombstone
+    })
+}
+
 /// Sum deltas onto the current value: at most one `Set`/`Create` establishes the base (two
 /// competing sets are an undeclared conflict and fail — Vol. V Ch. 3 §3.5, invariant 4),
 /// then all `Delta`s sum onto it. A `Tombstone` may not share the tick with a set or delta.

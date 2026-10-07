@@ -85,6 +85,8 @@ pub struct LivingConfig {
     pub starving_harm_per_hour: i64,
     /// Health lost per hour in the full heat of a fire (Amendment A-28).
     pub burn_harm_per_hour: i64,
+    /// Health lost per hour breathing thick smoke (Amendment A-32).
+    pub smoke_harm_per_hour: i64,
     /// How far a resident sees once they cross into the scene, in centimetres (Amendment A-24) —
     /// if the world has residents.
     pub resident_sight_cm: Option<i64>,
@@ -114,6 +116,7 @@ impl Domain for LivingDomain {
             || fact_type == schema::HEALTH
             || fact_type == schema::REST
             || fact_type == schema::FALL_JUDGED
+            || fact_type == schema::IMPACT_JUDGED
             || schema::NEED_FACTS.contains(&fact_type)
     }
 
@@ -154,6 +157,7 @@ impl Domain for LivingDomain {
                     starving_above: c.starving_above,
                     starving_harm_per_hour: c.starving_harm_per_hour,
                     burn_harm_per_hour: c.burn_harm_per_hour,
+                    smoke_harm_per_hour: c.smoke_harm_per_hour,
                 },
             )),
         ];
@@ -182,6 +186,7 @@ impl Domain for LivingDomain {
             || fact_type == schema::FATIGUE
             || fact_type == schema::HEALTH
             || fact_type == schema::FALL_JUDGED
+            || fact_type == schema::IMPACT_JUDGED
             || fact_type == schema::REST
             || schema::NEED_FACTS.contains(&fact_type)
         {

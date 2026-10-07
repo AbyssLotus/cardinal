@@ -61,6 +61,7 @@ hand_strike_percent = 50            # a fist lands at half one's strength (Amend
 tool_strike_percent_per_kg = 50     # each kilogram of a tool in hand adds half again
 strike_scale = 300                  # how much a blow harder than the weakest material breaks
 wreckage_height_cm = 20             # what is broken lies flat
+mend_scale = 300                    # with a tool, a crate is mended whole in a few goes (A-31)
 fire_step_seconds = 10              # fire takes its course every ten seconds (Amendment A-28)
 fire_grow_per_hour = 20000          # a fire takes hold over a quarter of an hour
 burn_per_hour = 30000               # a full fire eats 100 kg of fuel in twenty minutes
@@ -70,8 +71,16 @@ ignite_intensity = 2000             # how a fire starts
 rain_above = 9000                   # humidity past which it rains on what is in the open
 douse_per_hour = 40000              # and rain puts a fire out within the quarter hour
 wall_thickness_cm = 20              # a room's walls, floor, and roof: what of it burns
+fire_warmth_per_hour = 2000         # a full fire warms 100 m3 of walled air 20 degrees an hour (A-32)
+smoke_per_hour = 40000              # and fills it with smoke within a quarter hour
+smoke_clear_per_hour = 5000         # half the smoke clears in an hour, faster for each open door
+fire_fan_wind_cm_s = 1000           # a 10 m/s wind doubles a fire in the open, and its reach
 wind_force_divisor = 3200           # a 40 m/s gale presses at 50%: past timber, short of granite (A-29)
 wind_damage_scale = 16              # and tears down a timber shed within the couple of hours it blows
+wind_hold_per_kg = 100              # a kilogram holds its place against 1% of pressure (A-33)
+wind_carry_cm_per_hour = 20000      # what the wind overwhelms, it carries up to 200 m an hour
+gale_below = 400                    # a low 400 daPa under normal brews a gale: seldom, in the Vale
+gale_per_decapascal = 50            # half a metre a second more for each decapascal deeper
 
 [rules.living]
 metabolism_step_seconds = 60
@@ -91,6 +100,7 @@ starving_above = 9000               # past 90% hungry: starving
 starving_harm_per_hour = 100        # 1% of health lost each hour starving
 strength = 4000                     # people are 40% strong unless said otherwise (Amendment A-27)
 burn_harm_per_hour = 6000           # the full heat of a fire costs 60% of health an hour (A-28)
+smoke_harm_per_hour = 3000          # thick smoke, 30% an hour (A-32)
 
 [rules.information]
 perception_step_seconds = 1

@@ -18,12 +18,12 @@
 
 use crate::index::{container_of, size_of};
 use crate::schema::{
-    ACT_ARRIVE, ACT_CLOSE, ACT_CONSUME, ACT_DROP, ACT_FACE, ACT_IGNITE, ACT_LEAVE, ACT_OPEN,
-    ACT_PICK, ACT_REFUSED, ACT_STRIKE, ACT_TAKE, BODY_SIZE, BROKEN, BURNING, CONSUMED,
-    CONTAINED_IN, ENCLOSED, FALL_HEIGHT, HAS_PORTAL, HEADING, INTEGRITY, LEADS_TO, MADE_OF,
-    MATERIAL_DENSITY, MATERIAL_EDIBLE, MATERIAL_FLAMMABILITY, MATERIAL_HARDNESS, MOBILE,
-    MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PERCENT_FULL, PICKED, PORTAL_FAR_SIDE,
-    PORTAL_OPEN, POSITION, SOLID, STRENGTH, TERRAIN_SAMPLE, TERRAIN_SPACING,
+    ACT_ARRIVE, ACT_CLOSE, ACT_CONSUME, ACT_DROP, ACT_FACE, ACT_IGNITE, ACT_LEAVE, ACT_MEND,
+    ACT_OPEN, ACT_PICK, ACT_PUSH, ACT_REFUSED, ACT_STRIKE, ACT_TAKE, BODY_SIZE, BROKEN, BURNING,
+    CONSUMED, CONTAINED_IN, ENCLOSED, FALL_HEIGHT, HAS_PORTAL, HEADING, IMPACT, INTEGRITY,
+    LEADS_TO, MADE_OF, MATERIAL_DENSITY, MATERIAL_EDIBLE, MATERIAL_FLAMMABILITY, MATERIAL_HARDNESS,
+    MOBILE, MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PERCENT_FULL, PICKED, PORTAL_FAR_SIDE,
+    PORTAL_OPEN, POSITION, SOLID, STRENGTH, TERRAIN_SAMPLE, TERRAIN_SPACING, WHOLE_SHAPE,
 };
 use crate::space::{far_side, local_position, portal_destination};
 use crate::terrain::is_true;
@@ -39,6 +39,7 @@ use std::collections::BTreeMap;
 const ARRIVAL_GAP_CM: i64 = 5;
 
 const ACT_READS: &[FactType] = &[
+    ACT_PUSH,
     SOLID,
     ACT_OPEN,
     ACT_CLOSE,
@@ -77,8 +78,14 @@ const ACT_READS: &[FactType] = &[
     ACT_IGNITE,
     BURNING,
     MATERIAL_FLAMMABILITY,
+    ACT_MEND,
+    WHOLE_SHAPE,
 ];
 const ACT_WRITES: &[FactType] = &[
+    ACT_PUSH,
+    ACT_MEND,
+    IMPACT,
+    WHOLE_SHAPE,
     ACT_IGNITE,
     BURNING,
     MOTION_TARGET,
@@ -140,6 +147,17 @@ pub struct Act {
     wreckage_height_cm: i64,
     moves: crate::travel::MoveRules,
     ignite_intensity: i64,
+    mend_scale: i64,
+    wall_thickness_cm: i64,
+}
+
+/// What a thing's shape and flags were, as [`WHOLE_SHAPE`] keeps them: `[height, flags, 0]`.
+fn whole_shape(view: &dyn CommittedView, thing: EntityId) -> Value {
+    let flags = i64::from(is_true(view, thing, SOLID))
+        | i64::from(is_true(view, thing, OPAQUE)) << 1
+        | i64::from(is_true(view, thing, ENCLOSED)) << 2;
+    let height = size_of(view, thing).map_or(0, |s| s[2]);
+    Value::Vec3([height, flags, 0])
 }
 
 /// How a blow is judged (Amendment A-27), all world rules.
@@ -165,6 +183,8 @@ impl Act {
         wreckage_height_cm: i64,
         moves: crate::travel::MoveRules,
         ignite_intensity: i64,
+        mend_scale: i64,
+        wall_thickness_cm: i64,
     ) -> Self {
         Self {
             reach_cm,
@@ -173,7 +193,46 @@ impl Act {
             wreckage_height_cm,
             moves,
             ignite_intensity,
+            mend_scale,
+            wall_thickness_cm,
         }
+    }
+
+    /// The broken things whose integrity has come back whole: to be what they were (Amendment
+    /// A-31). Looked for among what changed, as breaking is.
+    fn mended_whole(view: &dyn CommittedView, basis: u64) -> Vec<EntityId> {
+        let candidates = if basis > 0 {
+            view.changed_since(INTEGRITY, basis - 1)
+        } else {
+            None
+        }
+        .unwrap_or_else(|| view.entities_with(BROKEN));
+        candidates
+            .into_iter()
+            .filter(|e| {
+                is_true(view, *e, BROKEN)
+                    && view.read(FactKey::new(*e, INTEGRITY)).is_none()
+                    && view.read(FactKey::new(*e, WHOLE_SHAPE)).is_some()
+            })
+            .collect()
+    }
+
+    /// Whether `body` can mend `target` (Amendment A-31): it is damaged; within reach, or the
+    /// place the body stands in; and the body holds a tool no softer than its weakest material.
+    fn can_mend(&self, view: &dyn CommittedView, body: EntityId, target: EntityId) -> bool {
+        let damaged = view.read(FactKey::new(target, INTEGRITY)).is_some();
+        let near = container_of(view, body) == Some(target)
+            || if view.read(FactKey::new(target, LEADS_TO)).is_some() {
+                self.reachable_face(view, body, target).is_some()
+            } else {
+                self.within_reach(view, body, target)
+            };
+        let tool = crate::materials::structural_hardness(view, target).is_some_and(|resists| {
+            crate::nearby::contents(view, body).into_iter().any(|t| {
+                crate::materials::structural_hardness(view, t).is_some_and(|h| h >= resists)
+            })
+        });
+        damaged && near && tool
     }
 
     /// Whether `body` has a flame to hand (Amendment A-28): something burning that it holds, or
@@ -404,6 +463,7 @@ impl System for Act {
             ACT_PICK,
             ACT_STRIKE,
             ACT_IGNITE,
+            ACT_MEND,
         ] {
             actors.extend(view.entities_with(fact));
         }
@@ -416,15 +476,34 @@ impl System for Act {
         // What breaks (Amendment A-27), before anything is done with what it held.
         for broken in Self::breaking(view, ctx.basis_tick()) {
             push(broken, BROKEN, Change::Set(Value::Bool(true)), "broke");
+            // What it was, to be again if mended whole (Amendment A-31).
+            push(
+                broken,
+                WHOLE_SHAPE,
+                Change::Set(whole_shape(view, broken)),
+                "broke",
+            );
             let faces = if is_true(view, broken, ENCLOSED) {
                 // A walled place: its walls come down, and every door and shuttable window in
-                // them is broken open.
+                // them is broken open. Whoever is inside is struck by what falls, from as high as
+                // the walls stood (Amendment A-31).
                 push(
                     broken,
                     ENCLOSED,
                     Change::Set(Value::Bool(false)),
                     "walls_fell",
                 );
+                let height = size_of(view, broken).map_or(0, |s| s[2]);
+                for caught in crate::nearby::contents(view, broken) {
+                    if is_true(view, caught, MOBILE) && height > 0 {
+                        push(
+                            caught,
+                            IMPACT,
+                            Change::Set(Value::Int(height)),
+                            "struck_by_falling_walls",
+                        );
+                    }
+                }
                 Self::doors_of(view, broken)
                     .into_iter()
                     .filter(|f| {
@@ -494,6 +573,12 @@ impl System for Act {
             for face in faces {
                 if face != broken {
                     push(face, BROKEN, Change::Set(Value::Bool(true)), "broke");
+                    push(
+                        face,
+                        WHOLE_SHAPE,
+                        Change::Set(whole_shape(view, face)),
+                        "broke",
+                    );
                 }
                 if doors.insert(face, true).is_none() {
                     push(
@@ -508,6 +593,46 @@ impl System for Act {
                 }
             }
         }
+        // What was broken and is mended whole is what it was again (Amendment A-31): standing as
+        // tall, as solid, as opaque, and walled, as it was — and a walled place's doors with it.
+        for whole in Self::mended_whole(view, ctx.basis_tick()) {
+            let mut restore = |thing: EntityId| {
+                let Some([height, flags, _]) = view
+                    .read(FactKey::new(thing, WHOLE_SHAPE))
+                    .and_then(|f| f.value.as_vec3())
+                else {
+                    return;
+                };
+                push(thing, BROKEN, Change::Tombstone, "mended");
+                push(thing, WHOLE_SHAPE, Change::Tombstone, "mended");
+                for (bit, fact) in [(1, SOLID), (2, OPAQUE), (4, ENCLOSED)] {
+                    if flags & bit != 0 {
+                        push(thing, fact, Change::Set(Value::Bool(true)), "mended");
+                    }
+                }
+                if let Some([w, d, h]) = size_of(view, thing) {
+                    if h != height && height > 0 {
+                        let back = Value::Vec3([w, d, height]);
+                        push(thing, BODY_SIZE, Change::Set(back), "mended");
+                    }
+                }
+            };
+            restore(whole);
+            let walled = view
+                .read(FactKey::new(whole, WHOLE_SHAPE))
+                .and_then(|f| f.value.as_vec3())
+                .is_some_and(|[_, flags, _]| flags & 4 != 0);
+            if walled {
+                for face in Self::doors_of(view, whole) {
+                    if is_true(view, face, BROKEN)
+                        && view.read(FactKey::new(face, INTEGRITY)).is_none()
+                    {
+                        restore(face);
+                    }
+                }
+            }
+        }
+
         // Things coming into the world, and leaving it (Amendment A-15): into a place, or a hand;
         // or, asked to arrive at a fixture — a hearth — set down just in front of it, in its
         // place, where one can walk up to it (Amendment A-18).
@@ -668,6 +793,25 @@ impl System for Act {
                     refused = Some(thing);
                 }
             }
+            // Mending (Amendment A-31): with a tool no softer than what is mended, a little at a
+            // time — less, the more there is of it.
+            if let Some(target) = entity_at(view, body, ACT_MEND) {
+                push(body, ACT_MEND, Change::Tombstone, "considered");
+                if self.can_mend(view, body, target) {
+                    let kg = crate::fire::structure_kg(view, target, self.wall_thickness_cm).max(1);
+                    let restored = kernel::fixed::div_dither(
+                        self.mend_scale as i128 * 1000,
+                        kg as i128,
+                        &mut ctx.rng(target.raw()),
+                    ) as i64;
+                    if restored > 0 {
+                        push(target, INTEGRITY, Change::Delta(restored), "mended");
+                    }
+                    succeeded = true;
+                } else {
+                    refused = Some(target);
+                }
+            }
             // Setting fire (Amendment A-28): with a flame to hand, to a thing in hand or in reach
             // that can burn.
             if let Some(target) = entity_at(view, body, ACT_IGNITE) {
@@ -713,6 +857,37 @@ impl System for Act {
                     push(body, ACT_REFUSED, Change::Tombstone, "done")
                 }
                 None => {}
+            }
+        }
+        // Pushes (Amendment A-33), last: a thing someone has taken hold of, or that broke or fell
+        // this tick, is not also pushed. One moving already finishes its move first. In a place
+        // with a size, a push stops at its edge.
+        for thing in view.entities_with(ACT_PUSH) {
+            push(thing, ACT_PUSH, Change::Tombstone, "considered");
+            let Some([dx, dy, _]) = view
+                .read(FactKey::new(thing, ACT_PUSH))
+                .and_then(|f| f.value.as_vec3())
+            else {
+                continue;
+            };
+            let Some(place) = container_of(view, thing) else {
+                continue;
+            };
+            if view.read(FactKey::new(thing, MOTION_TARGET)).is_some() || !handled.insert(thing) {
+                continue;
+            }
+            let [x, y, z] = local_position(view, thing);
+            let (mut nx, mut ny) = (x.saturating_add(dx), y.saturating_add(dy));
+            if let Some([hw, hd, _]) = size_of(view, place) {
+                (nx, ny) = (nx.clamp(-hw, hw), ny.clamp(-hd, hd));
+            }
+            if [nx, ny] != [x, y] {
+                push(
+                    thing,
+                    POSITION,
+                    Change::Set(Value::Vec3([nx, ny, z])),
+                    "pushed",
+                );
             }
         }
         out

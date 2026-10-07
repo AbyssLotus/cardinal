@@ -213,6 +213,7 @@ const FRONT_DOOR_WRITES: &[FactType] = &[
     physical::schema::ACT_PICK,
     physical::schema::ACT_STRIKE,
     physical::schema::ACT_IGNITE,
+    physical::schema::ACT_MEND,
     economy::schema::ACT_MAKE,
     economy::schema::ACT_CLAIM,
     minds::schema::DIRECTED,
@@ -399,6 +400,12 @@ impl City {
     /// Ask `who` to shut `door`.
     pub fn close(&mut self, who: u64, door: u64) -> &mut Self {
         self.order(who, ACT_CLOSE, Value::Entity(e(door)));
+        self
+    }
+
+    /// Ask `who` to mend `thing` a little (Amendment A-31).
+    pub fn mend(&mut self, who: u64, thing: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_MEND, Value::Entity(e(thing)));
         self
     }
 

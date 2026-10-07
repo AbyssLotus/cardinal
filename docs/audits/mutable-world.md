@@ -51,7 +51,7 @@ striking.
    - In a storm, exposed structures take damage where the wind's force exceeds what their weakest
      material bears. Light, loose things are blown about.
    - Storms the world package declares, and those the weather makes.
-4. **Minds that notice (A-30).** Fleeing fire, keeping out of burning places, breaking a way
+4. **Minds that notice.** Fleeing fire, keeping out of burning places, breaking a way
    through when the way is shut.
 5. **Open ground in a ruin.** Walking into and out of a place with no walls anywhere along its edge,
    not only through its doorways. This also lifts the "no travel between open sibling places
@@ -70,9 +70,17 @@ geometry: fire and storm there are a later, aggregate slice.
 - **Built:** slice 1, integrity and breaking (A-27): `tests/reference/tests/breaking.rs`.
 - **Built:** slice 2, fire (A-28): `tests/reference/tests/fire.rs`.
 - **Built:** slice 3, wind (A-29): `tests/reference/tests/wind.rs`.
-- **Next:** minds that notice (A-30), and open ground in a ruin.
+- **Built:** slice 5, open ground (A-30): `tests/reference/tests/open_ground.rs`.
+- **Built** beyond the plan:
+  - collapse and mending (A-31): `tests/reference/tests/mending.rs`;
+  - fire in the air: warmth, smoke, and fanning (A-32): `tests/reference/tests/fire_air.rs`;
+  - wind that moves things, pushes, and gales from deep lows (A-33): `tests/reference/tests/wind.rs`.
+- **Next:** slice 4, minds that notice: fleeing fire, keeping out of burning places, and breaking
+  a way through when the way is shut. Its amendment number moves on (A-30 went to open ground).
+- **Later:** fire and storm at the city tier, as aggregates over building records; warmth and
+  smoke passing from room to room; embers carried downwind; people knocked down by the wind.
 
-Two things the building found:
+What the building found:
 - **A thing on a broken table must fall.** Gravity only drops bodies that move by themselves.
   Breaking now drops what stood on what broke, found by looking over its place, so the answer is
   the same with or without the spatial index. The first attempt (having gravity look above
@@ -81,3 +89,8 @@ Two things the building found:
 - **Heat is drawn from a fire's middle, not its top.** A hay pile exactly as tall as a bedroom's
   floor had its heat to the kitchen shadowed by the walled bedroom above, until the line was drawn
   from where the fire is rather than where a gaze would start.
+- **A fire inside a room heats the walls as near as it is to them.** At first, any fire in a room
+  set its walls alight as if it stood against them. Walls now take heat by the distance to the
+  nearest wall or the ceiling.
+- **A broken door stays broken open.** A smashed window could be shut again, and kept out sight and
+  smoke as if whole. Shutting a broken door is now refused until it is mended (A-31).

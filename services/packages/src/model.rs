@@ -372,6 +372,8 @@ pub struct PhysicalRules {
     pub strike_scale: i64,
     /// How tall the wreckage of a broken thing stands at most, in centimetres.
     pub wreckage_height_cm: i64,
+    /// Integrity a mending action restores: this × 1000 over the thing's kilograms (A-31).
+    pub mend_scale: i64,
     /// How often fire takes its course, in seconds (Amendment A-28).
     pub fire_step_seconds: u64,
     /// How fast a fire grows toward what its material allows, per hour.
@@ -390,10 +392,27 @@ pub struct PhysicalRules {
     pub douse_per_hour: i64,
     /// How thick a walled place's walls, floor, and roof are, in centimetres.
     pub wall_thickness_cm: i64,
+    /// How much a full fire warms a hundred cubic metres of walled air, per hour, centidegrees
+    /// (Amendment A-32).
+    pub fire_warmth_per_hour: i64,
+    /// How much smoke a full fire raises in a hundred cubic metres of walled air, per hour.
+    pub smoke_per_hour: i64,
+    /// How much of a walled place's smoke clears per hour, again as much per open opening.
+    pub smoke_clear_per_hour: i64,
+    /// The wind, cm/s, that fans a fire in the open to twice what its fuel allows.
+    pub fire_fan_wind_cm_s: i64,
     /// The wind's pressure is its speed squared over this, in the units of hardness (A-29).
     pub wind_force_divisor: i64,
     /// Integrity lost per hour per unit of pressure beyond what a structure bears.
     pub wind_damage_scale: i64,
+    /// How much pressure each kilogram of a loose thing holds it against (Amendment A-33).
+    pub wind_hold_per_kg: i64,
+    /// How far, cm an hour, a wind that overwhelms what holds a thing carries it.
+    pub wind_carry_cm_per_hour: i64,
+    /// How far under normal, in decapascals, pressure must fall before a gale brews.
+    pub gale_below: i64,
+    /// How much wind, cm/s, each decapascal deeper brings.
+    pub gale_per_decapascal: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).
@@ -643,6 +662,8 @@ pub struct LivingRules {
     pub strength: Option<i64>,
     /// Health lost per hour in the full heat of a fire (Amendment A-28).
     pub burn_harm_per_hour: i64,
+    /// Health lost per hour breathing thick smoke (Amendment A-32).
+    pub smoke_harm_per_hour: i64,
 }
 
 /// One region the world begins with (Vol. IV Ch. 4, generation): an id, a starting

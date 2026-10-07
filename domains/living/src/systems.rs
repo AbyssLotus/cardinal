@@ -257,10 +257,16 @@ pub struct HarmRules {
     pub starving_harm_per_hour: i64,
     /// Health lost per hour in the full heat of a fire (Amendment A-28); less in less.
     pub burn_harm_per_hour: i64,
+    /// Health lost per hour breathing thick smoke (Amendment A-32); less in thinner.
+    pub smoke_harm_per_hour: i64,
 }
 
 const HEALTH_READS: &[FactType] = &[
+    crate::schema::SMOKE,
+    CONTAINED_IN,
     crate::schema::HEAT_EXPOSURE,
+    crate::schema::IMPACT,
+    crate::schema::IMPACT_JUDGED,
     HUNGER,
     BODY_HEAT,
     HEALTH,
@@ -271,7 +277,13 @@ const HEALTH_READS: &[FactType] = &[
     KIND_HARM,
 ];
 // At death the organism stops: its senses go, and its body no longer walks where it was going.
-const HEALTH_WRITES: &[FactType] = &[HEALTH, FALL_JUDGED, SIGHT_RANGE, TRAVEL_TO];
+const HEALTH_WRITES: &[FactType] = &[
+    HEALTH,
+    FALL_JUDGED,
+    crate::schema::IMPACT_JUDGED,
+    SIGHT_RANGE,
+    TRAVEL_TO,
+];
 
 /// Harm and healing (Vol. III Ch. 2 §2.4; Appendix A, Rulings 9 and 15; Amendment A-10). Every
 /// living organism's health falls while its body is colder than the world's line, and once for
@@ -337,6 +349,23 @@ impl System for Health {
                     ));
                 }
             }
+            // Struck by something falling, not yet judged (Amendment A-31): as a fall from as
+            // high strikes.
+            if let Some(f) = view.read(FactKey::new(organism, crate::schema::IMPACT)) {
+                let judged =
+                    int(view, FactKey::new(organism, crate::schema::IMPACT_JUDGED)).unwrap_or(0);
+                if f.provenance.tick as i64 > judged {
+                    let beyond = (f.value.as_int().unwrap_or(0) - r.safe_fall_cm).max(0);
+                    fall += beyond * r.fall_harm_per_metre / 100;
+                    out.push(Proposal::new(
+                        self.id(),
+                        FactKey::new(organism, crate::schema::IMPACT_JUDGED),
+                        ctx.basis_tick(),
+                        Change::Set(kernel::value::Value::Int(f.provenance.tick as i64)),
+                        Cause::new("impact_judged"),
+                    ));
+                }
+            }
             // Needs felt strongly enough to hurt, as their kinds declare (Amendment A-11).
             let mut aching = 0;
             for (object, level) in view.read_about(organism, NEED) {
@@ -362,8 +391,23 @@ impl System for Health {
             };
             // Burns: the heat of a fire, as Physical Reality reports it (Amendment A-28).
             let heat = int(view, FactKey::new(organism, crate::schema::HEAT_EXPOSURE)).unwrap_or(0);
-            let burns = over(
+            let mut burns = over(
                 r.burn_harm_per_hour * heat / FULL,
+                self.step.dt_ms,
+                &mut rng,
+            );
+            // Smoke, breathed where it stands (Amendment A-32): counted with the fire's harm.
+            let smoke = view
+                .read(FactKey::new(organism, CONTAINED_IN))
+                .and_then(|f| match f.value {
+                    kernel::value::Value::Entity(place) => {
+                        int(view, FactKey::new(place, crate::schema::SMOKE))
+                    }
+                    _ => None,
+                })
+                .unwrap_or(0);
+            burns += over(
+                r.smoke_harm_per_hour * smoke / FULL,
                 self.step.dt_ms,
                 &mut rng,
             );

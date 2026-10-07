@@ -561,11 +561,26 @@ fn in_view_with(
     min_illumination: i64,
     bare: &Bare,
 ) -> BTreeSet<EntityId> {
+    // Smoke (Amendment A-32): in a smoky place one sees only as far as the smoke lets one, and
+    // what is in a smoky place is seen only from as near.
+    let clear = |place: Option<EntityId>| {
+        place
+            .and_then(|p| view.read(FactKey::new(p, crate::schema::SMOKE)))
+            .and_then(|f| f.value.as_int())
+            .map_or(crate::schema::PERCENT_FULL, |s| {
+                (crate::schema::PERCENT_FULL - s).max(0)
+            })
+    };
+    let range =
+        range * clear(crate::index::container_of(view, observer)) / crate::schema::PERCENT_FULL;
     if range <= 0 {
         return BTreeSet::new();
     }
     let mut seen: BTreeSet<EntityId> = within(view, observer, range)
         .into_iter()
+        .filter(|(e, d)| {
+            *d <= range * clear(crate::index::container_of(view, *e)) / crate::schema::PERCENT_FULL
+        })
         .map(|(e, _)| e)
         .filter(|e| {
             bare.lit(view, *e, min_illumination) && line_of_sight_with(view, observer, *e, bare)
@@ -603,6 +618,7 @@ const SIGHT_READS: &[FactType] = &[
     SIGHT_RANGE,
     IN_VIEW,
     crate::schema::BURNING,
+    crate::schema::SMOKE,
 ];
 const SIGHT_WRITES: &[FactType] = &[IN_VIEW];
 

@@ -217,6 +217,7 @@ pub fn living_config(package: &WorldPackage) -> Option<LivingConfig> {
         resident_sight_cm: package.residents_rules.map(|r| r.sight_cm),
         strength: rules.strength,
         burn_harm_per_hour: rules.burn_harm_per_hour,
+        smoke_harm_per_hour: rules.smoke_harm_per_hour,
     })
 }
 
@@ -366,6 +367,7 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             scale: r.strike_scale,
         },
         wreckage_height_cm: r.wreckage_height_cm,
+        mend_scale: r.mend_scale,
         fire: physical::fire::FireRules {
             step_seconds: r.fire_step_seconds,
             grow_per_hour: r.fire_grow_per_hour,
@@ -376,10 +378,20 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             rain_above: r.rain_above,
             douse_per_hour: r.douse_per_hour,
             wall_thickness_cm: r.wall_thickness_cm,
+            warmth_per_hour: r.fire_warmth_per_hour,
+            smoke_per_hour: r.smoke_per_hour,
+            smoke_clear_per_hour: r.smoke_clear_per_hour,
+            fan_wind_cm_s: r.fire_fan_wind_cm_s,
         },
         wind: physical::wind::WindRules {
             force_divisor: r.wind_force_divisor,
             damage_scale: r.wind_damage_scale,
+            hold_per_kg: r.wind_hold_per_kg,
+            carry_cm_per_hour: r.wind_carry_cm_per_hour,
+        },
+        gale: physical::systems::Gale {
+            below: r.gale_below,
+            per_decapascal: r.gale_per_decapascal,
         },
     }
 }
@@ -662,6 +674,27 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         store.seed(
             FactKey::new(EntityId::from_raw(m.location_id), IN_REGION),
             seeded(Value::Entity(EntityId::from_raw(m.region_id))),
+        );
+    }
+
+    // Places one can be in, rather than things (Amendment A-30): every climate, every declared
+    // place, every walled room, and everywhere an opening is in or leads to.
+    let mut places: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
+    places.extend(package.regions.iter().map(|r| r.id));
+    places.extend(package.places.iter().map(|(p, _)| *p));
+    for spec in &package.flags {
+        if spec.flags.contains(&Flag::Enclosed) {
+            places.insert(spec.entity_id);
+        }
+    }
+    for portal in &package.portals {
+        places.insert(portal.host_region);
+        places.insert(portal.dest_region);
+    }
+    for place in places {
+        store.seed(
+            FactKey::new(EntityId::from_raw(place), physical::schema::PLACE),
+            seeded(Value::Bool(true)),
         );
     }
 

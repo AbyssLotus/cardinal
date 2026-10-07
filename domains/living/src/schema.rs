@@ -8,6 +8,10 @@
 
 use kernel::fact::FactType;
 
+/// How thick the smoke is in a walled place — **Physical Reality's** (Amendment A-32), read where
+/// an organism is, to judge what breathing it does.
+pub const SMOKE: FactType = FactType::new("physical.environment.smoke");
+
 /// An organism's body heat, as fixed-point centidegrees Celsius — vital-state physiology
 /// (Vol. III Ch. 2, vital state), the substrate of the "warmth" need that tracks the
 /// environment. Owned by Living Systems; fixed-point, not float (Vol. V Ch. 4).
@@ -102,6 +106,13 @@ pub const IN_VIEW: FactType = FactType::new("physical.sense.in_view");
 
 /// The full measure of a need or of health, in hundredths of a percent.
 pub const FULL: i64 = 10_000;
+
+/// How hard a body was struck by something falling on it, as the height of a fall that would
+/// strike as hard — **Physical Reality's** report (Amendment A-31), judged as a fall would be.
+pub const IMPACT: FactType = FactType::new("physical.body.impact");
+
+/// The tick of the last impact this domain has judged, so each strikes once.
+pub const IMPACT_JUDGED: FactType = FactType::new("living.vital.impact_judged");
 
 /// How much heat from fire a body is taking — **Physical Reality's** report (Amendment A-28),
 /// consumed by id to judge burns (Appendix A, Ruling 9).

@@ -15,17 +15,21 @@
 
 use crate::fire::{cube_root, structure_kg, Fire};
 use crate::schema::{
-    BODY_SIZE, BROKEN, CONTAINED_IN, ENCLOSED, EXPOSURE, INTEGRITY, LEADS_TO, MADE_OF,
-    MATERIAL_DENSITY, MATERIAL_HARDNESS, MOBILE, PERCENT_FULL, WIND_SPEED,
+    ACT_PUSH, BODY_SIZE, BROKEN, CONTAINED_IN, ENCLOSED, EXPOSURE, HEADING, INTEGRITY, LEADS_TO,
+    MADE_OF, MATERIAL_DENSITY, MATERIAL_HARDNESS, MOBILE, MOTION_END, MOTION_START, MOTION_TARGET,
+    PERCENT_FULL, POSITION, SOLID, WIND_SPEED, WIND_TOWARD,
 };
 use crate::terrain::is_true;
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
-use kernel::fixed::div_dither;
+use kernel::fixed::{div_dither, isqrt};
+use kernel::identity::EntityId;
 use kernel::proposal::{Change, Proposal};
+use kernel::rng::Rng;
 use kernel::system::{Cadence, CommittedView, System, TickContext};
 use kernel::time::Step;
+use kernel::value::Value;
 
-/// How wind bears on what stands in it (Amendment A-29), all world rules.
+/// How wind bears on what stands in it (Amendments A-29, A-33), all world rules.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct WindRules {
     /// The wind's pressure is its speed squared over this, in the units of hardness.
@@ -33,10 +37,15 @@ pub struct WindRules {
     /// Integrity lost per hour for each unit the pressure exceeds what a structure bears, from a
     /// hundred kilograms of it; more of it fails more slowly, by the cube root of how much more.
     pub damage_scale: i64,
+    /// How much pressure each kilogram of a loose thing holds it in place against (A-33).
+    pub hold_per_kg: i64,
+    /// How far, in centimetres an hour, a wind that overwhelms what holds a thing carries it.
+    pub carry_cm_per_hour: i64,
 }
 
 const WIND_LOAD_READS: &[FactType] = &[
     WIND_SPEED,
+    WIND_TOWARD,
     CONTAINED_IN,
     ENCLOSED,
     EXPOSURE,
@@ -48,8 +57,44 @@ const WIND_LOAD_READS: &[FactType] = &[
     BROKEN,
     MOBILE,
     LEADS_TO,
+    SOLID,
+    POSITION,
+    HEADING,
+    MOTION_TARGET,
+    MOTION_START,
+    MOTION_END,
 ];
-const WIND_LOAD_WRITES: &[FactType] = &[INTEGRITY];
+const WIND_LOAD_WRITES: &[FactType] = &[INTEGRITY, ACT_PUSH];
+
+/// Which way, as a vector of length `distance`, the wind over `region` carries things: toward the
+/// region it blows to, where both have a place in a common frame; else a gust's way, drawn from
+/// `rng` (Amendment A-33).
+fn downwind(view: &dyn CommittedView, region: EntityId, distance: i64, rng: &mut Rng) -> [i64; 2] {
+    let toward = view
+        .read(FactKey::new(region, WIND_TOWARD))
+        .and_then(|f| match f.value {
+            Value::Entity(e) => Some(e),
+            _ => None,
+        });
+    let way = toward.and_then(|t| {
+        let common = kernel::hierarchy::lowest_common_ancestor(view, region, t, CONTAINED_IN)?;
+        let a = crate::space::position_in(view, region, common)?;
+        let b = crate::space::position_in(view, t, common)?;
+        let (dx, dy) = ((b[0] - a[0]) as i128, (b[1] - a[1]) as i128);
+        let len = isqrt((dx * dx + dy * dy) as u128) as i128;
+        (len > 0).then(|| {
+            [
+                (dx * distance as i128 / len) as i64,
+                (dy * distance as i128 / len) as i64,
+            ]
+        })
+    });
+    way.unwrap_or_else(|| {
+        let bearing = rng.below(36_000) as i64;
+        let v = crate::space::rotate(bearing, [0, distance, 0]);
+        [v[0], v[1]]
+    })
+}
 
 /// What the wind tears at (Amendment A-29).
 pub struct WindLoad {
@@ -114,11 +159,38 @@ impl System for WindLoad {
             {
                 continue;
             }
-            let Some((_, wind)) = crate::climate::ambient(view, thing, WIND_SPEED) else {
+            let Some((region, wind)) = crate::climate::ambient(view, thing, WIND_SPEED) else {
                 continue;
             };
+            let mut rng = ctx.rng(thing.raw());
+            // A loose thing too light to hold its place is carried downwind (Amendment A-33): the
+            // further, the more the wind overwhelms what its weight holds.
+            let presses = pressure(wind);
+            if !is_true(view, thing, SOLID) {
+                let held = crate::materials::weight_g(view, thing)
+                    .map_or(i64::MAX, |g| g / 1000 * r.hold_per_kg);
+                if presses > held {
+                    let distance = div_dither(
+                        (presses - held) as i128
+                            * r.carry_cm_per_hour as i128
+                            * self.step.dt_ms as i128,
+                        presses as i128 * 3_600_000,
+                        &mut rng,
+                    ) as i64;
+                    if distance > 0 {
+                        let [dx, dy] = downwind(view, region, distance, &mut rng);
+                        out.push(Proposal::new(
+                            self.id(),
+                            FactKey::new(thing, ACT_PUSH),
+                            ctx.basis_tick(),
+                            Change::Set(Value::Vec3([dx, dy, 0])),
+                            Cause::new("blown"),
+                        ));
+                    }
+                }
+            }
             let bears = crate::materials::structural_hardness(view, thing).unwrap_or(PERCENT_FULL);
-            let over_by = pressure(wind) - bears;
+            let over_by = presses - bears;
             if over_by <= 0 {
                 continue;
             }
@@ -126,7 +198,7 @@ impl System for WindLoad {
             let torn = div_dither(
                 over_by as i128 * r.damage_scale as i128 * self.step.dt_ms as i128,
                 3_600_000 * slower as i128,
-                &mut ctx.rng(thing.raw()),
+                &mut rng,
             ) as i64;
             if torn > 0 {
                 out.push(Proposal::new(

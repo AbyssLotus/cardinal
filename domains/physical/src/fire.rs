@@ -25,7 +25,8 @@ use crate::schema::{
     BODY_SIZE, BROKEN, BURNING, CONTAINED_IN, ENCLOSED, EXPOSURE, HAS_PORTAL, HEADING,
     HEAT_EXPOSURE, HUMIDITY, INTEGRITY, KEPT_FIRE, LEADS_TO, MADE_OF, MATERIAL_DENSITY,
     MATERIAL_FLAMMABILITY, MOBILE, MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PERCENT_FULL,
-    PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION, TERRAIN_SAMPLE, TERRAIN_SPACING,
+    PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION, SMOKE, TEMPERATURE, TERRAIN_SAMPLE, TERRAIN_SPACING,
+    WIND_SPEED,
 };
 use crate::terrain::is_true;
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
@@ -60,6 +61,17 @@ pub struct FireRules {
     pub douse_per_hour: i64,
     /// How thick a walled place's walls, floor, and roof are, in centimetres: what of it burns.
     pub wall_thickness_cm: i64,
+    /// How much a full fire warms the air of a hundred cubic metres of walled place, per hour, in
+    /// centidegrees (Amendment A-32).
+    pub warmth_per_hour: i64,
+    /// How much smoke a full fire raises in a hundred cubic metres of walled place, per hour.
+    pub smoke_per_hour: i64,
+    /// How much of a walled place's smoke clears per hour, in hundredths of a percent — again as
+    /// much for each opening that stands open.
+    pub smoke_clear_per_hour: i64,
+    /// The wind, in centimetres a second, that fans a fire in the open to twice what its fuel
+    /// alone allows, and carries its heat twice as far.
+    pub fan_wind_cm_s: i64,
 }
 
 /// Every placement and line-of-sight fact, besides fire's own.
@@ -90,8 +102,11 @@ const FIRE_READS: &[FactType] = &[
     PORTAL_FAR_SIDE,
     TERRAIN_SAMPLE,
     TERRAIN_SPACING,
+    SMOKE,
+    TEMPERATURE,
+    WIND_SPEED,
 ];
-const FIRE_WRITES: &[FactType] = &[BURNING, INTEGRITY, HEAT_EXPOSURE];
+const FIRE_WRITES: &[FactType] = &[BURNING, INTEGRITY, HEAT_EXPOSURE, SMOKE, TEMPERATURE];
 
 /// Fire's course, its heat, and what catches (Amendment A-28).
 pub struct Fire {
@@ -143,6 +158,27 @@ pub fn structure_kg(view: &dyn CommittedView, thing: EntityId, wall_thickness_cm
     } else {
         crate::materials::weight_g(view, thing).unwrap_or(0) / 1000
     }
+}
+
+/// The walled place whose air a fire at `thing` fills (Amendment A-32): the place itself, if it
+/// is walled; else the nearest walled place holding it — unless it stands in the open, where the
+/// air carries heat and smoke away.
+fn walled_air(view: &dyn CommittedView, thing: EntityId) -> Option<EntityId> {
+    if is_true(view, thing, ENCLOSED) {
+        return Some(thing);
+    }
+    kernel::hierarchy::ancestry(view, thing, CONTAINED_IN)
+        .into_iter()
+        .skip(1)
+        .find(|p| is_true(view, *p, ENCLOSED))
+}
+
+/// How many hundreds of cubic metres of air a walled place holds — at least one.
+fn hundreds_m3(view: &dyn CommittedView, place: EntityId) -> i64 {
+    size_of(view, place).map_or(1, |[hw, hd, h]| {
+        let cm3 = 2 * hw as i128 * 2 * hd as i128 * h as i128;
+        ((cm3 / 100_000_000) as i64).max(1)
+    })
 }
 
 /// How far `thing` extends from where it stands, across: half its widest side.
@@ -217,8 +253,16 @@ impl System for Fire {
                 push(FactKey::new(b, BURNING), Change::Tombstone, "burnt_out");
                 continue;
             }
-            let allows = crate::materials::flammability_of(view, b).unwrap_or(0);
-            let raining = Self::in_the_open(view, b)
+            let in_the_open = Self::in_the_open(view, b);
+            // In the open, the wind fans it fiercer than its fuel alone allows (Amendment A-32).
+            let wind = if in_the_open {
+                crate::climate::ambient(view, b, WIND_SPEED).map_or(0, |(_, w)| w.max(0))
+            } else {
+                0
+            };
+            let fuel = crate::materials::flammability_of(view, b).unwrap_or(0);
+            let allows = (fuel + fuel * wind / r.fan_wind_cm_s.max(1)).min(PERCENT_FULL);
+            let raining = in_the_open
                 && crate::climate::ambient(view, b, HUMIDITY)
                     .is_some_and(|(_, h)| h >= r.rain_above);
             let next = if raining {
@@ -256,7 +300,14 @@ impl System for Fire {
             if i <= 0 {
                 continue;
             }
-            let reach = r.reach_cm * i / PERCENT_FULL + half(view, b);
+            // The wind carries its heat farther — in every direction, as gusts do.
+            let wind = if Self::in_the_open(view, b) {
+                crate::climate::ambient(view, b, WIND_SPEED).map_or(0, |(_, w)| w.max(0))
+            } else {
+                0
+            };
+            let carried = r.reach_cm * i / PERCENT_FULL;
+            let reach = carried + carried * wind / r.fan_wind_cm_s.max(1) + half(view, b);
             let holds = |c: EntityId| {
                 kernel::hierarchy::ancestry(view, c, CONTAINED_IN)
                     .into_iter()
@@ -303,6 +354,69 @@ impl System for Fire {
                     Change::Set(Value::Int(r.ignite_intensity)),
                     "caught_fire",
                 );
+            }
+        }
+
+        // 5. The air of walled places: warmed by what burns in them, and filled with its smoke,
+        //    which clears through the openings that stand open (Amendment A-32). A kept fire —
+        //    a hearth, with its chimney — warms the room and sends its smoke up and away.
+        let mut fires_in: BTreeMap<EntityId, i64> = BTreeMap::new();
+        let mut smoking_in: BTreeMap<EntityId, i64> = BTreeMap::new();
+        for &(b, i) in &burning {
+            if let Some(room) = walled_air(view, b) {
+                *fires_in.entry(room).or_insert(0) += i;
+                if !is_true(view, b, KEPT_FIRE) {
+                    *smoking_in.entry(room).or_insert(0) += i;
+                }
+            }
+        }
+        let mut rooms: std::collections::BTreeSet<EntityId> = fires_in.keys().copied().collect();
+        rooms.extend(view.entities_with(SMOKE));
+        for room in rooms {
+            let mut rng = ctx.rng(room.raw() ^ 0x5eed);
+            let fire = fires_in.get(&room).copied().unwrap_or(0);
+            let smoking = smoking_in.get(&room).copied().unwrap_or(0);
+            let air = hundreds_m3(view, room);
+            if fire > 0 && view.read(FactKey::new(room, TEMPERATURE)).is_some() {
+                let warmed = self.over(fire * r.warmth_per_hour / PERCENT_FULL / air, &mut rng);
+                if warmed > 0 {
+                    push(
+                        FactKey::new(room, TEMPERATURE),
+                        Change::Delta(warmed),
+                        "fire",
+                    );
+                }
+            }
+            let smoke = int(view, FactKey::new(room, SMOKE)).unwrap_or(0);
+            if !is_true(view, room, ENCLOSED) {
+                if smoke > 0 {
+                    push(FactKey::new(room, SMOKE), Change::Tombstone, "cleared");
+                }
+                continue;
+            }
+            let open = crate::space::portals_in(view, room)
+                .into_iter()
+                .filter(|p| {
+                    view.read(FactKey::new(*p, PORTAL_OPEN)).map(|f| f.value)
+                        != Some(Value::Bool(false))
+                })
+                .count() as i64;
+            let rises = self.over(smoking * r.smoke_per_hour / PERCENT_FULL / air, &mut rng);
+            let clears = self.over(
+                smoke * r.smoke_clear_per_hour / PERCENT_FULL * (1 + open),
+                &mut rng,
+            );
+            let next = (smoke + rises - clears).clamp(0, PERCENT_FULL);
+            if next != smoke {
+                if next == 0 {
+                    push(FactKey::new(room, SMOKE), Change::Tombstone, "cleared");
+                } else {
+                    push(
+                        FactKey::new(room, SMOKE),
+                        Change::Set(Value::Int(next)),
+                        "smoke",
+                    );
+                }
             }
         }
 

@@ -140,10 +140,15 @@ pub struct PhysicalConfig {
     pub strike: act::StrikeRules,
     /// How tall the wreckage of a broken thing stands at most, in centimetres (Amendment A-27).
     pub wreckage_height_cm: i64,
+    /// Integrity a mending action restores, per kilogram of the thing over this (Amendment
+    /// A-31): `mend_scale × 1000 / kg`.
+    pub mend_scale: i64,
     /// How fire behaves (Amendment A-28).
     pub fire: fire::FireRules,
     /// How wind bears on what stands in it (Amendment A-29).
     pub wind: wind::WindRules,
+    /// How a deep low brews a gale (Amendment A-33).
+    pub gale: systems::Gale,
 }
 
 impl PhysicalConfig {
@@ -183,6 +188,9 @@ pub const RESTRICTED: &[FactType] = &[
     schema::BURNING,
     schema::KEPT_FIRE,
     schema::HEAT_EXPOSURE,
+    schema::WHOLE_SHAPE,
+    schema::IMPACT,
+    schema::SMOKE,
 ];
 
 /// The Physical Reality domain, plugged into the kernel (Appendix A owner of the stage).
@@ -250,6 +258,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_OPEN
             || fact_type == schema::ACT_CLOSE
             || fact_type == schema::ACT_FACE
+            || fact_type == schema::ACT_PUSH
             || fact_type == schema::ACT_REFUSED
             || fact_type == schema::CONTAINED_IN
             || fact_type == schema::IN_REGION
@@ -282,6 +291,11 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::BROKEN
             || fact_type == schema::ACT_STRIKE
             || fact_type == schema::STORM
+            || fact_type == schema::PLACE
+            || fact_type == schema::WHOLE_SHAPE
+            || fact_type == schema::SMOKE
+            || fact_type == schema::ACT_MEND
+            || fact_type == schema::IMPACT
             || fact_type == schema::BURNING
             || fact_type == schema::KEPT_FIRE
             || fact_type == schema::ACT_IGNITE
@@ -365,6 +379,7 @@ impl Domain for PhysicalDomain {
                 step,
                 c.wind_gradient_divisor,
                 schema::MAX_WIND,
+                c.gale,
             )),
             Box::new(systems::PortalDanger::new(c.fall_danger_per_meter)),
             // Closes finished motion segments: one write per arrival (Amendment A-3).
@@ -380,6 +395,8 @@ impl Domain for PhysicalDomain {
                 c.wreckage_height_cm,
                 c.move_rules(),
                 c.fire.ignite_intensity,
+                c.mend_scale,
+                c.fire.wall_thickness_cm,
             )),
             // What the wind tears at (Amendment A-29).
             Box::new(wind::WindLoad::new(step, c.wind, c.fire.wall_thickness_cm)),
@@ -425,9 +442,10 @@ impl Domain for PhysicalDomain {
             composition::compose_integrity(current, changes, schema::PERCENT_FULL)
         } else if fact_type == schema::BURNING {
             composition::compose_fire(changes)
-        } else if fact_type == schema::HEAT_EXPOSURE {
+        } else if fact_type == schema::HEAT_EXPOSURE || fact_type == schema::SMOKE {
             composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
         } else if fact_type == schema::SOLID
+            || fact_type == schema::PLACE
             || fact_type == schema::KEPT_FIRE
             || fact_type == schema::BROKEN
             || fact_type == schema::OPAQUE
@@ -447,8 +465,12 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::MOTION_END
         {
             composition::compose_segment_field(current, changes)
-        } else if fact_type == schema::POSITION {
+        } else if fact_type == schema::POSITION || fact_type == schema::WHOLE_SHAPE {
             composition::compose_vec3(current, changes, None)
+        } else if fact_type == schema::IMPACT {
+            composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
+        } else if fact_type == schema::ACT_PUSH {
+            composition::compose_push(changes)
         } else if fact_type == schema::BODY_SIZE {
             composition::compose_vec3(current, changes, Some((0, schema::MAX_SIZE)))
         } else if fact_type == schema::HEADING {
@@ -501,6 +523,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_PICK
             || fact_type == schema::ACT_STRIKE
             || fact_type == schema::ACT_IGNITE
+            || fact_type == schema::ACT_MEND
         {
             composition::compose_intent(current, changes)
         } else if fact_type == schema::ACT_FACE {

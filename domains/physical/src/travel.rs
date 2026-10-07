@@ -39,12 +39,12 @@
 use crate::index::{container_of, size_of};
 use crate::motion::{compass, depart, halt, is_moving, segment};
 use crate::schema::{
-    BODY_SIZE, CONTAINED_IN, FALL_HEIGHT, HAS_PORTAL, HEADING, LEADS_TO, MOBILE, MOTION_END,
-    MOTION_START, MOTION_TARGET, PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION, SOLID, TERRAIN_SAMPLE,
-    TERRAIN_SPACING, TRAVEL_BLOCKED, TRAVEL_SPEED, TRAVEL_TO,
+    BODY_SIZE, CONTAINED_IN, ENCLOSED, FALL_HEIGHT, HAS_PORTAL, HEADING, LEADS_TO, MOBILE,
+    MOTION_END, MOTION_START, MOTION_TARGET, PLACE, PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION, SOLID,
+    TERRAIN_SAMPLE, TERRAIN_SPACING, TRAVEL_BLOCKED, TRAVEL_SPEED, TRAVEL_TO,
 };
 use crate::shape::{body_box, BodyBox};
-use crate::space::{far_side, local_position, portal_destination, rotate, route_where};
+use crate::space::{far_side, local_position, portal_destination, portals_in, rotate};
 use crate::terrain::{ground, is_true, slope_percent, support, support_at};
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::fixed::isqrt;
@@ -176,7 +176,122 @@ struct Planner<'v> {
     walls: BTreeMap<EntityId, Vec<(EntityId, BodyBox)>>,
     slopes: BTreeMap<(EntityId, i64, i64), Option<i64>>,
     grids: BTreeMap<(EntityId, i64), Grid>,
-    routes: BTreeMap<(EntityId, EntityId, Option<[i64; 3]>), Option<Vec<EntityId>>>,
+    routes: BTreeMap<(EntityId, EntityId, Option<[i64; 3]>), Option<Vec<Way>>>,
+}
+
+/// One step of a way from place to place (Amendment A-30): through an opening, into a place
+/// without walls from the place around it, or out of one into the place around it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Way {
+    /// Through this opening.
+    Portal(EntityId),
+    /// Into this place, which has no walls, anywhere along its edge.
+    Into(EntityId),
+    /// Out of the place one is in, which has no walls, into the place around it.
+    OutOf,
+}
+
+/// Whether `place` is a place without walls (Amendment A-30): open ground, a street, a ruin.
+fn open_place(view: &dyn CommittedView, place: EntityId) -> bool {
+    is_true(view, place, PLACE) && !is_true(view, place, ENCLOSED)
+}
+
+/// The way from place `from` to place `to`, through openings `usable` accepts, and across the edges
+/// of places without walls (Amendment A-30): out of any open place one is in, and into any open
+/// place that holds where one is going. Breadth first; openings before edges, and openings in
+/// ascending id, so the answer is deterministic. Edges are taken only along the two lines of
+/// containers — up from where one is, down toward where one is going — so a search across a city's
+/// open ground does not wander into every street in it.
+fn ways_between(
+    view: &dyn CommittedView,
+    from: EntityId,
+    to: EntityId,
+    usable: impl Fn(EntityId) -> bool,
+) -> Option<Vec<Way>> {
+    if from == to {
+        return Some(Vec::new());
+    }
+    let toward: Vec<EntityId> = kernel::hierarchy::ancestry(view, to, CONTAINED_IN);
+    let mut came_by: BTreeMap<EntityId, (EntityId, Way)> = BTreeMap::new();
+    let mut queue = std::collections::VecDeque::from([from]);
+    while let Some(place) = queue.pop_front() {
+        let mut next: Vec<(EntityId, Way)> = Vec::new();
+        for portal in portals_in(view, place) {
+            if usable(portal) {
+                if let Some(dest) = portal_destination(view, portal) {
+                    next.push((dest, Way::Portal(portal)));
+                }
+            }
+        }
+        if open_place(view, place) {
+            if let Some(around) = container_of(view, place) {
+                next.push((around, Way::OutOf));
+            }
+        }
+        for &inner in &toward {
+            if inner != place && container_of(view, inner) == Some(place) && open_place(view, inner)
+            {
+                next.push((inner, Way::Into(inner)));
+            }
+        }
+        for (dest, way) in next {
+            if dest == from || came_by.contains_key(&dest) {
+                continue;
+            }
+            came_by.insert(dest, (place, way));
+            if dest == to {
+                let mut path = Vec::new();
+                let mut here = to;
+                while here != from {
+                    let (previous, way) = came_by[&here];
+                    path.push(way);
+                    here = previous;
+                }
+                path.reverse();
+                return Some(path);
+            }
+            queue.push_back(dest);
+        }
+    }
+    None
+}
+
+/// Where, in `around`'s frame, one standing at `at` steps into open place `inner` (Amendment
+/// A-30): the nearest point of its footprint — where one stands, if already over it — or, for a
+/// place with no size, where it is.
+fn way_in(view: &dyn CommittedView, inner: EntityId, at: [i64; 3]) -> [i64; 3] {
+    let origin = local_position(view, inner);
+    let Some([hw, hd, _]) = size_of(view, inner) else {
+        return [origin[0], origin[1], at[2]];
+    };
+    let turn = crate::space::heading(view, inner);
+    let rel = rotate(
+        (36_000 - turn).rem_euclid(36_000),
+        [at[0] - origin[0], at[1] - origin[1], 0],
+    );
+    let clamped = [rel[0].clamp(-hw, hw), rel[1].clamp(-hd, hd), 0];
+    let back = rotate(turn, clamped);
+    [origin[0] + back[0], origin[1] + back[1], at[2]]
+}
+
+/// Where, in open place `here`'s own frame, one standing at `at` steps out of it (Amendment
+/// A-30): the nearest point of its edge, or, for a place with no size, its middle.
+fn way_out(view: &dyn CommittedView, here: EntityId, at: [i64; 3]) -> [i64; 3] {
+    let Some([hw, hd, _]) = size_of(view, here) else {
+        return [0, 0, at[2]];
+    };
+    let (x, y) = (at[0].clamp(-hw, hw), at[1].clamp(-hd, hd));
+    let edges = [
+        (hw - x, [hw, y]),
+        (x + hw, [-hw, y]),
+        (hd - y, [x, hd]),
+        (y + hd, [x, -hd]),
+    ];
+    let (_, [ex, ey]) = edges
+        .into_iter()
+        .min_by_key(|(d, _)| *d)
+        .expect("four edges");
+    [ex, ey, at[2]]
 }
 
 impl<'v> Planner<'v> {
@@ -204,7 +319,7 @@ impl<'v> Planner<'v> {
     /// open and in reach — [`route_where`], found once per tick for every body of one size: which
     /// openings are usable depends on nothing else about the body, so a crowd leaving one street
     /// for another searches the city's openings once, not once each.
-    fn route(&mut self, body: EntityId, from: EntityId, to: EntityId) -> Option<Vec<EntityId>> {
+    fn route(&mut self, body: EntityId, from: EntityId, to: EntityId) -> Option<Vec<Way>> {
         let view = self.view;
         let step = self.rules.step_height_cm;
         let key = (from, to, size_of(view, body));
@@ -214,9 +329,14 @@ impl<'v> Planner<'v> {
                 let usable = |p: EntityId| {
                     is_open(view, p) && fits(view, body, p) && reachable(view, body, p, step)
                 };
-                route_where(view, from, to, usable)
+                ways_between(view, from, to, usable)
             })
             .clone()
+    }
+
+    /// Whether `target` is a place one goes into, rather than a thing one walks up to.
+    fn is_place(&self, target: EntityId) -> bool {
+        self.places.contains(&target) || is_true(self.view, target, PLACE)
     }
 
     /// The solid bodies in `frame` too tall to step onto from the ground beneath them — what a
@@ -691,6 +811,8 @@ impl System for Gravity {
 }
 
 const TRAVEL_READS: &[FactType] = &[
+    PLACE,
+    ENCLOSED,
     TRAVEL_TO,
     TRAVEL_SPEED,
     TRAVEL_BLOCKED,
@@ -735,6 +857,7 @@ impl Travel {
 }
 
 /// What a traveller does this tick.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Step {
     /// Nothing yet (mid-leg, falling, waiting its turn at an opening, no speed given).
     Wait,
@@ -746,6 +869,10 @@ enum Step {
     Walk([i64; 2]),
     /// Pass through this portal now.
     Pass(EntityId),
+    /// Step into this place without walls, here (Amendment A-30).
+    Enter(EntityId),
+    /// Step out of the place without walls one is in, into the place around it.
+    Leave,
 }
 
 impl Travel {
@@ -775,7 +902,7 @@ impl Travel {
         let at = local_position(view, body);
 
         // Where must it be? Inside a place, or beside a thing.
-        let (goal_region, approach) = if plan.places.contains(&target) {
+        let (goal_region, approach) = if plan.is_place(target) {
             (target, None)
         } else {
             let Some(region) = container_of(view, target) else {
@@ -808,11 +935,28 @@ impl Travel {
             return walk(plan, goal, reach - ARRIVAL_TOLERANCE, Some(thing));
         }
 
-        // Another region: the way out, through openings it fits that are open and in reach.
+        // Another region: the way out, through openings it fits that are open and in reach, or
+        // across the edge of a place without walls (Amendment A-30).
         let Some(route) = plan.route(body, here, goal_region) else {
             return Step::Blocked;
         };
-        let portal = route[0];
+        let portal = match route[0] {
+            Way::Portal(portal) => portal,
+            Way::Into(inner) => {
+                let edge = way_in(view, inner, at);
+                if flat_distance(at, edge) <= ARRIVAL_TOLERANCE {
+                    return Step::Enter(inner);
+                }
+                return walk(plan, edge, 0, None);
+            }
+            Way::OutOf => {
+                let edge = way_out(view, here, at);
+                if flat_distance(at, edge) <= ARRIVAL_TOLERANCE {
+                    return Step::Leave;
+                }
+                return walk(plan, edge, 0, None);
+            }
+        };
         let door = local_position(view, portal);
         if flat_distance(at, door) <= ARRIVAL_TOLERANCE {
             let dest = portal_destination(view, portal);
@@ -879,7 +1023,7 @@ impl System for Travel {
                 ));
             }
             match step {
-                Step::Wait => {}
+                Step::Wait | Step::Enter(_) | Step::Leave => {}
                 Step::Blocked => {
                     if !was_blocked(body) {
                         changes.push((
@@ -959,6 +1103,52 @@ impl System for Travel {
                                 "pass_through",
                             ));
                         }
+                    }
+                }
+            }
+            // Across the edge of a place without walls (Amendment A-30): from where one stands,
+            // into the frame on the other side.
+            let crossing = match step {
+                Step::Enter(inner) => {
+                    let at = local_position(view, body);
+                    let origin = local_position(view, inner);
+                    let turn = crate::space::heading(view, inner);
+                    let rel = rotate(
+                        (36_000 - turn).rem_euclid(36_000),
+                        [at[0] - origin[0], at[1] - origin[1], at[2] - origin[2]],
+                    );
+                    Some((inner, rel, "entered"))
+                }
+                Step::Leave => {
+                    let here = container_of(view, body).expect("a traveller is somewhere");
+                    container_of(view, here).map(|around| {
+                        let at = local_position(view, body);
+                        let origin = local_position(view, here);
+                        let turned = rotate(crate::space::heading(view, here), at);
+                        let out = [
+                            origin[0] + turned[0],
+                            origin[1] + turned[1],
+                            origin[2] + turned[2],
+                        ];
+                        (around, out, "left")
+                    })
+                }
+                _ => None,
+            };
+            if let Some((into, position, why)) = crossing {
+                changes.push((
+                    FactKey::new(body, CONTAINED_IN),
+                    Change::Set(Value::Entity(into)),
+                    why,
+                ));
+                changes.push((
+                    FactKey::new(body, POSITION),
+                    Change::Set(Value::Vec3(position)),
+                    why,
+                ));
+                if segment(view, body).is_some() {
+                    for fact in [MOTION_TARGET, MOTION_START, MOTION_END] {
+                        changes.push((FactKey::new(body, fact), Change::Tombstone, why));
                     }
                 }
             }

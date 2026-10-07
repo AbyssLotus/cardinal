@@ -95,6 +95,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut tool_strike_percent_per_kg: Option<i64> = None;
     let mut strike_scale: Option<i64> = None;
     let mut wreckage_height_cm: Option<i64> = None;
+    let mut mend_scale: Option<i64> = None;
     let mut default_strength: Option<i64> = None;
     let mut fire_step_seconds: Option<u64> = None;
     let mut fire_grow_per_hour: Option<i64> = None;
@@ -107,8 +108,17 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut wall_thickness_cm: Option<i64> = None;
     let mut wind_force_divisor: Option<i64> = None;
     let mut wind_damage_scale: Option<i64> = None;
+    let mut wind_hold_per_kg: Option<i64> = None;
+    let mut wind_carry_cm_per_hour: Option<i64> = None;
+    let mut gale_below: Option<i64> = None;
+    let mut gale_per_decapascal: Option<i64> = None;
     let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
     let mut burn_harm: Option<i64> = None;
+    let mut smoke_harm: Option<i64> = None;
+    let mut fire_warmth_per_hour: Option<i64> = None;
+    let mut smoke_per_hour: Option<i64> = None;
+    let mut smoke_clear_per_hour: Option<i64> = None;
+    let mut fire_fan_wind_cm_s: Option<i64> = None;
     let mut fires: Vec<(u64, i64, bool)> = Vec::new();
     let mut strength: Vec<(u64, i64)> = Vec::new();
     let mut perception_step_seconds: Option<u64> = None;
@@ -323,6 +333,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 }
                 "strike_scale" => strike_scale = Some(parse_num(value, line_no)?),
                 "wreckage_height_cm" => wreckage_height_cm = Some(parse_num(value, line_no)?),
+                "mend_scale" => mend_scale = Some(parse_num(value, line_no)?),
                 "fire_step_seconds" => fire_step_seconds = Some(parse_num(value, line_no)?),
                 "fire_grow_per_hour" => fire_grow_per_hour = Some(parse_num(value, line_no)?),
                 "burn_per_hour" => burn_per_hour = Some(parse_num(value, line_no)?),
@@ -332,8 +343,18 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "rain_above" => rain_above = Some(parse_num(value, line_no)?),
                 "douse_per_hour" => douse_per_hour = Some(parse_num(value, line_no)?),
                 "wall_thickness_cm" => wall_thickness_cm = Some(parse_num(value, line_no)?),
+                "fire_warmth_per_hour" => fire_warmth_per_hour = Some(parse_num(value, line_no)?),
+                "smoke_per_hour" => smoke_per_hour = Some(parse_num(value, line_no)?),
+                "smoke_clear_per_hour" => smoke_clear_per_hour = Some(parse_num(value, line_no)?),
+                "fire_fan_wind_cm_s" => fire_fan_wind_cm_s = Some(parse_num(value, line_no)?),
                 "wind_force_divisor" => wind_force_divisor = Some(parse_num(value, line_no)?),
                 "wind_damage_scale" => wind_damage_scale = Some(parse_num(value, line_no)?),
+                "wind_hold_per_kg" => wind_hold_per_kg = Some(parse_num(value, line_no)?),
+                "wind_carry_cm_per_hour" => {
+                    wind_carry_cm_per_hour = Some(parse_num(value, line_no)?)
+                }
+                "gale_below" => gale_below = Some(parse_num(value, line_no)?),
+                "gale_per_decapascal" => gale_per_decapascal = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -361,6 +382,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "starving_harm_per_hour" => starving_harm = Some(parse_num(value, line_no)?),
                 "strength" => default_strength = Some(parse_num(value, line_no)?),
                 "burn_harm_per_hour" => burn_harm = Some(parse_num(value, line_no)?),
+                "smoke_harm_per_hour" => smoke_harm = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -917,6 +939,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         )?,
         strike_scale: require(strike_scale, "rules.physical.strike_scale")?,
         wreckage_height_cm: require(wreckage_height_cm, "rules.physical.wreckage_height_cm")?,
+        mend_scale: require(mend_scale, "rules.physical.mend_scale")?,
         fire_step_seconds: require(fire_step_seconds, "rules.physical.fire_step_seconds")?,
         fire_grow_per_hour: require(fire_grow_per_hour, "rules.physical.fire_grow_per_hour")?,
         burn_per_hour: require(burn_per_hour, "rules.physical.burn_per_hour")?,
@@ -926,8 +949,19 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         rain_above: require(rain_above, "rules.physical.rain_above")?,
         douse_per_hour: require(douse_per_hour, "rules.physical.douse_per_hour")?,
         wall_thickness_cm: require(wall_thickness_cm, "rules.physical.wall_thickness_cm")?,
+        fire_warmth_per_hour: require(fire_warmth_per_hour, "rules.physical.fire_warmth_per_hour")?,
+        smoke_per_hour: require(smoke_per_hour, "rules.physical.smoke_per_hour")?,
+        smoke_clear_per_hour: require(smoke_clear_per_hour, "rules.physical.smoke_clear_per_hour")?,
+        fire_fan_wind_cm_s: require(fire_fan_wind_cm_s, "rules.physical.fire_fan_wind_cm_s")?,
         wind_force_divisor: require(wind_force_divisor, "rules.physical.wind_force_divisor")?,
         wind_damage_scale: require(wind_damage_scale, "rules.physical.wind_damage_scale")?,
+        wind_hold_per_kg: require(wind_hold_per_kg, "rules.physical.wind_hold_per_kg")?,
+        wind_carry_cm_per_hour: require(
+            wind_carry_cm_per_hour,
+            "rules.physical.wind_carry_cm_per_hour",
+        )?,
+        gale_below: require(gale_below, "rules.physical.gale_below")?,
+        gale_per_decapascal: require(gale_per_decapascal, "rules.physical.gale_per_decapascal")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -1041,6 +1075,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             starving_harm_per_hour: require(starving_harm, "rules.living.starving_harm_per_hour")?,
             strength: default_strength,
             burn_harm_per_hour: require(burn_harm, "rules.living.burn_harm_per_hour")?,
+            smoke_harm_per_hour: require(smoke_harm, "rules.living.smoke_harm_per_hour")?,
         }),
     };
 
@@ -1621,6 +1656,7 @@ hand_strike_percent = 50
 tool_strike_percent_per_kg = 50
 strike_scale = 300
 wreckage_height_cm = 20
+mend_scale = 300
 fire_step_seconds = 10
 fire_grow_per_hour = 20000
 burn_per_hour = 30000
@@ -1630,8 +1666,16 @@ ignite_intensity = 2000
 rain_above = 9000
 douse_per_hour = 40000
 wall_thickness_cm = 20
+fire_warmth_per_hour = 2000
+smoke_per_hour = 40000
+smoke_clear_per_hour = 5000
+fire_fan_wind_cm_s = 1000
 wind_force_divisor = 3200
 wind_damage_scale = 16
+wind_hold_per_kg = 100
+wind_carry_cm_per_hour = 20000
+gale_below = 400
+gale_per_decapascal = 50
 [regions]
 1 = 1500
 ";

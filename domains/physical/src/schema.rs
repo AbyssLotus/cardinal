@@ -243,6 +243,11 @@ pub const PRESSURE: FactType = FactType::new("physical.environment.pressure");
 /// Magnitude only; direction is [`WIND_TOWARD`].
 pub const WIND_SPEED: FactType = FactType::new("physical.environment.wind_speed");
 
+/// That an entity is a place one can be in, rather than a thing (Amendment A-30): a climate, a
+/// declared place, a room. World data. A place without walls — open ground, a street, a ruin — can
+/// be walked into and out of anywhere along its edge, not only through its openings.
+pub const PLACE: FactType = FactType::new("physical.space.place");
+
 /// A storm the world declares over a region (Amendment A-29): a set of `[from, to, wind]` — the
 /// seconds since the world began that it blows between, and its wind in centimetres per second.
 /// While it blows, the region's wind is at least the storm's.
@@ -339,6 +344,20 @@ pub const INTEGRITY: FactType = FactType::new("physical.body.integrity");
 /// broken open. Only Physical Reality's own systems record it.
 pub const BROKEN: FactType = FactType::new("physical.body.broken");
 
+/// What a broken thing was, to be again if mended whole (Amendment A-31): `[height, flags, 0]`,
+/// its height in centimetres and, in `flags`, whether it was solid (1), opaque (2), and walled (4).
+pub const WHOLE_SHAPE: FactType = FactType::new("physical.body.whole_shape");
+
+/// A decider's intent that a body mend a thing (Amendment A-31): an entity reference. Carried out
+/// only with a tool in hand no softer than the thing's weakest material, on a thing within reach
+/// — or the place one stands in. Cleared either way.
+pub const ACT_MEND: FactType = FactType::new("physical.act.mend");
+
+/// How hard a body was struck by something falling on it, as the height of a fall that would
+/// strike as hard, in centimetres — a report, with the tick it happened (Amendment A-31), for
+/// whoever judges what it does to a body.
+pub const IMPACT: FactType = FactType::new("physical.body.impact");
+
 /// A decider's intent that a body strike a thing (Amendment A-27): an entity reference. Carried out
 /// only within reach, on a thing made of something with a known weight; a blow no harder than the
 /// thing's weakest material leaves no mark and is refused. Cleared either way.
@@ -349,6 +368,16 @@ pub const ACT_STRIKE: FactType = FactType::new("physical.act.strike");
 /// consumes its integrity, heats what lies near it, and lights its place. Only Physical
 /// Reality's own systems write it.
 pub const BURNING: FactType = FactType::new("physical.fire.burning");
+
+/// A push given a thing (Amendment A-33): how far to move it, `[x, y, 0]` centimetres in its
+/// place's frame. Open to anyone — the wind, a shove. Pushes in one tick add up; Physical
+/// Reality moves the thing, if nothing else has hold of it this tick, and clears the push.
+pub const ACT_PUSH: FactType = FactType::new("physical.act.push");
+
+/// How thick the smoke is in a walled place, in hundredths of a percent (Amendment A-32): it
+/// rises from what burns there and clears through the place's open openings. Absent, or in the
+/// open, there is none. It shortens sight and harms breathing.
+pub const SMOKE: FactType = FactType::new("physical.environment.smoke");
 
 /// That a fire is kept (Amendment A-28): a hearth's fire, tended — it neither consumes what it
 /// burns in nor dies down. Declared by the world.
