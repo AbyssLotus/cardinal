@@ -268,6 +268,12 @@ keeps the pipeline whole. A mind that read reality would walk to food it never s
 the omniscient familiar of Vol. V Ch. 9. Reading beliefs only, two minds in one reality can choose
 differently because they know different things.
 
+*Amendment A-24 (2026-10):* one system of decision systems reads something else, because it does
+not decide. When a person crosses from the city tier into the scene, the mind they are given is
+made from the record they cross from: Society's, read by its published ids, and nothing more. It
+writes only what a mind owns (its pace, its home, its routines, whether it is lying down). From
+then on that mind reads beliefs alone.
+
 ## Ruling 15 — Resting: deciders choose when, Living Systems decides whether
 
 *Amendment A-10 (2026-10).*
@@ -375,6 +381,14 @@ levels become the organism's, and back.
 **Reason:** Double existence (a resident record *and* an organism) double-counts every meal and
 every hour of sleep. As with the deer, the seam is explicit so the books balance, and Law 14 (scale
 must not change truth) has a place to be tested.
+
+*Amendment A-24 (2026-10): how a person crosses into the scene.* Where a person is simulated
+follows where they are. Each place has a rung, *city* or *scene*, its own or the nearest
+declared above it. A resident at a place in the scene, whether attention arrived there or they
+walked in, is marked crossing by Society. On the next tick every domain reads the mark from the
+same committed record and gives the person its own facts, while Society retires the record's
+state, keeping who they are (home and work). One commit: no tick holds both. Each domain creates
+its own facts; none writes another's.
 
 ---
 

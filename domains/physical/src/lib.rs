@@ -44,6 +44,7 @@ pub mod motion;
 pub mod nearby;
 pub mod regions;
 pub mod schema;
+pub mod seam;
 pub mod shape;
 pub mod sight;
 pub mod space;
@@ -127,6 +128,9 @@ pub struct PhysicalConfig {
     pub sight_min_illumination: i64,
     /// The most a body can carry, in kilograms (Amendment A-12).
     pub carry_limit_kg: i64,
+    /// The body a resident is given on crossing into the scene — half-width, half-depth, height,
+    /// in centimetres (Amendment A-24) — if the world has residents.
+    pub resident_body: Option<[i64; 3]>,
 }
 
 impl PhysicalConfig {
@@ -297,7 +301,7 @@ impl Domain for PhysicalDomain {
             .step(c.environment_step_seconds.saturating_mul(1000));
         let day_ms = c.day_length_seconds.saturating_mul(1000);
         let memory_ms = c.weather_persistence_seconds.saturating_mul(1000);
-        vec![
+        let mut systems: Vec<Box<dyn System>> = vec![
             Box::new(systems::DiurnalCycle::new(
                 c.clock,
                 step,
@@ -354,7 +358,12 @@ impl Domain for PhysicalDomain {
                 c.clock.step(c.sight_step_seconds.saturating_mul(1000)),
                 c.sight_min_illumination,
             )),
-        ]
+        ];
+        // Bodies for residents crossing into the scene (Amendment A-24).
+        if let Some(body) = c.resident_body {
+            systems.push(Box::new(seam::Seam::new(body)));
+        }
+        systems
     }
 
     fn compose(

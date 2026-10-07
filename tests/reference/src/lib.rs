@@ -208,6 +208,7 @@ const FRONT_DOOR_WRITES: &[FactType] = &[
     economy::schema::ACT_MAKE,
     economy::schema::ACT_CLAIM,
     minds::schema::DIRECTED,
+    society::schema::RESIDENCY,
 ];
 
 impl System for FrontDoor {
@@ -371,6 +372,13 @@ impl City {
     pub fn go(&mut self, who: u64, dest: u64, speed: i64) -> &mut Self {
         self.order(who, TRAVEL_TO, Value::Entity(e(dest)));
         self.order(who, TRAVEL_SPEED, Value::Int(speed));
+        self
+    }
+
+    /// Set `place`'s rung on the residency ladder — `society::schema::CITY` or `SCENE` — as a
+    /// frontend directing attention would (Amendment A-24).
+    pub fn attend(&mut self, place: u64, rung: i64) -> &mut Self {
+        self.order(place, society::schema::RESIDENCY, Value::Int(rung));
         self
     }
 

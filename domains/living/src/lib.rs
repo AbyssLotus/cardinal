@@ -21,6 +21,7 @@
 
 pub mod composition;
 pub mod schema;
+pub mod seam;
 pub mod systems;
 
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
@@ -82,6 +83,9 @@ pub struct LivingConfig {
     pub starving_above: i64,
     /// Health lost per hour while starving.
     pub starving_harm_per_hour: i64,
+    /// How far a resident sees once they cross into the scene, in centimetres (Amendment A-24) —
+    /// if the world has residents.
+    pub resident_sight_cm: Option<i64>,
 }
 
 impl LivingDomain {
@@ -111,7 +115,7 @@ impl Domain for LivingDomain {
         // One instance for the whole world; it iterates every organism it finds in reality.
         let c = self.config;
         let step = c.clock.step(c.metabolism_step_seconds.saturating_mul(1000));
-        vec![
+        let mut systems: Vec<Box<dyn System>> = vec![
             Box::new(systems::Thermoregulation::new(
                 step,
                 c.set_point_centi_c,
@@ -145,7 +149,12 @@ impl Domain for LivingDomain {
                     starving_harm_per_hour: c.starving_harm_per_hour,
                 },
             )),
-        ]
+        ];
+        // The vital state of residents crossing into the scene (Amendment A-24).
+        if let Some(sight) = c.resident_sight_cm {
+            systems.push(Box::new(seam::Seam::new(c.set_point_centi_c, sight)));
+        }
+        systems
     }
 
     fn compose(

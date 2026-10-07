@@ -165,6 +165,9 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     for &(home, _) in &package.larders {
         must_exist(home, home, "the home given a larder");
     }
+    for &(place, _) in &package.residency {
+        must_exist(place, place, "the place given a rung");
+    }
     for &(thing, owner) in &package.owners {
         must_exist(thing, thing, "the thing given an owner");
         must_exist(thing, owner, "its owner");
@@ -487,6 +490,34 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
             }
             path.push(up);
             here = up;
+        }
+    }
+
+    // A resident begins at home, and at home they are a record: their home is at the city tier
+    // (Ruling 19; Amendment A-24). A home in the scene would have them cross on the first tick,
+    // which a world that means them to be organisms there should declare as organisms instead.
+    let rungs: BTreeMap<u64, i64> = package.residency.iter().copied().collect();
+    for r in &package.residents {
+        let mut here = Some(r.home);
+        let mut rung = society::schema::SCENE;
+        let mut hops = 0;
+        while let Some(p) = here.filter(|_| hops <= parent.len()) {
+            if let Some(declared) = rungs.get(&p) {
+                rung = *declared;
+                break;
+            }
+            here = parent.get(&p).copied();
+            hops += 1;
+        }
+        if rung != society::schema::CITY {
+            problem(
+                Layer::Coherence,
+                r.id,
+                format!(
+                    "the resident's home {} is in the scene, not at the city tier (Ruling 19)",
+                    r.home
+                ),
+            );
         }
     }
 

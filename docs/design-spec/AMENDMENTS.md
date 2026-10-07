@@ -654,3 +654,68 @@ death at the city tier; buying and selling.
 
 **Rationale.** `docs/audits/world-scale.md` §8, step 2: a city of a million on a desktop, every
 resident an individual who costs nothing until something is due.
+
+---
+
+## A-24 — Crossing the seam: promotion (2026-10)
+
+**Edits:**
+- Appendix A (Ruling 19: how a person crosses; Ruling 14: a mind is made from a record)
+- Vol. V Ch. 5 §5.2 (the residency ladder, per place: built for promotion)
+- Vol. V Ch. 2 (who holds a value: the agenda indexes entities too)
+- Vol. I, Law 14 (scale must not change truth: the promotion side, tested)
+
+**Change.**
+- **Residency** (Society) is a place's rung: *city* or *scene*.
+  - A place takes the rung of the nearest place holding it that declares one. With none
+    declared, it is in the scene.
+  - Residency is policy: whoever directs attention may set it (a player's frontend, a tool, a
+    test). It changes what is computed, never what is true.
+  - A package declares the rungs it starts with. A resident's home must be at the city tier at
+    load: a person the world means to be in the scene is declared as an organism.
+- **Marking a crossing** (Society). A resident in the scene is marked *crossing*, naming the place
+  they cross into. There are two ways in:
+  - **Attention arrives.** When a place's rung becomes *scene*, everyone not walking who is at
+    that place, or at a place within it, is marked. A place within it that keeps the city tier
+    keeps its people.
+  - **Walking in.** A resident's place changes only by walking. When a walk ends at a place in the
+    scene, the rhythm marks them instead of choosing their next segment.
+- **Crossing.** On the next tick every domain acts on the mark at once. Each reads the same
+  committed record, so the person changes tier in a single commit:
+  - **Physical Reality** gives them a body of the world's resident size, able to move, in the
+    place they cross into;
+  - **Living Systems** copies their hunger and fatigue exactly, levels and all (A-20). It gives
+    them full health, body heat at the world's set point, the world's resident sight, and rest
+    if they were asleep;
+  - **the information layer** gives them what a resident knows: where they are, where their home
+    and work are, the openings of each and into each from where it lies, and their hunger and
+    fatigue as felt;
+  - **decision systems** give them the residents' walking pace, their home, and lying down if
+    they were asleep. One with work gets two routines in their own hours: to work in working
+    hours, home for the rest. These are the same personal hours the city tier kept (A-23);
+  - **Society** retires the record's state and the mark. It keeps only who they are: home and
+    work.
+- **Never both.** No tick holds both a resident's state and an organism's: Ruling 19 holds through
+  the crossing. Hunger and fatigue are continuous across it.
+- **Who is at a place** (kernel). An agenda fact (A-22) whose value is an entity is indexed by the
+  entity it names, so `holding(fact, value)` finds who is at a place in proportion to how many
+  are. Attention arriving at a district costs what its residents cost, not what the city costs.
+  Without an index the answer comes from a scan, and is the same.
+- **A fixed trait from an id** (kernel). `EntityId::jitter(by)` gives an offset within `±by`
+  derived from the id alone. Society and decision systems both compute a resident's hours with
+  it, so the two tiers agree without either importing the other.
+
+**Measured** (`examples/city.rs`, minute ticks; Ryzen-class desktop figures are the target, these
+are from the development machine): a district of 3,000 residents crosses in about 50 ms, the
+same at a city of 100,000 as at a city of a million. A million residents still average 28 ms a tick,
+and peak at 2.7 GB.
+
+**Not yet** (the next slice):
+- demotion back to the city tier, which must retire facts other systems may be writing in the
+  same tick;
+- carrying held things across;
+- a household's larder becoming food one can take in the scene. Until then, a resident in the
+  scene grows hungry as anyone does, and eats only what they find.
+
+**Rationale.** `docs/audits/world-scale.md` §9: the player turns into a street of the city, and its
+people are there, as themselves.

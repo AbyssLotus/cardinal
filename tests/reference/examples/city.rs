@@ -1,7 +1,8 @@
 //! The city-tier bench (Amendment A-23): Ashford with `N` generated residents at the city tier —
 //! districts of homes and workshops, three to a home, most of them working — run for a day.
 //! Reports what loading costs, what a tick costs on average and at worst, and how many facts the
-//! city holds: whether a city of a million fits a desktop.
+//! city holds: whether a city of a million fits a desktop. Then attention arrives at one district
+//! (Amendment A-24) and its residents cross into the scene: what that costs, and how many cross.
 //!
 //! ```text
 //! TICK_SECONDS=60 cargo run --release -p reference --example city -- 100000 1000000
@@ -52,6 +53,7 @@ fn city(n: u64, tick_seconds: u64) -> WorldPackage {
             200_000 + (d as i64 / 50) * 40_000,
         );
         let district = place(&mut pkg, ASHFORD, dx, dy);
+        pkg.residency.push((district, society::schema::CITY));
         let workshops: Vec<u64> = (0..workshops_per_district)
             .map(|w| place(&mut pkg, district, (w as i64 % 15) * 2_000, 30_000))
             .collect();
@@ -103,8 +105,16 @@ fn main() {
         .unwrap_or(60);
     let ticks = 86_400 / tick_seconds;
     println!(
-        "{:>9} {:>9} {:>9} {:>10} {:>10} {:>12} {:>11}",
-        "residents", "build s", "load s", "ms/tick", "worst ms", "segments/s", "facts"
+        "{:>9} {:>9} {:>9} {:>10} {:>10} {:>12} {:>11} {:>9} {:>9}",
+        "residents",
+        "build s",
+        "load s",
+        "ms/tick",
+        "worst ms",
+        "segments/s",
+        "facts",
+        "crossed",
+        "cross ms"
     );
     for n in sizes {
         let t0 = Instant::now();
@@ -114,6 +124,7 @@ fn main() {
         let mut city = City::from(pkg);
         let loaded = t1.elapsed();
         let (mut total, mut worst, mut segments) = (0.0f64, 0.0f64, 0u64);
+        let mut by_system: std::collections::BTreeMap<&str, u128> = Default::default();
         for _ in 0..ticks {
             city.chronicle.clear();
             let t = Instant::now();
@@ -121,22 +132,54 @@ fn main() {
             let ms = t.elapsed().as_secs_f64() * 1_000.0;
             total += ms;
             worst = worst.max(ms);
+            for m in city.meters() {
+                *by_system.entry(m.system.name()).or_default() += m.nanos as u128;
+            }
             segments += city
                 .chronicle
                 .iter()
                 .filter(|c| c.fact_type() == society::schema::RESIDENT_UNTIL)
                 .count() as u64;
         }
+        let facts = city.store().len();
+        city.chronicle.clear();
+        // Attention arrives at the first district: the rung lands, the seam marks everyone
+        // standing there, and every domain takes them up.
+        city.attend(FIRST_PLACE, society::schema::SCENE);
+        let mut cross_ms = 0.0f64;
+        for _ in 0..3 {
+            let t = Instant::now();
+            city.run(1);
+            cross_ms = cross_ms.max(t.elapsed().as_secs_f64() * 1_000.0);
+        }
+        let crossed = city
+            .chronicle
+            .iter()
+            .filter(|c| c.fact_type() == living::schema::HUNGER && c.cause().event() == "crossed")
+            .count();
         println!(
-            "{:>9} {:>9.1} {:>9.1} {:>10.2} {:>10.2} {:>12.1} {:>11}",
+            "{:>9} {:>9.1} {:>9.1} {:>10.2} {:>10.2} {:>12.1} {:>11} {:>9} {:>9.1}",
             n,
             built.as_secs_f64(),
             loaded.as_secs_f64(),
             total / ticks as f64,
             worst,
             segments as f64 / 86_400.0,
-            city.store().len()
+            facts,
+            crossed,
+            cross_ms
         );
+        // What each system cost, on average (Amendment A-21): `METERS=1`.
+        if std::env::var("METERS").is_ok() {
+            let mut rows: Vec<_> = by_system.into_iter().collect();
+            rows.sort_by(|a, b| b.1.cmp(&a.1));
+            for (name, nanos) in rows.iter().take(8) {
+                println!(
+                    "    {:>8.2} ms/tick  {name}",
+                    *nanos as f64 / 1e6 / ticks as f64
+                );
+            }
+        }
         let _ = city.store().state_hash();
     }
 }

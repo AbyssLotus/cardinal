@@ -135,8 +135,10 @@ reference engine is being built here, from the specification, in roadmap order
       continuity; levels (A-20); change memory (A-21); the agenda (A-22)
 - [x] The city tier (A-23): residents as compact records woken only when due; a million in
       3 GB at 27 ms per simulated minute
-- [ ] Promotion and demotion between the city tier and the scene (Law 14); city generation;
-      the hot store; parallel shards
+- [x] Crossing into the scene (A-24): attention on a place turns its residents into organisms
+      in one tick, levels exact; a district of 3,000 in about 50 ms at any city size
+- [ ] Demotion back to the city tier (Law 14's round trip); city generation; the hot store;
+      parallel shards
 - [ ] Hardening, from the hostile audit: a sealed mutation path, multi-cause provenance,
       benchmark gates in CI
 - [ ] Agents, next: talking and rumour, model-backed minds as recorded inputs

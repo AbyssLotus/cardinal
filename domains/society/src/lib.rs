@@ -67,6 +67,15 @@ pub mod schema {
     /// How many meals a household's larder holds, on its home.
     pub const LARDER: FactType = FactType::new("society.household.larder");
 
+    /// A place's rung on the residency ladder (Amendment A-24): [`CITY`] or [`SCENE`]. A place
+    /// without one takes the rung of the nearest place holding it that has one; with none, it is
+    /// in the scene. Policy, set by whoever directs attention; it changes what is computed, never
+    /// what is true.
+    pub const RESIDENCY: FactType = FactType::new("society.place.residency");
+    /// A resident crossing into the scene (Amendment A-24): the place they cross into. Every
+    /// domain gives them its own facts the tick after it is set, and Society retires the record.
+    pub const RESIDENT_CROSSING: FactType = FactType::new("society.resident.crossing");
+
     /// Asleep, at home.
     pub const SLEEPING: i64 = 1;
     /// At home, awake.
@@ -78,6 +87,11 @@ pub mod schema {
     /// Eating a meal at home.
     pub const EATING: i64 = 5;
 
+    /// The city tier: people here are resident records.
+    pub const CITY: i64 = 1;
+    /// The scene: people here are organisms, with bodies and minds.
+    pub const SCENE: i64 = 2;
+
     /// Every fact type this domain owns.
     pub const OWNED: &[FactType] = &[
         RESIDENT_HOME,
@@ -87,6 +101,8 @@ pub mod schema {
         RESIDENT_UNTIL,
         RESIDENT_HUNGER,
         RESIDENT_FATIGUE,
+        RESIDENT_CROSSING,
+        RESIDENCY,
         LARDER,
         BOND,
         ROLE,
@@ -104,9 +120,21 @@ pub mod schema {
     pub const POSITION: FactType = FactType::new("physical.space.position");
     /// The container a thing is in — **Physical Reality's**.
     pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
+    /// The facts **Physical Reality's** spatial index mirrors, all read to search it: a thing's
+    /// size, facing, and motion, besides its place and position.
+    pub const BODY_SIZE: FactType = FactType::new("physical.body.size");
+    /// Which way a body faces — **Physical Reality's**.
+    pub const HEADING: FactType = FactType::new("physical.body.heading");
+    /// Where a moving body is headed — **Physical Reality's**.
+    pub const MOTION_TARGET: FactType = FactType::new("physical.motion.target");
+    /// When it set off — **Physical Reality's**.
+    pub const MOTION_START: FactType = FactType::new("physical.motion.start");
+    /// When it arrives — **Physical Reality's**.
+    pub const MOTION_END: FactType = FactType::new("physical.motion.end");
 }
 
 pub mod residents;
+pub mod seam;
 
 /// Hermetic transformations owned by the Society domain (Vol. V Ch. 3 §3.1).
 pub mod systems {
@@ -246,13 +274,15 @@ impl Domain for SocietyDomain {
         ))];
         if let Some(rules) = c.rhythm {
             systems.push(Box::new(residents::Rhythm::new(c.clock, rules)));
+            systems.push(Box::new(seam::Crossing));
         }
         systems
     }
 
     fn agenda(&self) -> Vec<FactType> {
-        // A resident is attended to when what they are doing ends (Amendment A-23).
-        vec![schema::RESIDENT_UNTIL]
+        // A resident is attended to when what they are doing ends (Amendment A-23), and found
+        // where they are when attention arrives there (Amendment A-24).
+        vec![schema::RESIDENT_UNTIL, schema::RESIDENT_AT]
     }
 
     fn compose(
@@ -282,6 +312,14 @@ impl Domain for SocietyDomain {
             && matches!(value, Resolved::Write(v) if !matches!(v, Value::Entity(_)))
         {
             return Err(ValidationError::new("a role names a job"));
+        }
+        if fact_type == schema::RESIDENCY
+            && matches!(value, Resolved::Write(v)
+                if !matches!(v, Value::Int(schema::CITY) | Value::Int(schema::SCENE)))
+        {
+            return Err(ValidationError::new(
+                "a place is at the city tier or in the scene",
+            ));
         }
         Ok(())
     }

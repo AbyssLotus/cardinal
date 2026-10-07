@@ -8,8 +8,9 @@
 //! levels (Amendment A-20), written only when they change course.
 
 use crate::schema::{
-    AT_HOME, CONTAINED_IN, EATING, LARDER, POSITION, RESIDENT_AT, RESIDENT_DOING, RESIDENT_FATIGUE,
-    RESIDENT_HOME, RESIDENT_HUNGER, RESIDENT_UNTIL, RESIDENT_WORK, SLEEPING, WALKING, WORKING,
+    AT_HOME, CONTAINED_IN, EATING, LARDER, POSITION, RESIDENCY, RESIDENT_AT, RESIDENT_CROSSING,
+    RESIDENT_DOING, RESIDENT_FATIGUE, RESIDENT_HOME, RESIDENT_HUNGER, RESIDENT_UNTIL,
+    RESIDENT_WORK, SCENE, SLEEPING, WALKING, WORKING,
 };
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::fixed::isqrt;
@@ -68,8 +69,11 @@ const RHYTHM_READS: &[FactType] = &[
     LARDER,
     POSITION,
     CONTAINED_IN,
+    RESIDENCY,
+    RESIDENT_CROSSING,
 ];
 const RHYTHM_WRITES: &[FactType] = &[
+    RESIDENT_CROSSING,
     RESIDENT_DOING,
     RESIDENT_AT,
     RESIDENT_UNTIL,
@@ -122,17 +126,34 @@ impl Rhythm {
 }
 
 /// A resident's own offset from the settlement's hours, in seconds within `±spread`: fixed for
-/// each resident, derived from who they are (SplitMix64 of their id), so the same resident keeps
-/// the same hours in every run.
+/// each resident, derived from who they are, so the same resident keeps the same hours in every
+/// run — and at every tier (Amendment A-24).
 fn personal_offset(who: EntityId, spread: i64) -> i64 {
-    if spread <= 0 {
-        return 0;
+    who.jitter(spread)
+}
+
+/// A place's rung on the residency ladder (Amendment A-24): its own, or the nearest declared by a
+/// place holding it; with none, the scene. `memo` remembers places already answered.
+pub fn rung(view: &dyn CommittedView, place: EntityId, memo: &mut BTreeMap<EntityId, i64>) -> i64 {
+    let mut path = Vec::new();
+    let mut here = Some(place);
+    let mut found = SCENE;
+    while let Some(p) = here.filter(|_| path.len() < 64) {
+        if let Some(r) = memo.get(&p) {
+            found = *r;
+            break;
+        }
+        path.push(p);
+        if let Some(r) = int(view, FactKey::new(p, RESIDENCY)) {
+            found = r;
+            break;
+        }
+        here = entity(view, FactKey::new(p, CONTAINED_IN));
     }
-    let mut z = who.raw().wrapping_add(0x9e37_79b9_7f4a_7c15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    z ^= z >> 31;
-    (z % (2 * spread as u64 + 1)) as i64 - spread
+    for p in path {
+        memo.insert(p, found);
+    }
+    found
 }
 
 /// Whether `t` (seconds into the day) lies in `[from, to)`, wrapping past midnight when
@@ -212,8 +233,37 @@ impl System for Rhythm {
         let mut stocked: BTreeMap<EntityId, i64> = BTreeMap::new();
         let time = self.time_of_day(now);
         let day = r.day_seconds.max(1);
+        // The scene (Amendment A-24). Those crossing are the seam's. A resident's place changes
+        // only by walking, so only one arriving can find themselves somewhere the scene is —
+        // unless attention moved in the last tick, when the seam marks everyone standing where it
+        // arrived, and the rhythm leaves them be. A store that cannot say what changed is taken
+        // to say that anything may have.
+        let crossing = view.entities_with(RESIDENT_CROSSING);
+        let basis = ctx.basis_tick();
+        let attention_moved = basis > 0
+            && view
+                .changed_since(RESIDENCY, basis - 1)
+                .map_or(true, |c| !c.is_empty());
+        let mut rungs = BTreeMap::new();
 
         for who in view.due(RESIDENT_UNTIL, now) {
+            if crossing.binary_search(&who).is_ok() {
+                continue;
+            }
+            let doing = int(view, FactKey::new(who, RESIDENT_DOING)).unwrap_or(AT_HOME);
+            let at = entity(view, FactKey::new(who, RESIDENT_AT));
+            if let (Some(at), true) = (at, doing == WALKING || attention_moved) {
+                if rung(view, at, &mut rungs) == SCENE {
+                    if doing == WALKING {
+                        push(
+                            FactKey::new(who, RESIDENT_CROSSING),
+                            Change::Set(Value::Entity(at)),
+                            "arrived_in_the_scene",
+                        );
+                    }
+                    continue;
+                }
+            }
             // This resident's own hours: the settlement's, shifted by their offset.
             let own = |s: i64| (s + personal_offset(who, r.hours_spread_seconds)).rem_euclid(day);
             let (sleep_from, sleep_to) = (own(r.sleep_from_seconds), own(r.sleep_to_seconds));
@@ -224,8 +274,7 @@ impl System for Rhythm {
                 continue;
             };
             let work = entity(view, FactKey::new(who, RESIDENT_WORK));
-            let doing = int(view, FactKey::new(who, RESIDENT_DOING)).unwrap_or(AT_HOME);
-            let at = entity(view, FactKey::new(who, RESIDENT_AT)).unwrap_or(home);
+            let at = at.unwrap_or(home);
             let hunger = level(view, FactKey::new(who, RESIDENT_HUNGER)).unwrap_or(Level::new(
                 0,
                 r.hunger_per_hour,

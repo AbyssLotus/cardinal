@@ -148,6 +148,9 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut r_meal_minutes: Option<i64> = None;
     let mut r_walk: Option<i64> = None;
     let mut r_spread: Option<i64> = None;
+    let mut r_body: Option<[i64; 3]> = None;
+    let mut r_sight: Option<i64> = None;
+    let mut residency: Vec<(u64, i64)> = Vec::new();
     let mut has_residents_rules = false;
     let mut curiosity: Vec<(u64, i64)> = Vec::new();
     let mut likes: Vec<(u64, u64, i64)> = Vec::new();
@@ -411,6 +414,18 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     "meal_minutes" => r_meal_minutes = Some(parse_num(value, line_no)?),
                     "walk_speed_cm_s" => r_walk = Some(parse_num(value, line_no)?),
                     "hours_spread_minutes" => r_spread = Some(parse_num(value, line_no)?),
+                    "body" => {
+                        let body =
+                            parse_ints::<3>(value, line_no, "half_width, half_depth, height")?;
+                        if body.iter().any(|v| *v < 0) {
+                            return Err(ParseError::at(
+                                line_no,
+                                "a body's size cannot be negative",
+                            ));
+                        }
+                        r_body = Some(body);
+                    }
+                    "sight_cm" => r_sight = Some(parse_num(value, line_no)?),
                     other => {
                         return Err(ParseError::at(
                             line_no,
@@ -424,6 +439,19 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 residents.push(parse_resident(id, value, line_no)?);
             }
             "larders" => larders.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
+            "residency" => {
+                let rung = match value {
+                    "city" => society::schema::CITY,
+                    "scene" => society::schema::SCENE,
+                    other => {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("a place is at the city tier or in the scene, not {other:?}"),
+                        ))
+                    }
+                };
+                residency.push((parse_num(key, line_no)?, rung));
+            }
             "curiosity" => curiosity.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
             "home" => home.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
             "likes" => {
@@ -933,12 +961,15 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 meal_minutes: require(r_meal_minutes, "rules.residents.meal_minutes")?,
                 walk_speed_cm_s: require(r_walk, "rules.residents.walk_speed_cm_s")?,
                 hours_spread_minutes: require(r_spread, "rules.residents.hours_spread_minutes")?,
+                body: require(r_body, "rules.residents.body")?,
+                sight_cm: require(r_sight, "rules.residents.sight_cm")?,
             })
         } else {
             None
         },
         residents,
         larders,
+        residency,
         curiosity,
         likes,
         home,

@@ -181,8 +181,10 @@ pub struct MemoryStore {
     changes: VecDeque<(u64, Written)>,
     change_window: usize,
     // For each agenda fact type installed (Amendment A-22), who is due when: `(tick, entity)`,
-    // so who is due by a tick is one range walk. Never part of the digest: it is an index.
+    // so who is due by a tick is one range walk; and who names which entity: `(named, entity)`
+    // (Amendment A-24), so who is at a place is one too. Never part of the digest: indexes.
     agenda: BTreeMap<FactType, BTreeSet<(i64, EntityId)>>,
+    naming: BTreeMap<FactType, BTreeSet<(EntityId, EntityId)>>,
 }
 
 impl Default for MemoryStore {
@@ -196,6 +198,7 @@ impl Default for MemoryStore {
             changes: VecDeque::new(),
             change_window: CHANGE_WINDOW,
             agenda: BTreeMap::new(),
+            naming: BTreeMap::new(),
         }
     }
 }
@@ -246,20 +249,59 @@ impl MemoryStore {
     }
 
     /// Index `fact_types` as agenda facts (Amendment A-22): each one's value is the tick an entity
-    /// is next due. Indexes what is already held and keeps up with every seed and commit after.
+    /// is next due — or, for a fact whose value is an entity, the entity it names (Amendment
+    /// A-24), so who holds it is one range walk too. Indexes what is already held and keeps up
+    /// with every seed and commit after.
     pub fn install_agenda(&mut self, fact_types: &[FactType]) {
         for &ft in fact_types {
-            let mut due = BTreeSet::new();
-            for entity in self.by_type.get(&ft).into_iter().flatten() {
-                if let Some(values) = self.facts.get(&FactKey::new(*entity, ft)) {
-                    for (value, _) in values.iter() {
-                        if let Value::Int(t) = value {
-                            due.insert((*t, *entity));
-                        }
+            self.agenda.insert(ft, BTreeSet::new());
+            self.naming.insert(ft, BTreeSet::new());
+            let held: Vec<(FactKey, Value)> = self
+                .by_type
+                .get(&ft)
+                .into_iter()
+                .flatten()
+                .map(|e| FactKey::new(*e, ft))
+                .flat_map(|key| {
+                    self.facts
+                        .get(&key)
+                        .into_iter()
+                        .flat_map(move |values| values.iter().map(move |(v, _)| (key, *v)))
+                })
+                .collect();
+            for (key, value) in held {
+                self.index_value(key, &value, true);
+            }
+        }
+    }
+
+    /// File `value` at `key` in the agenda indexes, or take it out — a number by itself, an
+    /// entity by the entity it names. Facts of types not installed, and facts about a pair, are
+    /// not indexed.
+    fn index_value(&mut self, key: FactKey, value: &Value, add: bool) {
+        if key.about.is_some() {
+            return;
+        }
+        match value {
+            Value::Int(t) => {
+                if let Some(due) = self.agenda.get_mut(&key.fact_type) {
+                    if add {
+                        due.insert((*t, key.entity));
+                    } else {
+                        due.remove(&(*t, key.entity));
                     }
                 }
             }
-            self.agenda.insert(ft, due);
+            Value::Entity(named) => {
+                if let Some(naming) = self.naming.get_mut(&key.fact_type) {
+                    if add {
+                        naming.insert((*named, key.entity));
+                    } else {
+                        naming.remove(&(*named, key.entity));
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
@@ -314,11 +356,7 @@ impl MemoryStore {
     /// Add one value at `key` — the shared insertion path of seeding and commit. Does not touch
     /// the spatial index; callers re-place what they changed.
     fn insert_value(&mut self, key: FactKey, fact: Fact) {
-        if let (Some(due), None, Value::Int(t)) =
-            (self.agenda.get_mut(&key.fact_type), key.about, fact.value)
-        {
-            due.insert((t, key.entity));
-        }
+        self.index_value(key, &fact.value, true);
         let fresh = match self.facts.get_mut(&key) {
             Some(values) => values.insert(fact.value, fact.provenance).is_none(),
             None => {
@@ -354,11 +392,7 @@ impl MemoryStore {
         if let Some(values) = self.facts.remove(&key) {
             for (value, _) in values.iter() {
                 self.hasher.remove_fact(&triple_bytes(key, value));
-                if let (Some(due), None, Value::Int(t)) =
-                    (self.agenda.get_mut(&key.fact_type), key.about, value)
-                {
-                    due.remove(&(*t, key.entity));
-                }
+                self.index_value(key, value, false);
             }
             if !self.holds_any(key.entity, key.fact_type) {
                 if let Some(entities) = self.by_type.get_mut(&key.fact_type) {
@@ -453,6 +487,24 @@ impl CommittedView for MemoryStore {
         out.sort_unstable();
         out.dedup();
         out
+    }
+
+    fn holding(&self, fact_type: FactType, value: Value) -> Vec<EntityId> {
+        let (lo, hi) = (EntityId::from_raw(0), EntityId::from_raw(u64::MAX));
+        match (
+            value,
+            self.agenda.get(&fact_type),
+            self.naming.get(&fact_type),
+        ) {
+            (Value::Int(t), Some(due), _) => {
+                due.range((t, lo)..=(t, hi)).map(|(_, e)| *e).collect()
+            }
+            (Value::Entity(named), _, Some(naming)) => naming
+                .range((named, lo)..=(named, hi))
+                .map(|(_, e)| *e)
+                .collect(),
+            _ => crate::system::holding_by_scan(self, fact_type, value),
+        }
     }
 
     fn changed_since(&self, fact_type: FactType, since: u64) -> Option<Vec<EntityId>> {

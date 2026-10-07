@@ -214,6 +214,7 @@ pub fn living_config(package: &WorldPackage) -> Option<LivingConfig> {
         hunger_per_hour: rules.hunger_per_hour,
         starving_above: rules.starving_above,
         starving_harm_per_hour: rules.starving_harm_per_hour,
+        resident_sight_cm: package.residents_rules.map(|r| r.sight_cm),
     })
 }
 
@@ -291,6 +292,13 @@ pub fn minds_config(package: &WorldPackage) -> Option<MindsConfig> {
             sleep_from_seconds: r.sleep_hours.0 * 3600,
             sleep_to_seconds: r.sleep_hours.1 * 3600,
         },
+        // A resident crossing into the scene keeps their pace and their hours (Amendment A-24).
+        residents: package.residents_rules.map(|rr| minds::seam::ResidentMind {
+            walk_speed_cm_s: rr.walk_speed_cm_s,
+            work_from_seconds: rr.work_hours.0 * 3600,
+            work_to_seconds: rr.work_hours.1 * 3600,
+            hours_spread_seconds: rr.hours_spread_minutes * 60,
+        }),
     })
 }
 
@@ -306,6 +314,7 @@ pub fn information_config(package: &WorldPackage) -> Option<InformationConfig> {
         affection_step_seconds: rules.affection_step_seconds,
         affection_per_hour: rules.affection_per_hour,
         affection_fade_per_day: rules.affection_fade_per_day,
+        residents: package.residents_rules.is_some(),
     })
 }
 
@@ -339,6 +348,7 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
         sight_step_seconds: r.sight_step_seconds,
         sight_min_illumination: r.sight_min_illumination,
         carry_limit_kg: r.carry_limit_kg,
+        resident_body: package.residents_rules.map(|rr| rr.body),
     }
 }
 
@@ -892,6 +902,13 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             store.seed(
                 FactKey::new(EntityId::from_raw(home), society::schema::LARDER),
                 seeded(Value::Int(meals)),
+            );
+        }
+        // Places' rungs on the residency ladder (Amendment A-24).
+        for &(place, rung) in &package.residency {
+            store.seed(
+                FactKey::new(EntityId::from_raw(place), society::schema::RESIDENCY),
+                seeded(Value::Int(rung)),
             );
         }
         // Jobs and who holds them (Amendment A-18).

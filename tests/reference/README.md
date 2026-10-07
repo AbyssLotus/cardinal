@@ -28,6 +28,7 @@ something Ashford lacks grows Ashford.
 | `jobs.rs` | nobody working before their hours; Carol bringing the harvest in to the kitchen; Bob baking pies for the kitchen from what he can find; the hungry eating the pies; same seed, same working day |
 | `wants.rs` | the curious courier going to see the house, and stopping once he has; Erin claiming the glass bottle no one owns and keeping it in her bedroom, past Bob's lamp, which she leaves alone; what is someone else's left where it lies; a claim needing the thing in hand and no owner |
 | `residents.rs` | the Lanes at the city tier: asleep at home by night, at the workshop in working hours, home by evening; eating from larders their shifts keep stocked; costing nothing while nothing ends; same seed, same Lanes; a resident never also an organism (Ruling 19) |
+| `crossing.rs` | attention on the Lanes at night: its residents becoming organisms in one tick, asleep in their beds, as hungry and tired as their records to the bit; then up at their own hours, out of their doors and into the workshop, and home by evening; a worker crossing on arriving at the workshop; a home kept at the city tier keeping its household; same seed, same crossing; no resident beginning in the scene (Ruling 19) |
 | `week.rs` | a week with nobody directed: everyone eats and nobody starves; Carol and Bob work every day and the pies get eaten; the household sleeps every night; every choice explained; same seed, same week |
 | `living.rs` | body heat against the air of whatever encloses a body; tick-length invariance; Living never perturbing Physical |
 | `engine.rs` | replay determinism, seed divergence, the spatial index invisible and exact, declared reads, every fact a system names owned by some domain, tick abort on a broken invariant, the loader's refusals and validation problems |
@@ -35,16 +36,18 @@ something Ashford lacks grows Ashford.
 `src/lib.rs` is the harness: Ashford's ids by name, and `City`, a running Ashford with a
 front door through which a test asks people to go somewhere, open or shut something, turn,
 take, drop, eat, pick, rest, make, or claim — the same intents a player or a mind would propose
-(Appendix A, Rulings 13, 15–18). Commanding someone directs them first, so their own mind stands
+(Appendix A, Rulings 13, 15–18) — and through which it can turn attention on a place
+(`City::attend`, Amendment A-24). Commanding someone directs them first, so their own mind stands
 aside (Amendment A-14). `City::quiet` and `without_minds` give an Ashford where nobody acts unless
 told; `well_fed` one where nobody grows hungry, for tests of other drives.
 
 Kernel contract tests stay in `kernel/tests/` — among them tick continuity, change memory (A-21),
-and the agenda (A-22) — and each crate keeps its unit tests beside its code.
+and the agenda and who holds a value (A-22, A-24) — and each crate keeps its unit tests beside its
+code.
 
 `examples/scale.rs` and `examples/city.rs` are the benches: the scene (N villagers with minds and
 sight; `METERS=1` breaks a tick down by system) and the city tier (N residents in generated
-districts). Run them in release.
+districts, a day, then attention on one district; `METERS=1` too). Run them in release.
 
 ## Destined
 

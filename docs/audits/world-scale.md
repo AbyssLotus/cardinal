@@ -328,3 +328,45 @@ and runs a simulated day at one-minute ticks:
 - generating a city's streets and buildings;
 - harm and death at the city tier;
 - the hot store, to bring 3 KB per resident down further.
+
+---
+
+## 10. Crossing into the scene, measured (2026-10-06)
+
+Promotion (A-24; Appendix A, Ruling 19) is built.
+- Each place is at the city tier or in the scene.
+- A resident who is somewhere in the scene, because attention arrived or because they walked in,
+  becomes an organism in one tick. Each of five domains creates its own facts from the same
+  committed record.
+
+In Ashford, attention on the Lanes at three in the morning finds its twelve residents asleep.
+They cross with their hunger and fatigue unchanged to the bit, lying down. By eleven the workers
+have got up at their own hours, gone out of their doors and along the street into the workshop.
+By nine they are home again (`tests/reference/tests/crossing.rs`).
+
+`examples/city.rs` now ends its day by turning attention on one district of 3,000 residents:
+
+| City | Crossing a district | Mean tick |
+|---|---|---|
+| 100,000 | 50 ms | 4.3 ms |
+| 1,000,000 | 52 ms | 28 ms |
+
+Crossing costs what the district costs, not what the city costs. Finding who is at a place is now an
+index walk: the agenda indexes entity values too (`holding`).
+
+**One cost the meters caught.** The first cut had the crossing system re-examine every resident
+whose segment ended, the same ones the rhythm examines, for 5 ms a tick at a million. A resident's
+place changes only by walking. So only someone arriving can find themselves newly in the scene,
+unless attention moved, and the rhythm already holds those arrivals. The rhythm now marks them,
+and the crossing system acts only on ticks when attention moves. The steady cost is back to
+nothing.
+
+**Where a million spends its tick now:** commit 18 ms, rhythm 7 ms, everything else under 3 ms.
+Commit is the next target: about 20,000 writes a tick, near a microsecond each, through the
+chronicle, digest, change memory, and indexes.
+
+**Next:**
+- demotion (the way back), and Law 14's round trip tested;
+- households' larders as food in the scene;
+- generating streets and buildings, so every district has doors as the Lanes do;
+- a cheaper commit.

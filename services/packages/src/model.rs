@@ -106,6 +106,10 @@ pub struct WorldPackage {
     pub residents: Vec<ResidentSpec>,
     /// How many meals each household's larder holds at the start: `(home, meals)`.
     pub larders: Vec<(u64, i64)>,
+    /// Places' rungs on the residency ladder at the start: `(place, rung)`, Society's
+    /// `CITY` or `SCENE` (Amendment A-24). A place declaring none takes its container's; with
+    /// none declared above it, it is in the scene.
+    pub residency: Vec<(u64, i64)>,
     /// How curious each mind is: `(mind, worth of seeing a place it has never stood in)`
     /// (Amendment A-19). Absent: incurious.
     pub curiosity: Vec<(u64, i64)>,
@@ -481,6 +485,11 @@ pub struct ResidentsRules {
     pub walk_speed_cm_s: i64,
     /// How far, in minutes either side, a resident's own hours may lie from the settlement's.
     pub hours_spread_minutes: i64,
+    /// The body a resident is given on crossing into the scene: half-width, half-depth, height,
+    /// in centimetres (Amendment A-24).
+    pub body: [i64; 3],
+    /// How far a resident sees once in the scene, in centimetres.
+    pub sight_cm: i64,
 }
 
 /// A person at the city tier (Amendment A-23): where they live and work, and how hungry they

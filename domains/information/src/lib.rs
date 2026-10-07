@@ -12,6 +12,7 @@
 //! and what a body feels of itself, and writes beliefs as facts about a pair (Amendment A-7).
 
 pub mod schema;
+pub mod seam;
 pub mod systems;
 
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
@@ -41,6 +42,9 @@ pub struct InformationConfig {
     pub affection_per_hour: i64,
     /// Fondness lost per day out of another's sight.
     pub affection_fade_per_day: i64,
+    /// Whether the world has residents, who may cross into the scene knowing their street
+    /// (Amendment A-24).
+    pub residents: bool,
 }
 
 /// The information layer, plugged into the kernel as the owner of observation, belief, and
@@ -78,7 +82,7 @@ impl Domain for InformationDomain {
 
     fn systems(&self) -> Vec<Box<dyn System>> {
         let c = self.config;
-        vec![
+        let mut systems: Vec<Box<dyn System>> = vec![
             Box::new(systems::Perception::new(
                 c.clock.step(c.perception_step_seconds.saturating_mul(1000)),
                 c.warmth_resolution_centi_c,
@@ -90,7 +94,12 @@ impl Domain for InformationDomain {
                 c.affection_per_hour,
                 c.affection_fade_per_day,
             )),
-        ]
+        ];
+        // What residents crossing into the scene know (Amendment A-24).
+        if c.residents {
+            systems.push(Box::new(seam::Seam));
+        }
+        systems
     }
 
     fn compose(

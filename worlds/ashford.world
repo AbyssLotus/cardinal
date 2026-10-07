@@ -112,6 +112,8 @@ meals_per_shift = 3                 # a shift earns the household three meals
 meal_minutes = 30
 walk_speed_cm_s = 120
 hours_spread_minutes = 45           # each keeps the hours up to 45 minutes their own way
+body = 25, 15, 175                  # crossing into the scene (Amendment A-24): a body this size
+sight_cm = 3000                     # and sight to 30 m
 
 [rules.society]
 courtship_step_seconds = 600
@@ -371,6 +373,21 @@ part_below = 3000                   # both this cool: they part
 1202 = 201, 12, 0, 300              # its door, inside
 1203 = 201, 202, 300, -200          # the ladder, foot
 1204 = 202, 201, 300, -200          # the ladder, head
+# The Lanes (Amendment A-24): a door from the street into each home and the workshop, and back.
+1301 = 150, 151, 0, 300             # the homes on the south side open north onto the street
+1302 = 150, 152, 1000, 300
+1303 = 150, 153, 2000, 300
+1304 = 150, 154, 0, 1200            # the north side's open south
+1305 = 150, 155, 1000, 1200
+1306 = 150, 156, 2000, 1200
+1307 = 150, 157, 5700, 800          # the workshop's door, at its west end
+1351 = 151, 150, 0, 300
+1352 = 152, 150, 0, 300
+1353 = 153, 150, 0, 300
+1354 = 154, 150, 0, -300
+1355 = 155, 150, 0, -300
+1356 = 156, 150, 0, -300
+1357 = 157, 150, -300, 0
 
 [portal_pairs]
 1001 = 1002
@@ -384,6 +401,13 @@ part_below = 3000                   # both this cool: they part
 1105 = 1106
 1201 = 1202
 1203 = 1204
+1301 = 1351
+1302 = 1352
+1303 = 1353
+1304 = 1354
+1305 = 1355
+1306 = 1356
+1307 = 1357
 
 [portal_danger]
 1102 = 0                # the manor's inside front door is pinned harmless
@@ -826,6 +850,10 @@ part_below = 3000                   # both this cool: they part
 5010 = home:155, hunger:1200
 5011 = home:156, work:157, hunger:2200
 5012 = home:156, work:157, hunger:800
+
+[residency]
+# place = city or scene (Amendment A-24): the Lanes keep the city tier until attention arrives.
+150 = city
 
 [larders]
 # home = meals in the larder at the start
