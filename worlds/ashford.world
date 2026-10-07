@@ -57,6 +57,19 @@ indoor_coupling_seconds = 14400
 sight_step_seconds = 1              # what each body can see, refreshed every second
 sight_min_illumination = 50         # below 0.5% of full daylight, nothing can be made out
 carry_limit_kg = 25                 # the most anyone can carry
+hand_strike_percent = 50            # a fist lands at half one's strength (Amendment A-27)
+tool_strike_percent_per_kg = 50     # each kilogram of a tool in hand adds half again
+strike_scale = 300                  # how much a blow harder than the weakest material breaks
+wreckage_height_cm = 20             # what is broken lies flat
+fire_step_seconds = 10              # fire takes its course every ten seconds (Amendment A-28)
+fire_grow_per_hour = 20000          # a fire takes hold over a quarter of an hour
+burn_per_hour = 30000               # a full fire eats 100 kg of fuel in twenty minutes
+fire_reach_cm = 300                 # and throws its heat three metres
+ignition_heat = 3000                # heat times flammability at which a thing catches
+ignite_intensity = 2000             # how a fire starts
+rain_above = 9000                   # humidity past which it rains on what is in the open
+douse_per_hour = 40000              # and rain puts a fire out within the quarter hour
+wall_thickness_cm = 20              # a room's walls, floor, and roof: what of it burns
 
 [rules.living]
 metabolism_step_seconds = 60
@@ -74,6 +87,8 @@ dependence_fade_per_day = 1500      # 15% less dependent for each day without
 hunger_per_hour = 200               # 2% hungrier for each hour
 starving_above = 9000               # past 90% hungry: starving
 starving_harm_per_hour = 100        # 1% of health lost each hour starving
+strength = 4000                     # people are 40% strong unless said otherwise (Amendment A-27)
+burn_harm_per_hour = 6000           # the full heat of a fire costs 60% of health an hour (A-28)
 
 [rules.information]
 perception_step_seconds = 1
@@ -176,6 +191,10 @@ part_below = 3000                   # both this cool: they part
 3100 = 100              # the apple tree, at the far end of the yard
 122 = 103               # the hearth
 3005 = 100              # a green glass bottle, lying in the yard
+3006 = 100              # a packing crate in the yard (Amendment A-27)
+3007 = 3006             # with an apple in it
+3008 = 100              # and a hammer beside it
+3009 = 100              # a torch, unlit, by the crate (Amendment A-28)
 # Food for those the orchard is beyond (Amendment A-19, a week in Ashford)
 3101 = 301                 # the manor pantry, in the hall
 3102 = 102                 # a crate of windfall apples in the cellar
@@ -246,6 +265,10 @@ part_below = 3000                   # both this cool: they part
 3100 = -1200, 600, 0
 122 = -400, 300, 0
 3005 = -300, -300, 0
+3006 = 0, -600, 0
+3007 = 0, 0, 0
+3008 = 100, -600, 0
+3009 = -100, -600, 0
 3101 = 100, 150, 0
 3102 = 100, 0, 0
 3103 = 0, 60, 0
@@ -475,6 +498,10 @@ part_below = 3000                   # both this cool: they part
 3100 = 50, 50, 400      # the apple tree: a metre across, four metres tall
 122 = 60, 40, 100       # the hearth: 1.2 m wide, a metre high
 3005 = 3, 3, 20          # the bottle: 6 cm across, 20 cm tall (1.8 kg)
+3006 = 30, 25, 40        # the crate: 60 cm x 50 cm, 40 cm tall (84 kg of timber)
+3007 = 4, 4, 8           # its apple
+3008 = 2, 2, 15          # the hammer: 15 cm of iron (1.9 kg)
+3009 = 2, 2, 30          # the torch: 60 cm of timber (0.3 kg)
 3101 = 30, 30, 60
 3102 = 30, 30, 60
 3103 = 20, 20, 30
@@ -549,6 +576,7 @@ part_below = 3000                   # both this cool: they part
 120 = solid             # tables
 3100 = solid            # the apple tree
 122 = solid             # the hearth
+3006 = solid            # the crate
 123 = solid             # the flour bin
 203 = solid
 130 = solid, opaque     # the hay wagon
@@ -655,6 +683,10 @@ part_below = 3000                   # both this cool: they part
 2083 = 3000
 2084 = 3000
 
+[strength]
+# organism = how strong, beyond the world's 40% (Amendment A-27)
+2003 = 7000             # Carol hauls the harvest
+
 [knows]
 # mind = what it knows at the start: where each thing is; where an opening leads and whether
 # it is open; how warm a place's air is
@@ -752,11 +784,19 @@ part_below = 3000                   # both this cool: they part
 709 = density:300, hardness:300, flammability:3000, edible:10000, nutrition:5000  # bread
 710 = density:900, hardness:500, flammability:1000, edible:10000, nutrition:4000  # smoked fish
 711 = density:800, hardness:200, flammability:1000, edible:10000, nutrition:4000  # a household's meal (Amendment A-26)
+712 = density:100, hardness:100, flammability:9500    # straw (Amendment A-28)
 
 [made_of]
 121 = 701               # the lamp: glass
 122 = 703               # the hearth: granite
 3005 = 701              # the bottle: glass
+3006 = 700              # the crate: timber
+3007 = 704              # its apple
+3008 = 702              # the hammer: iron
+130 = 712               # the hay wagon: straw, piled high
+3009 = 700              # a torch: a stave of timber
+110 = 700               # the shed: timber
+120 = 700               # the kitchen table: timber
 123 = 700               # the flour bin: timber
 3000 = 704              # the apple
 3001 = 705              # the vials: poppy tincture

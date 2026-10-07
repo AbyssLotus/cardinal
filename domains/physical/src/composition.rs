@@ -408,3 +408,73 @@ mod tests {
         assert!(compose_vec3(None, &two, None).is_err());
     }
 }
+
+/// Compose changes to a thing's integrity (Amendment A-27): absent is whole (`full`); at most one
+/// `Set` establishes a base, then every `Delta` — damage and repair alike — adds to it, and the
+/// result is held within nothing and whole. Whole again, nothing need be stored: the fact is
+/// cleared.
+pub fn compose_integrity(
+    current: Option<Value>,
+    changes: &[Change],
+    full: i64,
+) -> Result<Resolved, ResolveError> {
+    let mut base = current.and_then(|v| v.as_int()).unwrap_or(full);
+    let mut set_seen = false;
+    let mut delta: i64 = 0;
+    for change in changes {
+        match change {
+            Change::Set(v) | Change::Create(v) => {
+                if set_seen {
+                    return Err(ResolveError::new("two competing settings of one integrity"));
+                }
+                set_seen = true;
+                base = v
+                    .as_int()
+                    .ok_or(ResolveError::new("integrity is a number"))?;
+            }
+            Change::Delta(d) => delta = delta.saturating_add(*d),
+            Change::Tombstone | Change::Retire => {
+                if changes.len() > 1 {
+                    return Err(ResolveError::new(
+                        "an integrity cleared and changed in one tick",
+                    ));
+                }
+                return Ok(Resolved::Tombstone);
+            }
+            Change::Add(_) | Change::Remove(_) => {
+                return Err(ResolveError::new("integrity is one number, not a set"))
+            }
+        }
+    }
+    let now = base.saturating_add(delta).clamp(0, full);
+    Ok(if now == full {
+        Resolved::Tombstone
+    } else {
+        Resolved::Write(Value::Int(now))
+    })
+}
+
+/// Compose changes to how fiercely something burns (Amendment A-28): fires set to it in one tick —
+/// one system's course, another's spark — burn as fiercely as the fiercest; only if nothing sets
+/// it does going out stand.
+pub fn compose_fire(changes: &[Change]) -> Result<Resolved, ResolveError> {
+    let mut fiercest: Option<i64> = None;
+    let mut out = false;
+    for change in changes {
+        match change {
+            Change::Set(v) | Change::Create(v) => {
+                let n = v
+                    .as_int()
+                    .ok_or(ResolveError::new("a fire burns by a number"))?;
+                fiercest = Some(fiercest.map_or(n, |f| f.max(n)));
+            }
+            Change::Tombstone | Change::Retire => out = true,
+            _ => return Err(ResolveError::new("a fire is set or goes out")),
+        }
+    }
+    match (fiercest, out) {
+        (Some(n), _) => Ok(Resolved::Write(Value::Int(n))),
+        (None, true) => Ok(Resolved::Tombstone),
+        (None, false) => Err(ResolveError::new("no change to a fire")),
+    }
+}

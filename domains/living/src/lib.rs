@@ -83,9 +83,14 @@ pub struct LivingConfig {
     pub starving_above: i64,
     /// Health lost per hour while starving.
     pub starving_harm_per_hour: i64,
+    /// Health lost per hour in the full heat of a fire (Amendment A-28).
+    pub burn_harm_per_hour: i64,
     /// How far a resident sees once they cross into the scene, in centimetres (Amendment A-24) —
     /// if the world has residents.
     pub resident_sight_cm: Option<i64>,
+    /// How strong the world's people are, unless declared otherwise (Amendment A-27): given to a
+    /// resident crossing into the scene.
+    pub strength: Option<i64>,
 }
 
 impl LivingDomain {
@@ -103,6 +108,7 @@ impl Domain for LivingDomain {
     fn owns(&self, fact_type: FactType) -> bool {
         fact_type == schema::BODY_HEAT
             || fact_type == schema::SIGHT_RANGE
+            || fact_type == schema::STRENGTH
             || fact_type == schema::FATIGUE
             || fact_type == schema::HUNGER
             || fact_type == schema::HEALTH
@@ -147,12 +153,17 @@ impl Domain for LivingDomain {
                     heal_per_hour: c.heal_per_hour,
                     starving_above: c.starving_above,
                     starving_harm_per_hour: c.starving_harm_per_hour,
+                    burn_harm_per_hour: c.burn_harm_per_hour,
                 },
             )),
         ];
         // The vital state of residents crossing into the scene (Amendment A-24).
         if let Some(sight) = c.resident_sight_cm {
-            systems.push(Box::new(seam::Seam::new(c.set_point_centi_c, sight)));
+            systems.push(Box::new(seam::Seam::new(
+                c.set_point_centi_c,
+                sight,
+                c.strength,
+            )));
         }
         systems
     }
@@ -166,6 +177,7 @@ impl Domain for LivingDomain {
         if fact_type == schema::BODY_HEAT {
             composition::compose_body_heat(current, changes)
         } else if fact_type == schema::SIGHT_RANGE
+            || fact_type == schema::STRENGTH
             || fact_type == schema::HUNGER
             || fact_type == schema::FATIGUE
             || fact_type == schema::HEALTH
@@ -188,6 +200,13 @@ impl Domain for LivingDomain {
                     return Err(ValidationError::new(
                         "body heat resolved below absolute zero",
                     ));
+                }
+            }
+        }
+        if fact_type == schema::STRENGTH {
+            if let Resolved::Write(v) = value {
+                if !v.as_int().is_some_and(|n| (0..=schema::FULL).contains(&n)) {
+                    return Err(ValidationError::new("strength is 0..=100%"));
                 }
             }
         }

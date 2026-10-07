@@ -78,6 +78,12 @@ pub struct WorldPackage {
     /// How far each organism can see, in centimetres (Living Systems' sensory capability,
     /// Amendment A-8): `(organism, sight range)`. An organism absent here perceives nothing.
     pub senses: Vec<(u64, i64)>,
+    /// How strong each organism is, in hundredths of a percent (Amendment A-27): `(organism,
+    /// strength)`. Those absent have the world's default, if it declares one.
+    pub strength: Vec<(u64, i64)>,
+    /// Fires burning at the start (Amendment A-28): `(thing, fierceness, kept)` — a kept fire is
+    /// a tended hearth's, neither consuming nor dying down.
+    pub fires: Vec<(u64, i64, bool)>,
     /// What each mind knows at the start (Amendment A-8; Vol. IV Ch. 5): `(mind, things)`.
     /// For each thing, where it is; for an opening, also where it leads and whether it is open;
     /// for a place, also how warm its air is.
@@ -355,6 +361,33 @@ pub struct PhysicalRules {
     pub sight_min_illumination: i64,
     /// The most a body can carry, in kilograms (Amendment A-12).
     pub carry_limit_kg: i64,
+    /// How hard a bare-handed blow lands, as a percentage of strength (Amendment A-27).
+    pub hand_strike_percent: i64,
+    /// How much harder each kilogram of a tool makes a blow, as a percentage of strength.
+    pub tool_strike_percent_per_kg: i64,
+    /// Integrity lost per unit a blow lands harder than a thing's weakest material, per kilogram
+    /// the thing weighs.
+    pub strike_scale: i64,
+    /// How tall the wreckage of a broken thing stands at most, in centimetres.
+    pub wreckage_height_cm: i64,
+    /// How often fire takes its course, in seconds (Amendment A-28).
+    pub fire_step_seconds: u64,
+    /// How fast a fire grows toward what its material allows, per hour.
+    pub fire_grow_per_hour: i64,
+    /// How much integrity a full fire eats per hour from a hundred kilograms of fuel.
+    pub burn_per_hour: i64,
+    /// How far a full fire reaches beyond its extent, in centimetres.
+    pub fire_reach_cm: i64,
+    /// The heat, times flammability, at which a thing catches fire.
+    pub ignition_heat: i64,
+    /// How fiercely a fire burns when it first catches.
+    pub ignite_intensity: i64,
+    /// The humidity at and above which rain falls on what is open to the sky.
+    pub rain_above: i64,
+    /// How fast rain puts out a fire in the open, per hour.
+    pub douse_per_hour: i64,
+    /// How thick a walled place's walls, floor, and roof are, in centimetres.
+    pub wall_thickness_cm: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).
@@ -599,6 +632,11 @@ pub struct LivingRules {
     pub starving_above: i64,
     /// Health lost per hour while starving.
     pub starving_harm_per_hour: i64,
+    /// How strong the world's people are unless declared otherwise, in hundredths of a percent
+    /// (Amendment A-27). Absent: only those declared have any strength.
+    pub strength: Option<i64>,
+    /// Health lost per hour in the full heat of a fire (Amendment A-28).
+    pub burn_harm_per_hour: i64,
 }
 
 /// One region the world begins with (Vol. IV Ch. 4, generation): an id, a starting

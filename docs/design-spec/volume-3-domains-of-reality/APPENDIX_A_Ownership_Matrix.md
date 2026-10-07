@@ -192,6 +192,15 @@ rules. Conflict never writes another domain's facts.
 otherwise combat becomes a second authority on bodies and walls. (Ch. 8 §8.3, Ch. 12
 §12.1.)
 
+*Amendments A-27, A-28 (2026-10): built.*
+- A thing's or a walled place's integrity is open to any proposer, and changes add up.
+  Physical Reality alone breaks what reaches nothing: a thing into its wreckage, a walled place
+  into a ruin.
+- A blow is an intent Physical Reality judges by the striker's strength (Living's capability) and
+  the tool in hand, against the target's weakest material.
+- Fire is Physical Reality's. It reports the heat each body is taking, and Living Systems judges
+  the burns.
+
 ## Ruling 10 — Money: Economy circulates, Institutions authorize
 
 **Dispute:** Who owns currency?

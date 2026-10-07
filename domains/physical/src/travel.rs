@@ -571,6 +571,49 @@ const GRAVITY_WRITES: &[FactType] = &[
     FALL_HEIGHT,
 ];
 
+/// A fall: where a thing stands, where it lands, how long the drop takes, and how far it is.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Fall {
+    /// Where it stands, in its container's frame.
+    pub from: [i64; 3],
+    /// Where it lands.
+    pub landing: [i64; 3],
+    /// How many ticks the drop takes — at least one.
+    pub ticks: u64,
+    /// How far it falls, in centimetres.
+    pub drop: i64,
+}
+
+/// How `body` would fall to what is under it — not counting `gone`, which no longer holds it up
+/// (Amendment A-27) — or `None` if it stands on something. The time is gravity's: √(2h/g),
+/// rounded up to whole ticks.
+pub fn fall_of(
+    view: &dyn CommittedView,
+    body: EntityId,
+    rules: &MoveRules,
+    gone: Option<EntityId>,
+) -> Option<Fall> {
+    let frame = container_of(view, body)?;
+    let here = local_position(view, body);
+    let mut ignore = vec![body];
+    ignore.extend(gone);
+    let floor = support_at(view, frame, here, rules.step_height_cm, &ignore);
+    let drop = here[2] - floor;
+    if drop <= SUPPORT_TOLERANCE {
+        return None;
+    }
+    // Time to fall h from rest: √(2h/g) seconds = √(2h·10⁶/g) milliseconds.
+    let g = rules.gravity_cm_s2.max(1) as u128;
+    let fall_ms = isqrt(2 * drop as u128 * 1_000_000 / g) as u64;
+    let ticks = fall_ms.div_ceil(rules.clock.tick_ms()).max(1);
+    Some(Fall {
+        from: here,
+        landing: [here[0], here[1], floor],
+        ticks,
+        drop,
+    })
+}
+
 /// Drops every unsupported mobile body to whatever is under it (Amendment A-4).
 pub struct Gravity {
     rules: MoveRules,

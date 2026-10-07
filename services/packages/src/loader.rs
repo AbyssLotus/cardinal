@@ -215,6 +215,8 @@ pub fn living_config(package: &WorldPackage) -> Option<LivingConfig> {
         starving_above: rules.starving_above,
         starving_harm_per_hour: rules.starving_harm_per_hour,
         resident_sight_cm: package.residents_rules.map(|r| r.sight_cm),
+        strength: rules.strength,
+        burn_harm_per_hour: rules.burn_harm_per_hour,
     })
 }
 
@@ -358,6 +360,23 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
         carry_limit_kg: r.carry_limit_kg,
         resident_body: package.residents_rules.map(|rr| rr.body),
         pantry_body: pantry_rules(package).map(|(_, _, body)| body),
+        strike: physical::act::StrikeRules {
+            hand_percent: r.hand_strike_percent,
+            tool_percent_per_kg: r.tool_strike_percent_per_kg,
+            scale: r.strike_scale,
+        },
+        wreckage_height_cm: r.wreckage_height_cm,
+        fire: physical::fire::FireRules {
+            step_seconds: r.fire_step_seconds,
+            grow_per_hour: r.fire_grow_per_hour,
+            burn_per_hour: r.burn_per_hour,
+            reach_cm: r.fire_reach_cm,
+            ignition_heat: r.ignition_heat,
+            ignite_intensity: r.ignite_intensity,
+            rain_above: r.rain_above,
+            douse_per_hour: r.douse_per_hour,
+            wall_thickness_cm: r.wall_thickness_cm,
+        },
     }
 }
 
@@ -642,6 +661,21 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         );
     }
 
+    // Fires burning at the start (Amendment A-28).
+    for &(thing, fierce, kept) in &package.fires {
+        let thing = EntityId::from_raw(thing);
+        store.seed(
+            FactKey::new(thing, physical::schema::BURNING),
+            seeded(Value::Int(fierce)),
+        );
+        if kept {
+            store.seed(
+                FactKey::new(thing, physical::schema::KEPT_FIRE),
+                seeded(Value::Bool(true)),
+            );
+        }
+    }
+
     // The world begins with its light (Amendment A-16): each region lit as the sun stands at the
     // first moment, so a world that opens at midnight opens dark, and nobody sees by a light
     // that is not there.
@@ -721,6 +755,21 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 ),
                 seeded(Value::Int(level)),
             );
+        }
+        // Strength, a capability (Amendment A-27): declared, or the world's default for every
+        // organism.
+        for o in &package.organisms {
+            let declared = package
+                .strength
+                .iter()
+                .find(|(who, _)| *who == o.id)
+                .map(|(_, s)| *s);
+            if let Some(strength) = declared.or(rules.strength) {
+                store.seed(
+                    FactKey::new(EntityId::from_raw(o.id), living::schema::STRENGTH),
+                    seeded(Value::Int(strength)),
+                );
+            }
         }
         // Sensory capability is Living's (Amendment A-8).
         for &(organism, range) in &package.senses {

@@ -18,10 +18,12 @@
 
 use crate::index::{container_of, size_of};
 use crate::schema::{
-    ACT_ARRIVE, ACT_CLOSE, ACT_CONSUME, ACT_DROP, ACT_FACE, ACT_LEAVE, ACT_OPEN, ACT_PICK,
-    ACT_REFUSED, ACT_TAKE, BODY_SIZE, CONSUMED, CONTAINED_IN, ENCLOSED, HEADING, LEADS_TO, MADE_OF,
-    MATERIAL_DENSITY, MATERIAL_EDIBLE, MOBILE, MOTION_END, MOTION_START, MOTION_TARGET, PICKED,
-    PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION, SOLID,
+    ACT_ARRIVE, ACT_CLOSE, ACT_CONSUME, ACT_DROP, ACT_FACE, ACT_IGNITE, ACT_LEAVE, ACT_OPEN,
+    ACT_PICK, ACT_REFUSED, ACT_STRIKE, ACT_TAKE, BODY_SIZE, BROKEN, BURNING, CONSUMED,
+    CONTAINED_IN, ENCLOSED, FALL_HEIGHT, HAS_PORTAL, HEADING, INTEGRITY, LEADS_TO, MADE_OF,
+    MATERIAL_DENSITY, MATERIAL_EDIBLE, MATERIAL_FLAMMABILITY, MATERIAL_HARDNESS, MOBILE,
+    MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PERCENT_FULL, PICKED, PORTAL_FAR_SIDE,
+    PORTAL_OPEN, POSITION, SOLID, STRENGTH, TERRAIN_SAMPLE, TERRAIN_SPACING,
 };
 use crate::space::{far_side, local_position, portal_destination};
 use crate::terrain::is_true;
@@ -63,8 +65,33 @@ const ACT_READS: &[FactType] = &[
     MADE_OF,
     MATERIAL_DENSITY,
     MATERIAL_EDIBLE,
+    MATERIAL_HARDNESS,
+    ACT_STRIKE,
+    INTEGRITY,
+    BROKEN,
+    OPAQUE,
+    HAS_PORTAL,
+    STRENGTH,
+    TERRAIN_SPACING,
+    TERRAIN_SAMPLE,
+    ACT_IGNITE,
+    BURNING,
+    MATERIAL_FLAMMABILITY,
 ];
 const ACT_WRITES: &[FactType] = &[
+    ACT_IGNITE,
+    BURNING,
+    MOTION_TARGET,
+    MOTION_START,
+    MOTION_END,
+    FALL_HEIGHT,
+    ACT_STRIKE,
+    INTEGRITY,
+    BROKEN,
+    SOLID,
+    OPAQUE,
+    ENCLOSED,
+    BODY_SIZE,
     ACT_OPEN,
     ACT_CLOSE,
     ACT_FACE,
@@ -94,19 +121,203 @@ const ACT_WRITES: &[FactType] = &[
 /// - **consume** — a thing the body holds, made entirely of edible materials. It leaves the
 ///   world (its place is cleared; its identity and composition remain), and the body's
 ///   [`CONSUMED`] report names it.
+///
+/// And striking and breaking (Amendment A-27):
+///
+/// - **strike** — a thing within reach, made of something with a known weight. The blow lands as
+///   hard as the body's strength allows bare-handed, or as the best tool in hand allows — its
+///   weight adding to the blow, its own weakest material bounding it. A blow no harder than the
+///   thing's weakest material leaves no mark and is refused; a harder one costs it integrity, in
+///   proportion to how much harder, over its weight;
+/// - **break** — first, before any intent: whatever reached no integrity is broken. A thing
+///   becomes its wreckage — flat, not solid, not opaque — and what it held spills where it stood;
+///   a walled place becomes a ruin, its walls down and its doors broken open; a door breaks open,
+///   both faces. Things spilling this tick cannot also be taken, dropped, or eaten in it.
 pub struct Act {
     reach_cm: i64,
     carry_limit_g: i64,
+    strike: StrikeRules,
+    wreckage_height_cm: i64,
+    moves: crate::travel::MoveRules,
+    ignite_intensity: i64,
+}
+
+/// How a blow is judged (Amendment A-27), all world rules.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct StrikeRules {
+    /// How hard a bare-handed blow lands, as a percentage of the striker's strength.
+    pub hand_percent: i64,
+    /// How much harder each kilogram of a tool in hand makes a blow, as a percentage of strength.
+    pub tool_percent_per_kg: i64,
+    /// Integrity lost per unit a blow lands harder than the thing's weakest material, per
+    /// kilogram the thing weighs.
+    pub scale: i64,
 }
 
 impl Act {
-    /// Acts within `reach_cm` beyond a body's own extent, and carries no more than
-    /// `carry_limit_kg` (world rules).
-    pub const fn new(reach_cm: i64, carry_limit_kg: i64) -> Self {
+    /// Acts within `reach_cm` beyond a body's own extent, carries no more than `carry_limit_kg`,
+    /// strikes by `strike`, and leaves wreckage no taller than `wreckage_height_cm` (world
+    /// rules).
+    pub const fn new(
+        reach_cm: i64,
+        carry_limit_kg: i64,
+        strike: StrikeRules,
+        wreckage_height_cm: i64,
+        moves: crate::travel::MoveRules,
+        ignite_intensity: i64,
+    ) -> Self {
         Self {
             reach_cm,
             carry_limit_g: carry_limit_kg.saturating_mul(1000),
+            strike,
+            wreckage_height_cm,
+            moves,
+            ignite_intensity,
         }
+    }
+
+    /// Whether `body` has a flame to hand (Amendment A-28): something burning that it holds, or
+    /// that is within its reach.
+    fn has_flame(&self, view: &dyn CommittedView, body: EntityId) -> bool {
+        view.entities_with(BURNING).into_iter().any(|fire| {
+            container_of(view, fire) == Some(body) || self.within_reach(view, body, fire)
+        })
+    }
+
+    /// The things standing on `broken` that do not move by themselves — a lamp on a table — each
+    /// with its fall, now that `broken` holds nothing up. (Bodies that move by themselves are
+    /// gravity's, next tick.) Found among what shares its place, the same with or without the
+    /// spatial index.
+    fn left_standing_on(
+        &self,
+        view: &dyn CommittedView,
+        broken: EntityId,
+        place: EntityId,
+    ) -> Vec<(EntityId, crate::travel::Fall)> {
+        let under = crate::index::occupied_at(view, broken, local_position(view, broken));
+        crate::nearby::contents(view, place)
+            .into_iter()
+            .filter(|t| {
+                *t != broken
+                    && !is_true(view, *t, MOBILE)
+                    && view.read(FactKey::new(*t, LEADS_TO)).is_none()
+                    && !is_true(view, *t, ENCLOSED)
+                    && view.read(FactKey::new(*t, MOTION_TARGET)).is_none()
+            })
+            .filter(|t| {
+                let b = crate::index::occupied_at(view, *t, local_position(view, *t));
+                let on_top = (b.min[2] - under.max[2]).abs() <= 1;
+                on_top
+                    && b.min[0] < under.max[0]
+                    && b.max[0] > under.min[0]
+                    && b.min[1] < under.max[1]
+                    && b.max[1] > under.min[1]
+            })
+            .filter_map(|t| {
+                crate::travel::fall_of(view, t, &self.moves, Some(broken)).map(|f| (t, f))
+            })
+            .collect()
+    }
+
+    /// How hard `body` can hit, in the units of hardness: bare-handed, or with the best thing it
+    /// holds, which never strikes harder than its own weakest material.
+    fn blow_strength(&self, view: &dyn CommittedView, body: EntityId) -> i64 {
+        let strength = view
+            .read(FactKey::new(body, STRENGTH))
+            .and_then(|f| f.value.as_int())
+            .unwrap_or(0)
+            .max(0) as i128;
+        let r = &self.strike;
+        let hand = strength * r.hand_percent as i128 / 100;
+        let tools = crate::nearby::contents(view, body)
+            .into_iter()
+            .filter_map(|tool| {
+                let hard = crate::materials::structural_hardness(view, tool)? as i128;
+                let grams = crate::materials::weight_g(view, tool)? as i128;
+                let swung = strength
+                    * (r.hand_percent as i128 * 1000 + r.tool_percent_per_kg as i128 * grams)
+                    / 100_000;
+                Some(swung.min(hard))
+            });
+        tools.chain(std::iter::once(hand)).max().unwrap_or(0) as i64
+    }
+
+    /// The integrity a blow by `body` takes from `target`, or `None` if it cannot land or leaves
+    /// no mark: out of reach, already broken, of unknown make or weight, or no harder than the
+    /// target's weakest material.
+    fn blow(&self, view: &dyn CommittedView, body: EntityId, target: EntityId) -> Option<i64> {
+        let whole = view
+            .read(FactKey::new(target, INTEGRITY))
+            .and_then(|f| f.value.as_int())
+            .unwrap_or(PERCENT_FULL);
+        if target == body || whole <= 0 || is_true(view, target, BROKEN) {
+            return None;
+        }
+        let reachable = if view.read(FactKey::new(target, LEADS_TO)).is_some() {
+            self.reachable_face(view, body, target).is_some()
+        } else {
+            self.within_reach(view, body, target)
+        };
+        if !reachable {
+            return None;
+        }
+        let resists = crate::materials::structural_hardness(view, target)?;
+        let grams = crate::materials::weight_g(view, target)?.max(1);
+        let lands = self.blow_strength(view, body);
+        if lands <= resists {
+            return None;
+        }
+        let damage = (lands - resists) as i128 * self.strike.scale as i128 * 1000 / grams as i128;
+        Some(damage.clamp(1, PERCENT_FULL as i128) as i64)
+    }
+
+    /// The entities to break this tick: everything whose integrity has reached nothing and is not
+    /// yet broken — looked for among what changed, when the store can say.
+    fn breaking(view: &dyn CommittedView, basis: u64) -> Vec<EntityId> {
+        let candidates = if basis > 0 {
+            view.changed_since(INTEGRITY, basis - 1)
+        } else {
+            None
+        }
+        .unwrap_or_else(|| view.entities_with(INTEGRITY));
+        candidates
+            .into_iter()
+            .filter(|e| {
+                view.read(FactKey::new(*e, INTEGRITY))
+                    .and_then(|f| f.value.as_int())
+                    == Some(0)
+                    && !is_true(view, *e, BROKEN)
+            })
+            .collect()
+    }
+
+    /// Both faces of every door into or out of walled place `place`.
+    fn doors_of(view: &dyn CommittedView, place: EntityId) -> Vec<EntityId> {
+        let hosted = |p: EntityId| -> Vec<EntityId> {
+            view.read_all(FactKey::new(p, HAS_PORTAL))
+                .into_iter()
+                .filter_map(|f| match f.value {
+                    Value::Entity(o) => Some(o),
+                    _ => None,
+                })
+                .collect()
+        };
+        let mut faces: Vec<EntityId> = hosted(place);
+        if let Some(around) = container_of(view, place) {
+            faces.extend(
+                hosted(around)
+                    .into_iter()
+                    .filter(|o| entity_at(view, *o, LEADS_TO) == Some(place)),
+            );
+        }
+        let far: Vec<EntityId> = faces
+            .iter()
+            .filter_map(|f| portal_destination(view, *f).and_then(|d| far_side(view, *f, d)))
+            .collect();
+        faces.extend(far);
+        faces.sort_unstable();
+        faces.dedup();
+        faces
     }
 
     /// Why `body` cannot take `thing` now, or `None` if it can.
@@ -191,6 +402,8 @@ impl System for Act {
             ACT_DROP,
             ACT_CONSUME,
             ACT_PICK,
+            ACT_STRIKE,
+            ACT_IGNITE,
         ] {
             actors.extend(view.entities_with(fact));
         }
@@ -199,6 +412,102 @@ impl System for Act {
         // Door faces already set this tick, and to what; things already handled this tick.
         let mut doors: BTreeMap<EntityId, bool> = BTreeMap::new();
         let mut handled: std::collections::BTreeSet<EntityId> = Default::default();
+
+        // What breaks (Amendment A-27), before anything is done with what it held.
+        for broken in Self::breaking(view, ctx.basis_tick()) {
+            push(broken, BROKEN, Change::Set(Value::Bool(true)), "broke");
+            let faces = if is_true(view, broken, ENCLOSED) {
+                // A walled place: its walls come down, and every door and shuttable window in
+                // them is broken open.
+                push(
+                    broken,
+                    ENCLOSED,
+                    Change::Set(Value::Bool(false)),
+                    "walls_fell",
+                );
+                Self::doors_of(view, broken)
+                    .into_iter()
+                    .filter(|f| {
+                        is_true(view, *f, OPAQUE)
+                            || view.read(FactKey::new(*f, PORTAL_OPEN)).map(|v| v.value)
+                                == Some(Value::Bool(false))
+                    })
+                    .collect()
+            } else if view.read(FactKey::new(broken, LEADS_TO)).is_some() {
+                let mut faces = vec![broken];
+                if let Some(dest) = portal_destination(view, broken) {
+                    faces.extend(far_side(view, broken, dest));
+                }
+                faces
+            } else {
+                // A thing: its wreckage lies flat where it stood, and what it held spills out.
+                if is_true(view, broken, SOLID) {
+                    push(broken, SOLID, Change::Set(Value::Bool(false)), "broke");
+                }
+                if is_true(view, broken, OPAQUE) {
+                    push(broken, OPAQUE, Change::Set(Value::Bool(false)), "broke");
+                }
+                if let Some([w, d, h]) = size_of(view, broken) {
+                    if h > self.wreckage_height_cm {
+                        let flat = [w, d, self.wreckage_height_cm.max(0)];
+                        push(broken, BODY_SIZE, Change::Set(Value::Vec3(flat)), "broke");
+                    }
+                }
+                if let Some(place) = container_of(view, broken) {
+                    // What stood on it falls to what is under it now.
+                    let now = view.tick() as i64;
+                    for (thing, fall) in self.left_standing_on(view, broken, place) {
+                        if !handled.insert(thing) {
+                            continue;
+                        }
+                        let landing = Value::Vec3(fall.landing);
+                        push(thing, POSITION, Change::Set(Value::Vec3(fall.from)), "fell");
+                        push(thing, MOTION_TARGET, Change::Set(landing), "fell");
+                        push(thing, MOTION_START, Change::Set(Value::Int(now)), "fell");
+                        let end = Value::Int(now + fall.ticks as i64);
+                        push(thing, MOTION_END, Change::Set(end), "fell");
+                        push(
+                            thing,
+                            FALL_HEIGHT,
+                            Change::Set(Value::Int(fall.drop)),
+                            "fell",
+                        );
+                    }
+                    let at = local_position(view, broken);
+                    for spilled in crate::nearby::contents(view, broken) {
+                        if !handled.insert(spilled) {
+                            continue;
+                        }
+                        let off = local_position(view, spilled);
+                        let to = [at[0] + off[0], at[1] + off[1], at[2] + off[2]];
+                        push(
+                            spilled,
+                            CONTAINED_IN,
+                            Change::Set(Value::Entity(place)),
+                            "spilled",
+                        );
+                        push(spilled, POSITION, Change::Set(Value::Vec3(to)), "spilled");
+                    }
+                }
+                Vec::new()
+            };
+            for face in faces {
+                if face != broken {
+                    push(face, BROKEN, Change::Set(Value::Bool(true)), "broke");
+                }
+                if doors.insert(face, true).is_none() {
+                    push(
+                        face,
+                        PORTAL_OPEN,
+                        Change::Set(Value::Bool(true)),
+                        "broken_open",
+                    );
+                }
+                if is_true(view, face, OPAQUE) {
+                    push(face, OPAQUE, Change::Set(Value::Bool(false)), "broke");
+                }
+            }
+        }
         // Things coming into the world, and leaving it (Amendment A-15): into a place, or a hand;
         // or, asked to arrive at a fixture — a hearth — set down just in front of it, in its
         // place, where one can walk up to it (Amendment A-18).
@@ -246,6 +555,15 @@ impl System for Act {
                     continue;
                 };
                 push(body, fact, Change::Tombstone, "considered");
+                // A broken door stands open: there is nothing left to shut (Amendment A-27).
+                if is_true(view, door, BROKEN) {
+                    if open {
+                        succeeded = true;
+                    } else {
+                        refused = Some(door);
+                    }
+                    continue;
+                }
                 let faces = match self.reachable_face(view, body, door) {
                     Some(_) => {
                         let mut faces = vec![door];
@@ -348,6 +666,31 @@ impl System for Act {
                     succeeded = true;
                 } else {
                     refused = Some(thing);
+                }
+            }
+            // Setting fire (Amendment A-28): with a flame to hand, to a thing in hand or in reach
+            // that can burn.
+            if let Some(target) = entity_at(view, body, ACT_IGNITE) {
+                push(body, ACT_IGNITE, Change::Tombstone, "considered");
+                let in_hand = container_of(view, target) == Some(body);
+                let near = in_hand || self.within_reach(view, body, target);
+                if near && crate::fire::can_catch(view, target) && self.has_flame(view, body) {
+                    let fire = Value::Int(self.ignite_intensity);
+                    push(target, BURNING, Change::Set(fire), "set_alight");
+                    succeeded = true;
+                } else {
+                    refused = Some(target);
+                }
+            }
+            // Striking (Amendment A-27): every blow landed on one thing this tick adds up.
+            if let Some(target) = entity_at(view, body, ACT_STRIKE) {
+                push(body, ACT_STRIKE, Change::Tombstone, "considered");
+                match self.blow(view, body, target) {
+                    Some(damage) => {
+                        push(target, INTEGRITY, Change::Delta(-damage), "struck");
+                        succeeded = true;
+                    }
+                    None => refused = Some(target),
                 }
             }
             if let Some(deposit) = entity_at(view, body, ACT_PICK) {

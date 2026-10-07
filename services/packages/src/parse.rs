@@ -91,6 +91,23 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut sight_step_seconds: Option<u64> = None;
     let mut sight_min_illumination: Option<i64> = None;
     let mut carry_limit_kg: Option<i64> = None;
+    let mut hand_strike_percent: Option<i64> = None;
+    let mut tool_strike_percent_per_kg: Option<i64> = None;
+    let mut strike_scale: Option<i64> = None;
+    let mut wreckage_height_cm: Option<i64> = None;
+    let mut default_strength: Option<i64> = None;
+    let mut fire_step_seconds: Option<u64> = None;
+    let mut fire_grow_per_hour: Option<i64> = None;
+    let mut burn_per_hour: Option<i64> = None;
+    let mut fire_reach_cm: Option<i64> = None;
+    let mut ignition_heat: Option<i64> = None;
+    let mut ignite_intensity: Option<i64> = None;
+    let mut rain_above: Option<i64> = None;
+    let mut douse_per_hour: Option<i64> = None;
+    let mut wall_thickness_cm: Option<i64> = None;
+    let mut burn_harm: Option<i64> = None;
+    let mut fires: Vec<(u64, i64, bool)> = Vec::new();
+    let mut strength: Vec<(u64, i64)> = Vec::new();
     let mut perception_step_seconds: Option<u64> = None;
     let mut warmth_resolution: Option<i64> = None;
     let mut senses: Vec<(u64, i64)> = Vec::new();
@@ -297,6 +314,21 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     sight_min_illumination = Some(parse_num(value, line_no)?)
                 }
                 "carry_limit_kg" => carry_limit_kg = Some(parse_num(value, line_no)?),
+                "hand_strike_percent" => hand_strike_percent = Some(parse_num(value, line_no)?),
+                "tool_strike_percent_per_kg" => {
+                    tool_strike_percent_per_kg = Some(parse_num(value, line_no)?)
+                }
+                "strike_scale" => strike_scale = Some(parse_num(value, line_no)?),
+                "wreckage_height_cm" => wreckage_height_cm = Some(parse_num(value, line_no)?),
+                "fire_step_seconds" => fire_step_seconds = Some(parse_num(value, line_no)?),
+                "fire_grow_per_hour" => fire_grow_per_hour = Some(parse_num(value, line_no)?),
+                "burn_per_hour" => burn_per_hour = Some(parse_num(value, line_no)?),
+                "fire_reach_cm" => fire_reach_cm = Some(parse_num(value, line_no)?),
+                "ignition_heat" => ignition_heat = Some(parse_num(value, line_no)?),
+                "ignite_intensity" => ignite_intensity = Some(parse_num(value, line_no)?),
+                "rain_above" => rain_above = Some(parse_num(value, line_no)?),
+                "douse_per_hour" => douse_per_hour = Some(parse_num(value, line_no)?),
+                "wall_thickness_cm" => wall_thickness_cm = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -322,6 +354,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "hunger_per_hour" => hunger_per_hour = Some(parse_num(value, line_no)?),
                 "starving_above" => starving_above = Some(parse_num(value, line_no)?),
                 "starving_harm_per_hour" => starving_harm = Some(parse_num(value, line_no)?),
+                "strength" => default_strength = Some(parse_num(value, line_no)?),
+                "burn_harm_per_hour" => burn_harm = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -538,6 +572,27 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "senses" => {
                 let organism: u64 = parse_num(key, line_no)?;
                 senses.push((organism, parse_num(value, line_no)?));
+            }
+            "strength" => {
+                let organism: u64 = parse_num(key, line_no)?;
+                strength.push((organism, parse_num(value, line_no)?));
+            }
+            "fires" => {
+                // thing = fierceness[, kept]
+                let thing: u64 = parse_num(key, line_no)?;
+                let mut parts = value.split(',').map(str::trim);
+                let fierce = parse_num(parts.next().unwrap_or(""), line_no)?;
+                let kept = match parts.next() {
+                    None => false,
+                    Some("kept") => true,
+                    Some(other) => {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("a fire is kept or not, not {other:?}"),
+                        ))
+                    }
+                };
+                fires.push((thing, fierce, kept));
             }
             "knows" => {
                 let mind: u64 = parse_num(key, line_no)?;
@@ -837,6 +892,22 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "rules.physical.sight_min_illumination",
         )?,
         carry_limit_kg: require(carry_limit_kg, "rules.physical.carry_limit_kg")?,
+        hand_strike_percent: require(hand_strike_percent, "rules.physical.hand_strike_percent")?,
+        tool_strike_percent_per_kg: require(
+            tool_strike_percent_per_kg,
+            "rules.physical.tool_strike_percent_per_kg",
+        )?,
+        strike_scale: require(strike_scale, "rules.physical.strike_scale")?,
+        wreckage_height_cm: require(wreckage_height_cm, "rules.physical.wreckage_height_cm")?,
+        fire_step_seconds: require(fire_step_seconds, "rules.physical.fire_step_seconds")?,
+        fire_grow_per_hour: require(fire_grow_per_hour, "rules.physical.fire_grow_per_hour")?,
+        burn_per_hour: require(burn_per_hour, "rules.physical.burn_per_hour")?,
+        fire_reach_cm: require(fire_reach_cm, "rules.physical.fire_reach_cm")?,
+        ignition_heat: require(ignition_heat, "rules.physical.ignition_heat")?,
+        ignite_intensity: require(ignite_intensity, "rules.physical.ignite_intensity")?,
+        rain_above: require(rain_above, "rules.physical.rain_above")?,
+        douse_per_hour: require(douse_per_hour, "rules.physical.douse_per_hour")?,
+        wall_thickness_cm: require(wall_thickness_cm, "rules.physical.wall_thickness_cm")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -948,6 +1019,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             hunger_per_hour: require(hunger_per_hour, "rules.living.hunger_per_hour")?,
             starving_above: require(starving_above, "rules.living.starving_above")?,
             starving_harm_per_hour: require(starving_harm, "rules.living.starving_harm_per_hour")?,
+            strength: default_strength,
+            burn_harm_per_hour: require(burn_harm, "rules.living.burn_harm_per_hour")?,
         }),
     };
 
@@ -980,6 +1053,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         travel,
         places,
         senses,
+        strength,
+        fires,
         knows,
         minds,
         temperament,
@@ -1521,6 +1596,19 @@ indoor_coupling_seconds = 14400
 sight_step_seconds = 1
 sight_min_illumination = 50
 carry_limit_kg = 25
+hand_strike_percent = 50
+tool_strike_percent_per_kg = 50
+strike_scale = 300
+wreckage_height_cm = 20
+fire_step_seconds = 10
+fire_grow_per_hour = 20000
+burn_per_hour = 30000
+fire_reach_cm = 300
+ignition_heat = 3000
+ignite_intensity = 2000
+rain_above = 9000
+douse_per_hour = 40000
+wall_thickness_cm = 20
 [regions]
 1 = 1500
 ";

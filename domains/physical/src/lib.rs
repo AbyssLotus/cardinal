@@ -38,6 +38,7 @@
 pub mod act;
 pub mod climate;
 pub mod composition;
+pub mod fire;
 pub mod index;
 pub mod materials;
 pub mod motion;
@@ -134,6 +135,12 @@ pub struct PhysicalConfig {
     /// The size of a household's pantry in the scene (Amendment A-26), if the world's residents
     /// have them.
     pub pantry_body: Option<[i64; 3]>,
+    /// How a blow is judged (Amendment A-27).
+    pub strike: act::StrikeRules,
+    /// How tall the wreckage of a broken thing stands at most, in centimetres (Amendment A-27).
+    pub wreckage_height_cm: i64,
+    /// How fire behaves (Amendment A-28).
+    pub fire: fire::FireRules,
 }
 
 impl PhysicalConfig {
@@ -169,6 +176,10 @@ pub const RESTRICTED: &[FactType] = &[
     schema::IN_VIEW,
     schema::CONSUMED,
     schema::PICKED,
+    schema::BROKEN,
+    schema::BURNING,
+    schema::KEPT_FIRE,
+    schema::HEAT_EXPOSURE,
 ];
 
 /// The Physical Reality domain, plugged into the kernel (Appendix A owner of the stage).
@@ -264,6 +275,13 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_LEAVE
             || fact_type == schema::ACT_PICK
             || fact_type == schema::PICKED
+            || fact_type == schema::INTEGRITY
+            || fact_type == schema::BROKEN
+            || fact_type == schema::ACT_STRIKE
+            || fact_type == schema::BURNING
+            || fact_type == schema::KEPT_FIRE
+            || fact_type == schema::ACT_IGNITE
+            || fact_type == schema::HEAT_EXPOSURE
     }
 
     fn accepts(&self, fact_type: FactType, system: kernel::fact::SystemId) -> bool {
@@ -349,7 +367,19 @@ impl Domain for PhysicalDomain {
             Box::new(travel::Gravity::new(c.move_rules())),
             Box::new(travel::Travel::new(c.move_rules())),
             // Opens, shuts, and turns on request, within reach (Amendment A-5).
-            Box::new(act::Act::new(c.reach_cm, c.carry_limit_kg)),
+            Box::new(act::Act::new(
+                c.reach_cm,
+                c.carry_limit_kg,
+                c.strike,
+                c.wreckage_height_cm,
+                c.move_rules(),
+                c.fire.ignite_intensity,
+            )),
+            // Fire: burning, spreading, and the heat it gives (Amendment A-28).
+            Box::new(fire::Fire::new(
+                c.clock.step(c.fire.step_seconds.saturating_mul(1000)),
+                c.fire,
+            )),
             // Walled rooms' air follows the air outside them (Amendment A-5).
             Box::new(systems::Shelter::new(
                 step,
@@ -383,7 +413,15 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::FALL_HEIGHT
         {
             composition::compose_additive(current, changes)
+        } else if fact_type == schema::INTEGRITY {
+            composition::compose_integrity(current, changes, schema::PERCENT_FULL)
+        } else if fact_type == schema::BURNING {
+            composition::compose_fire(changes)
+        } else if fact_type == schema::HEAT_EXPOSURE {
+            composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
         } else if fact_type == schema::SOLID
+            || fact_type == schema::KEPT_FIRE
+            || fact_type == schema::BROKEN
             || fact_type == schema::OPAQUE
             || fact_type == schema::ENCLOSED
             || fact_type == schema::PORTAL_OPEN
@@ -453,6 +491,8 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_CONSUME
             || fact_type == schema::ACT_ARRIVE
             || fact_type == schema::ACT_PICK
+            || fact_type == schema::ACT_STRIKE
+            || fact_type == schema::ACT_IGNITE
         {
             composition::compose_intent(current, changes)
         } else if fact_type == schema::ACT_FACE {

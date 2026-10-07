@@ -57,6 +57,10 @@ pub struct Bare {
     positions:
         std::cell::RefCell<std::collections::BTreeMap<(EntityId, EntityId), Option<[i64; 3]>>>,
     walk: std::cell::Cell<usize>,
+    firelit: std::cell::RefCell<Option<std::collections::BTreeSet<EntityId>>>,
+    /// Lines are drawn from the middle of what they start at, not its top: heat radiates from a
+    /// fire's whole body, as a gaze leaves from the eyes (Amendment A-28).
+    from_middle: bool,
 }
 
 /// A frame's places with no body of their own, and the farthest any of their contents reaches
@@ -81,6 +85,8 @@ impl Default for Bare {
             chains: Default::default(),
             positions: Default::default(),
             walk: std::cell::Cell::new(0),
+            firelit: Default::default(),
+            from_middle: false,
         }
     }
 }
@@ -169,6 +175,25 @@ impl Bare {
     /// Whether `entity` is lit to at least `min` — [`lit`], with each place's light looked up
     /// once: a thing that carries no light of its own is in its place's.
     fn lit(&self, view: &dyn CommittedView, entity: EntityId, min: i64) -> bool {
+        // Firelight (Amendment A-28): what burns is seen, and so is everything in its place.
+        let by_fire = {
+            let mut known = self.firelit.borrow_mut();
+            let firelit = known.get_or_insert_with(|| {
+                let mut lit = std::collections::BTreeSet::new();
+                for fire in view.entities_with(crate::schema::BURNING) {
+                    lit.insert(fire);
+                    lit.extend(crate::index::container_of(view, fire));
+                }
+                lit
+            });
+            !firelit.is_empty()
+                && (firelit.contains(&entity)
+                    || crate::index::container_of(view, entity)
+                        .is_some_and(|p| firelit.contains(&p)))
+        };
+        if by_fire {
+            return true;
+        }
         let own = view
             .read(FactKey::new(entity, ILLUMINATION))
             .and_then(|f| f.value.as_int());
@@ -264,6 +289,17 @@ pub fn line_of_sight(view: &dyn CommittedView, observer: EntityId, target: Entit
     line_of_sight_with(view, observer, target, &Bare::default())
 }
 
+/// Whether heat from fire `from` reaches `to` (Amendment A-28): the line of sight, drawn from the
+/// middle of the fire rather than its top. Walls, opaque bodies, and rising ground stop radiant
+/// heat as they stop a gaze.
+pub fn line_of_heat(view: &dyn CommittedView, from: EntityId, to: EntityId) -> bool {
+    let bare = Bare {
+        from_middle: true,
+        ..Bare::default()
+    };
+    line_of_sight_with(view, from, to, &bare)
+}
+
 /// [`line_of_sight`], sharing `bare` with the other lines of the same evaluation.
 fn line_of_sight_with(
     view: &dyn CommittedView,
@@ -328,7 +364,12 @@ fn clear_between(
     (target, t, side_t): End,
     bare: &Bare,
 ) -> bool {
-    let eye = [o[0], o[1], o[2] + height(view, observer)];
+    let up = if bare.from_middle {
+        height(view, observer) / 2
+    } else {
+        height(view, observer)
+    };
+    let eye = [o[0], o[1], o[2] + up];
     // A body is seen if its top or its middle is in view — a head over a sill, a chest behind
     // a low wall. (For a point, both are the point.)
     let tall = height(view, target);
@@ -561,6 +602,7 @@ const SIGHT_READS: &[FactType] = &[
     ILLUMINATION,
     SIGHT_RANGE,
     IN_VIEW,
+    crate::schema::BURNING,
 ];
 const SIGHT_WRITES: &[FactType] = &[IN_VIEW];
 

@@ -323,6 +323,45 @@ pub const MATERIAL_POTENCY: FactType = FactType::new("physical.material.potency"
 /// How much dependence each dose of a material builds, 0..=10000 (Amendment A-13).
 pub const MATERIAL_HABIT: FactType = FactType::new("physical.material.habit");
 
+/// How whole a thing or a walled place is, in hundredths of a percent (Amendment A-27): absent
+/// means whole, so only what has been damaged carries it. Changes add up — damage and repair in one
+/// tick both apply (Vol. III Ch. 12) — held within nothing and whole. Open to any proposer
+/// (Appendix A, Ruling 9); Physical Reality breaks what reaches nothing.
+pub const INTEGRITY: FactType = FactType::new("physical.body.integrity");
+
+/// That a thing or a walled place is broken (Amendment A-27): a thing is its own wreckage — flat,
+/// not solid, not opaque, still its materials — a walled place a ruin, its walls down, a door
+/// broken open. Only Physical Reality's own systems record it.
+pub const BROKEN: FactType = FactType::new("physical.body.broken");
+
+/// A decider's intent that a body strike a thing (Amendment A-27): an entity reference. Carried out
+/// only within reach, on a thing made of something with a known weight; a blow no harder than the
+/// thing's weakest material leaves no mark and is refused. Cleared either way.
+pub const ACT_STRIKE: FactType = FactType::new("physical.act.strike");
+
+/// How fiercely a thing or a walled place burns, in hundredths of a percent (Amendment A-28):
+/// absent means it is not burning. It grows toward what its most flammable material allows,
+/// consumes its integrity, heats what lies near it, and lights its place. Only Physical
+/// Reality's own systems write it.
+pub const BURNING: FactType = FactType::new("physical.fire.burning");
+
+/// That a fire is kept (Amendment A-28): a hearth's fire, tended — it neither consumes what it
+/// burns in nor dies down. Declared by the world.
+pub const KEPT_FIRE: FactType = FactType::new("physical.fire.kept");
+
+/// A decider's intent that a body set fire to a thing (Amendment A-28): an entity reference.
+/// Carried out only with a flame to hand — something burning held, or within reach — on a thing
+/// within reach or in hand that can burn. Cleared either way.
+pub const ACT_IGNITE: FactType = FactType::new("physical.act.ignite");
+
+/// How much heat from fire a body is taking, in hundredths of a percent (Amendment A-28): a
+/// report, absent when none, for whoever judges what heat does to a body.
+pub const HEAT_EXPOSURE: FactType = FactType::new("physical.body.heat_exposure");
+
+/// How strong an organism is, in hundredths of a percent — **Living Systems'** capability, read
+/// by its published id to judge a blow (Amendment A-27).
+pub const STRENGTH: FactType = FactType::new("living.capability.strength");
+
 /// A decider's intent that a body take hold of a thing (Appendix A, Ruling 16): an entity
 /// reference. Carried out only within reach and for a thing whose weight is known and bearable;
 /// cleared either way.

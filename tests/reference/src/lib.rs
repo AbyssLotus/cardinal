@@ -66,6 +66,10 @@ pub mod id {
     pub const TREE: u64 = 3100;
     pub const VIALS: [u64; 4] = [3001, 3002, 3003, 3004];
     pub const BOTTLE: u64 = 3005;
+    // Things to break (Amendment A-27).
+    pub const CRATE: u64 = 3006;
+    pub const CRATE_APPLE: u64 = 3007;
+    pub const HAMMER: u64 = 3008;
     pub const BILBERRIES: u64 = 3104;
     // The Lanes, at the city tier (Amendment A-23).
     pub const LANES: u64 = 150;
@@ -207,6 +211,8 @@ const FRONT_DOOR_WRITES: &[FactType] = &[
     physical::schema::ACT_DROP,
     physical::schema::ACT_CONSUME,
     physical::schema::ACT_PICK,
+    physical::schema::ACT_STRIKE,
+    physical::schema::ACT_IGNITE,
     economy::schema::ACT_MAKE,
     economy::schema::ACT_CLAIM,
     minds::schema::DIRECTED,
@@ -393,6 +399,18 @@ impl City {
     /// Ask `who` to shut `door`.
     pub fn close(&mut self, who: u64, door: u64) -> &mut Self {
         self.order(who, ACT_CLOSE, Value::Entity(e(door)));
+        self
+    }
+
+    /// Ask `who` to set `thing` alight (Amendment A-28).
+    pub fn ignite(&mut self, who: u64, thing: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_IGNITE, Value::Entity(e(thing)));
+        self
+    }
+
+    /// Ask `who` to strike `thing` once (Amendment A-27).
+    pub fn strike(&mut self, who: u64, thing: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_STRIKE, Value::Entity(e(thing)));
         self
     }
 

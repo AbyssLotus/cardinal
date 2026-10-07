@@ -594,6 +594,8 @@ A cave floods because its permeability allows water movement.
 
 Fire spreads because nearby materials satisfy ignition conditions.
 
+*As built (Amendments A-27, A-28):* a structure takes damage until its integrity is gone, and a blow no harder than its weakest material leaves no mark. A fire grows toward what its most flammable material allows, eats what it burns in, and heats what it has a line to. A thing catches when that heat, times its flammability, reaches the world's ignition line. Granite and glass never catch; straw catches first.
+
 This property-oriented approach naturally supports future materials without changing engine behavior.
 
 ## Composite Materials

@@ -140,8 +140,12 @@ reference engine is being built here, from the specification, in roadmap order
 - [x] Crossing back (A-25): kernel retirement; residents leaving the scene become records again
       in one tick; Law 14's round trip identical to the bit; a generated town where people cross
       the seam all day as they commute
-- [ ] Larders as food in the scene; carrying things across; city generation at scale; the hot
-      store; parallel shards
+- [x] A mutable world ([plan](docs/audits/mutable-world.md)): integrity, breaking, and striking
+      by strength and tool (A-27); fire that burns, spreads by heat, lights the night, burns the
+      living, and is put out by rain (A-28)
+- [ ] Wind that wrecks what it can (A-29); minds that flee fire and break a way through (A-30);
+      walking into ruins and open places anywhere along their edge
+- [ ] Carrying things across the seam; city generation at scale; the hot store; parallel shards
 - [ ] Hardening, from the hostile audit: a sealed mutation path, multi-cause provenance,
       benchmark gates in CI
 - [ ] Agents, next: talking and rumour, model-backed minds as recorded inputs

@@ -255,9 +255,12 @@ pub struct HarmRules {
     pub starving_above: i64,
     /// Health lost per hour while starving.
     pub starving_harm_per_hour: i64,
+    /// Health lost per hour in the full heat of a fire (Amendment A-28); less in less.
+    pub burn_harm_per_hour: i64,
 }
 
 const HEALTH_READS: &[FactType] = &[
+    crate::schema::HEAT_EXPOSURE,
     HUNGER,
     BODY_HEAT,
     HEALTH,
@@ -357,19 +360,28 @@ impl System for Health {
             } else {
                 0
             };
-            let heal = if cold == 0 && fall == 0 && aching == 0 && starving == 0 {
+            // Burns: the heat of a fire, as Physical Reality reports it (Amendment A-28).
+            let heat = int(view, FactKey::new(organism, crate::schema::HEAT_EXPOSURE)).unwrap_or(0);
+            let burns = over(
+                r.burn_harm_per_hour * heat / FULL,
+                self.step.dt_ms,
+                &mut rng,
+            );
+            let heal = if cold == 0 && fall == 0 && aching == 0 && starving == 0 && burns == 0 {
                 over(r.heal_per_hour, self.step.dt_ms, &mut rng)
             } else {
                 0
             };
-            let next = (health - cold - fall - aching - starving + heal).clamp(0, FULL);
+            let next = (health - cold - fall - aching - starving - burns + heal).clamp(0, FULL);
             if next == health {
                 continue;
             }
             // The cause: the worst of what harmed it, or healing.
-            let worst = fall.max(cold).max(aching).max(starving);
+            let worst = fall.max(cold).max(aching).max(starving).max(burns);
             let why = match (next, worst) {
                 (_, 0) => "healing",
+                (0, w) if w == burns => "died_of_burns",
+                (_, w) if w == burns => "burns",
                 (0, w) if w == fall => "died_of_a_fall",
                 (0, w) if w == cold => "died_of_cold",
                 (0, w) if w == starving => "died_of_hunger",

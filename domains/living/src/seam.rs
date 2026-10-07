@@ -11,7 +11,7 @@
 //! after. Society carries their hunger and fatigue back into the record, exactly; what the city
 //! tier does not keep — needs that arose, dependence — ends at the seam.
 
-use crate::schema::{BODY_HEAT, FATIGUE, FULL, HEALTH, HUNGER, REST, SIGHT_RANGE};
+use crate::schema::{BODY_HEAT, FATIGUE, FULL, HEALTH, HUNGER, REST, SIGHT_RANGE, STRENGTH};
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::proposal::{Change, Proposal};
 use kernel::system::{Cadence, CommittedView, System, TickContext};
@@ -37,20 +37,31 @@ const SEAM_READS: &[FactType] = &[
     RESIDENT_FATIGUE,
     RESIDENT_DOING,
 ];
-const SEAM_WRITES: &[FactType] = &[HUNGER, FATIGUE, HEALTH, BODY_HEAT, SIGHT_RANGE, REST];
+const SEAM_WRITES: &[FactType] = &[
+    HUNGER,
+    FATIGUE,
+    HEALTH,
+    BODY_HEAT,
+    SIGHT_RANGE,
+    REST,
+    STRENGTH,
+];
 
 /// Gives each person crossing into the scene an organism's vital state (Amendment A-24).
 pub struct Seam {
     set_point_centi_c: i64,
     sight_cm: i64,
+    strength: Option<i64>,
 }
 
 impl Seam {
-    /// Body heat at `set_point_centi_c`, and sight to `sight_cm`.
-    pub const fn new(set_point_centi_c: i64, sight_cm: i64) -> Self {
+    /// Body heat at `set_point_centi_c`, sight to `sight_cm`, and the world's strength for its
+    /// people, if it declares one (Amendment A-27).
+    pub const fn new(set_point_centi_c: i64, sight_cm: i64, strength: Option<i64>) -> Self {
         Self {
             set_point_centi_c,
             sight_cm,
+            strength,
         }
     }
 }
@@ -89,6 +100,9 @@ impl System for Seam {
                 (BODY_HEAT, Value::Int(self.set_point_centi_c)),
                 (SIGHT_RANGE, Value::Int(self.sight_cm)),
             ];
+            if let Some(strength) = self.strength {
+                facts.push((STRENGTH, Value::Int(strength)));
+            }
             // The levels as they stand, rate and anchor and all.
             for (record, mine) in [(RESIDENT_HUNGER, HUNGER), (RESIDENT_FATIGUE, FATIGUE)] {
                 if let Some(level) = read(record) {

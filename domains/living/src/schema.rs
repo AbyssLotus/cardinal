@@ -18,6 +18,11 @@ pub const BODY_HEAT: FactType = FactType::new("living.vital.body_heat");
 /// what lies in view within this range, and the information layer decides what is observed.
 pub const SIGHT_RANGE: FactType = FactType::new("living.sense.sight_range");
 
+/// How strong an organism is, in hundredths of a percent — a physical capability (Vol. III Ch. 2:
+/// "strength, speed, stamina as biological facts"; Amendment A-27). Physical Reality reads it to
+/// judge how hard a blow lands.
+pub const STRENGTH: FactType = FactType::new("living.capability.strength");
+
 /// How tired an organism is, in hundredths of a percent (0 rested, 10000 exhausted) — a need
 /// (Vol. III Ch. 2 §2.4; Amendment A-10): it rises while the organism is awake and falls while it
 /// rests, at rates the world declares.
@@ -97,6 +102,10 @@ pub const IN_VIEW: FactType = FactType::new("physical.sense.in_view");
 
 /// The full measure of a need or of health, in hundredths of a percent.
 pub const FULL: i64 = 10_000;
+
+/// How much heat from fire a body is taking — **Physical Reality's** report (Amendment A-28),
+/// consumed by id to judge burns (Appendix A, Ruling 9).
+pub const HEAT_EXPOSURE: FactType = FactType::new("physical.body.heat_exposure");
 
 /// How far a body fell in its most recent fall, in centimetres — **Physical Reality's** report,
 /// consumed by id to judge the harm (Appendix A, Ruling 9).

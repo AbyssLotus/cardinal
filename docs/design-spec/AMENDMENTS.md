@@ -876,3 +876,122 @@ people go back to being the city's, costing nothing; walks back in, and there th
 **Rationale.** Without this, a household whose home is in the scene could eat only at the city tier,
 at home, where its people never are while the home is in the scene. Within two days the scene
 would starve the people the city tier kept fed.
+
+---
+
+## A-27 — Integrity: things that break (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (materials: what a structure bears) and §1.11 (bodies: integrity, breaking)
+- Vol. III Ch. 2 (capability: strength)
+- Appendix A (Ruling 9, built: damage proposed by anyone, applied by Physical Reality; Ruling 13:
+  breaking is Physical Reality's)
+
+**Change.**
+- **Integrity** (Physical). How whole a thing or a walled place is, in hundredths of a percent.
+  - Absent means whole, so only what has been damaged carries it.
+  - Changes add up: damage and repair proposed in one tick both apply (Vol. III Ch. 12). The
+    result is held within nothing and whole; whole again, it is no longer stored.
+  - Open to any proposer (Ruling 9): a blow, a fire, a storm, a battle.
+- **Breaking** (Physical). When a thing's integrity reaches nothing, Physical Reality breaks it in the
+  next tick. Being broken is recorded, and only Physical Reality's own systems may record it.
+  - **A thing becomes its wreckage.** It is the same entity, still its materials and still its
+    owner's (Conservation). It lies flat, no taller than the world's wreckage height. It is no
+    longer solid or opaque. What it held spills where it stood.
+  - **A walled place becomes a ruin.** It is the same place, with its walls down. It is open to
+    sight and to the sky (no longer sheltered), and its doors are broken open.
+  - **A door breaks open:** both its faces broken, open, and no longer opaque.
+  - What stood on a broken thing is no longer held up. A thing that cannot move by itself (a
+    bottle on a table) falls as the thing breaks, taking the time gravity takes. A body that can
+    move by itself is gravity's on the next tick (A-4). What stood on it is found by looking
+    over the thing's place, so the answer is the same with or without the spatial index.
+- **Strength** (Living). An organism's physical capability, 0–100% (Vol. III Ch. 2: "strength,
+  speed, stamina as biological facts"). Declared per organism, or the world's default for its
+  people. A resident crossing into the scene is given the default.
+- **Striking** (Physical; Ruling 13). A decider proposes that a body strike a thing (`act.strike`).
+  Physical Reality carries out the blow if the thing is within reach, and is made of something with
+  a known weight. How hard it lands:
+  - **Bare-handed:** the body's strength, times the world's `hand_strike_percent`.
+  - **With a tool in hand:** a tool adds the world's `tool_strike_percent_per_kg` of strength for
+    each kilogram it weighs. It never strikes harder than its own weakest material: a wooden
+    club does not dent iron. The best thing in hand is used.
+  - **What it does:** a blow no harder than the target's weakest material leaves no mark, and is
+    refused, so the striker can notice. A harder blow costs the target integrity: how much
+    harder, times the world's `strike_scale`, over its weight in kilograms. One blow is one
+    action, the same at any tick length.
+
+**In Ashford:**
+- A packing crate stands in the yard with an apple in it, and a two-kilogram hammer lies by it.
+- People are 40% strong; Carol, who hauls the harvest, 70%.
+- Erin's fists cannot break the crate. Carol's can, in a few blows. Erin with the hammer can, in
+  two. The broken crate lies flat and timber in the yard, and the apple rolls out.
+
+**Not yet:**
+- rebuilding what is broken;
+- harm to those inside a ruin as it falls;
+- breaking a body (harm to the living is Living's);
+- deciders that choose to strike (A-30).
+
+**Rationale.** `docs/audits/mutable-world.md` §3.1: the foundation fire, wind, and conflict all
+propose to.
+
+---
+
+## A-28 — Fire (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 ("fire spreads because nearby materials satisfy ignition conditions": built)
+  and §1.10 (environment: rain on what is open to the sky)
+- Vol. III Ch. 2 §2.4 (harm: burns)
+- Appendix A (Ruling 9: Physical Reality reports heat, Living Systems judges burns)
+
+**Change.**
+- **Burning** (Physical; only its own systems write it). How fiercely a thing or a walled place
+  burns. Absent means not burning. On the world's fire cadence:
+  - **Its course.** It grows toward what the thing's most flammable material allows, at the
+    world's rate. It eats the thing's integrity: at full fierceness, the world's `burn_per_hour`
+    from a hundred kilograms of fuel, more slowly by the cube root of how much more there is. A
+    walled place's fuel is its walls, floor, and roof, at the world's `wall_thickness_cm`. With
+    nothing left the fire goes out, and what burned is broken (A-27): wreckage, or a ruin. In the
+    open, while humidity is at the world's `rain_above` or more, rain puts it out. A fire the
+    world declares *kept*, a tended hearth's, neither grows, nor eats, nor dies down.
+  - **Its heat.** It heats everything within its reach that it has a line to. Its reach is the
+    world's `fire_reach_cm` at full fierceness, beyond its own extent, measured to the nearest
+    edge of what it heats. It gives more the nearer and the fiercer it is. The line is drawn from
+    the fire's middle (heat radiates from its whole body), and walls, opaque bodies, and rising
+    ground stop it as they stop a gaze. Walls keep heat out until they burn themselves.
+  - **What it holds and what holds it.** A fire inside a walled place heats its walls, as near as
+    it is to the nearest of them or the ceiling. A walled place on fire heats everything inside it.
+  - **Catching.** A thing that can burn catches when the heat it is given, times its flammability,
+    reaches the world's `ignition_heat`. It catches at the world's `ignite_intensity`. Fires set to
+    one thing in one tick burn as fiercely as the fiercest.
+- **Heat exposure** (Physical, a report). How much heat each body that moves by itself is taking,
+  written only where it changed.
+- **Burns** (Living). Health lost at the world's `burn_harm_per_hour`, in proportion to heat
+  exposure. Death by fire is chronicled as such.
+- **Firelight** (Physical: sight). What burns can be seen, and so can everything in the place it
+  burns in, whatever the daylight.
+- **Setting fire** (Physical; Ruling 13). A decider proposes that a body set fire to a thing
+  (`act.ignite`). It is carried out if the body has a flame to hand (something burning that it
+  holds, or within its reach), and the thing is in hand or in reach and can burn. Otherwise it is
+  refused.
+- **Fires the world declares.** `[fires] thing = fierceness[, kept]`.
+
+**In Ashford** (`tests/reference/tests/fire.rs`):
+- The hay wagon is straw. Set alight against Alice's house, it takes the timber kitchen and the
+  bedroom over it, which burn down to ruins open to the sky; the granite cellar does not burn.
+  Bob, who has no mind of his own in that test to flee with, is burned.
+- A kept fire in the hearth lights the kitchen at midnight, so Bob can see the table, and in half
+  an hour sets nothing near it alight.
+- Erin cannot set the crate alight with nothing burning to hand. She lights the torch at the
+  hearth and sets the crate alight with it. The crate burns down to wreckage; its apple, too wet
+  to burn, rolls out.
+- Under rain, the burning hay wagon goes out; the kitchen table burning under the roof does not.
+
+**Not yet:**
+- smoke;
+- fire warming the air (it reports heat to bodies; the climate's temperature is untouched);
+- minds that flee fire or put it out (A-30);
+- fire at the city tier.
+
+**Rationale.** `docs/audits/mutable-world.md` §3.2.
