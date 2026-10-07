@@ -130,8 +130,15 @@ reference engine is being built here, from the specification, in roadmap order
       (A-16); making things from recipes (A-17); jobs — the orchard round and the baking — and
       sleep (A-18); wants — curiosity, and claiming and keeping things (A-19); a week in Ashford
       with nobody directed, and nobody starving
-- [ ] Hardening, from the hostile audit: tick continuity, a sealed mutation path, multi-cause
-      provenance, adversarial and benchmark gates
+- [x] Measured scale ([audit review](docs/audits/hostile-audit-review.md),
+      [plan](docs/audits/world-scale.md)): scaling benches and per-system meters; tick
+      continuity; levels (A-20); change memory (A-21); the agenda (A-22)
+- [x] The city tier (A-23): residents as compact records woken only when due; a million in
+      3 GB at 27 ms per simulated minute
+- [ ] Promotion and demotion between the city tier and the scene (Law 14); city generation;
+      the hot store; parallel shards
+- [ ] Hardening, from the hostile audit: a sealed mutation path, multi-cause provenance,
+      benchmark gates in CI
 - [ ] Agents, next: talking and rumour, model-backed minds as recorded inputs
 - [ ] Persistence: chronicle tail + snapshots, two-road recovery (Vol. V Ch. 7)
 - [ ] Hybrid store hot tier; residency ladder; parallel evaluation (Vol. V Ch. 2, Ch. 5)

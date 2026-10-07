@@ -156,6 +156,15 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     for &(who, _) in &package.roles {
         must_exist(who, who, "the person given a role");
     }
+    for r in &package.residents {
+        must_exist(r.id, r.home, "the resident's home");
+        if let Some(work) = r.work {
+            must_exist(r.id, work, "where the resident works");
+        }
+    }
+    for &(home, _) in &package.larders {
+        must_exist(home, home, "the home given a larder");
+    }
     for &(thing, owner) in &package.owners {
         must_exist(thing, thing, "the thing given an owner");
         must_exist(thing, owner, "its owner");
@@ -213,6 +222,16 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
                 );
             }
             _ => {}
+        }
+    }
+    // One person, one tier at a time (Appendix A, Ruling 19): a resident is not also an organism.
+    for r in &package.residents {
+        if package.organisms.iter().any(|o| o.id == r.id) {
+            problem(
+                Layer::Coherence,
+                r.id,
+                "a resident at the city tier is not also an organism (Ruling 19)".into(),
+            );
         }
     }
     for &(who, material, _) in &package.likes {

@@ -100,6 +100,12 @@ pub struct WorldPackage {
     pub roles: Vec<(u64, u64)>,
     /// Who owns what at the start: `(thing, owner)` (Amendment A-19).
     pub owners: Vec<(u64, u64)>,
+    /// The rhythm residents at the city tier live by, if the world has any (Amendment A-23).
+    pub residents_rules: Option<ResidentsRules>,
+    /// People at the city tier: resident records, not organisms (Appendix A, Ruling 19).
+    pub residents: Vec<ResidentSpec>,
+    /// How many meals each household's larder holds at the start: `(home, meals)`.
+    pub larders: Vec<(u64, i64)>,
     /// How curious each mind is: `(mind, worth of seeing a place it has never stood in)`
     /// (Amendment A-19). Absent: incurious.
     pub curiosity: Vec<(u64, i64)>,
@@ -453,6 +459,42 @@ pub struct JobSpec {
     /// Its hours, `(from, to)` in whole hours of the day; wrapping past midnight when
     /// `from > to`.
     pub hours: (i64, i64),
+}
+
+/// The rhythm of a settlement's residents (Amendment A-23). Their hunger and fatigue rates are
+/// Living Systems' (`[rules.living]`): the same person tires at the same pace at every tier.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ResidentsRules {
+    /// The night, `(from, to)` in whole hours.
+    pub sleep_hours: (i64, i64),
+    /// Working hours, `(from, to)` in whole hours.
+    pub work_hours: (i64, i64),
+    /// Hunger past which a resident with food at home eats.
+    pub hungry_above: i64,
+    /// How much a meal eases hunger.
+    pub meal_nutrition: i64,
+    /// Meals a finished shift earns the household.
+    pub meals_per_shift: i64,
+    /// How long a meal takes, in minutes.
+    pub meal_minutes: i64,
+    /// Walking pace, in centimetres a second.
+    pub walk_speed_cm_s: i64,
+    /// How far, in minutes either side, a resident's own hours may lie from the settlement's.
+    pub hours_spread_minutes: i64,
+}
+
+/// A person at the city tier (Amendment A-23): where they live and work, and how hungry they
+/// begin.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ResidentSpec {
+    /// The resident's entity id.
+    pub id: u64,
+    /// Their home, a place.
+    pub home: u64,
+    /// Where they work, if they do.
+    pub work: Option<u64>,
+    /// How hungry they begin.
+    pub hunger: i64,
 }
 
 /// Tunable rules Society's bonds follow (Amendment A-11).

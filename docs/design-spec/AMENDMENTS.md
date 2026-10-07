@@ -611,3 +611,46 @@ goes took an outside profiler; the engine should say.
 **Rationale.** `docs/audits/world-scale.md` §8: the city tier's million residents must cost nothing
 until something is due. The spec has asked for this since Vol. I ("the scheduler should advance
 directly to the next due boundary"); this is its kernel primitive.
+
+---
+
+## A-23 — The city tier: residents (2026-10)
+
+**Edits:**
+- Appendix A (Ruling 19, one person, one tier at a time)
+- Vol. III Ch. 5 (residents, households, and the rhythm of a settlement)
+- Vol. I Ch. 4 §7.3 (Tier 1, individual simulation for loaded settlements: built)
+
+**Change.**
+- **Residents** (Society). At the city tier a person is a resident record, and nothing else:
+  - home and workplace, both places;
+  - what they are doing (sleeping, at home, walking, working, eating);
+  - where, and until which tick, an agenda fact (A-22);
+  - how hungry and how tired they are, as levels (A-20).
+
+  A household's larder, a count of meals, belongs to its home.
+- **The rhythm** (Society). A resident is attended to only when the thing they are doing ends.
+  Then the next thing is chosen from the hour and their state:
+  - **at night,** sleep at home, resting;
+  - **hungry, with food at home,** eat a meal: the larder gives one, hunger falls by its
+    nutrition;
+  - **in working hours,** walk to work, taking the time the distance takes at the world's walking
+    pace, and work until the hours end;
+  - **otherwise,** home, until the next of these is due.
+
+  Every rule and rate comes from the package.
+- **Everyone keeps the hours a little their own way.** Each resident's night and working hours
+  are the settlement's, shifted by a personal offset of up to the world's `hours_spread_minutes`
+  either side. The offset is fixed for each resident, derived from who they are. A city does not
+  all wake in the same minute, and its work is spread across the hour as people are.
+- **Earning the keep.** A finished shift adds the world's meals per shift to the worker's
+  household larder: an explicit boundary process (Vol. I, *Conservation*), standing in for the
+  economy the city tier does not simulate in detail.
+- **Cost.** A resident with nothing ending costs nothing. A day is a handful of segments, each a
+  few writes.
+
+**Not yet** (the next slice): promotion into the scene and demotion back across the seam; harm and
+death at the city tier; buying and selling.
+
+**Rationale.** `docs/audits/world-scale.md` §8, step 2: a city of a million on a desktop, every
+resident an individual who costs nothing until something is due.

@@ -286,3 +286,45 @@ So the city tier does not wait on the hot store or parallelism. It waits only on
 4. **The hot store and parallel shards** (old phases 2 and 3), sized by what step 3 measures.
 5. **Incremental sight and perception** for a larger scene, using change memory (A-21).
 6. **The world** (old phase 6): many regions on the residency ladder.
+
+---
+
+## 9. The city tier, measured (2026-10-06)
+
+Residents (A-23; Appendix A, Ruling 19) are built.
+
+- A person at the city tier is a Society resident record of seven facts: home, work, what they
+  are doing, where, until when, hunger, and fatigue.
+- A rhythm system attends to them only when what they are doing ends, found through the agenda
+  (A-22).
+- Each keeps the settlement's hours shifted by a personal offset, so a city does not all wake in
+  one minute.
+
+`tests/reference/examples/city.rs` generates districts of homes and workshops on top of Ashford
+and runs a simulated day at one-minute ticks:
+
+| Residents | Load | Mean tick | Worst tick | Segments per second | Facts | Peak memory |
+|---|---|---|---|---|---|---|
+| 100,000 | 0.2 s | 4.2 ms | 12.5 ms | 8.9 | 0.8 M | — |
+| 1,000,000 | 2.2 s | 27 ms | 116 ms | 89 | 7.9 M | 3.0 GB |
+
+**A city of a million fits the target machine:**
+- about a tenth of its memory;
+- 27 ms of work for each simulated minute, so it runs about two thousand times faster than real
+  time;
+- at the scene's one-second ticks, about a third of a millisecond per tick.
+
+**Two fixes the measurements forced:**
+- **Single values inline in the store.** Every fact had a little map of its own; a single value
+  now sits inline (`Values::One`), and only set-valued facts keep a map. Memory per fact fell
+  about half, with no change in behaviour.
+- **Personal hours.** With everyone keeping identical hours, 400,000 residents all woke in one
+  tick: 1.2 s of work, and a large temporary allocation. A fixed per-resident offset (here ±45
+  minutes) spreads the rush, as people are.
+
+**Next:**
+- promotion of a district's residents into the scene and demotion back, with Law 14's round trip
+  tested;
+- generating a city's streets and buildings;
+- harm and death at the city tier;
+- the hot store, to bring 3 KB per resident down further.

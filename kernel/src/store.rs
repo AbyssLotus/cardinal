@@ -96,13 +96,72 @@ pub const CHANGE_WINDOW: usize = 64;
 /// What was written in one tick: per fact type, the entities whose facts of it were written.
 type Written = BTreeMap<FactType, BTreeSet<EntityId>>;
 
+/// The committed values at one key: the single value most facts hold, kept inline, or the sorted
+/// set a cardinality-many fact holds once it has more than one. Either way it reads as one sorted
+/// sequence of values with their provenance; keeping the single value inline spares every
+/// ordinary fact a map of its own.
+#[derive(Clone, Debug)]
+enum Values {
+    One(Value, Provenance),
+    Many(BTreeMap<Value, Provenance>),
+}
+
+impl Values {
+    /// Add `value`, or refresh its provenance if it is already held; the provenance it replaced,
+    /// if it was.
+    fn insert(&mut self, value: Value, provenance: Provenance) -> Option<Provenance> {
+        match self {
+            Values::One(v, p) if *v == value => Some(std::mem::replace(p, provenance)),
+            Values::One(v, p) => {
+                let mut many = BTreeMap::new();
+                many.insert(*v, *p);
+                many.insert(value, provenance);
+                *self = Values::Many(many);
+                None
+            }
+            Values::Many(many) => many.insert(value, provenance),
+        }
+    }
+
+    /// The values in ascending order, each with its provenance.
+    fn iter(&self) -> ValuesIter<'_> {
+        match self {
+            Values::One(v, p) => ValuesIter::One(Some((v, p))),
+            Values::Many(many) => ValuesIter::Many(many.iter()),
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Values::One(..) => 1,
+            Values::Many(many) => many.len(),
+        }
+    }
+}
+
+/// [`Values::iter`].
+enum ValuesIter<'a> {
+    One(Option<(&'a Value, &'a Provenance)>),
+    Many(std::collections::btree_map::Iter<'a, Value, Provenance>),
+}
+
+impl<'a> Iterator for ValuesIter<'a> {
+    type Item = (&'a Value, &'a Provenance);
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            ValuesIter::One(one) => one.take(),
+            ValuesIter::Many(many) => many.next(),
+        }
+    }
+}
+
 /// The reference store: the fact/triple model as a sorted map of value sets
 /// (Vol. V Ch. 2 §2.2), with a fact-type index and an incrementally-maintained digest.
 #[derive(Clone, Debug)]
 pub struct MemoryStore {
     // Per fact key, the committed values (each with provenance). A cardinality-one fact holds
     // at most one; a cardinality-many fact holds a set. Sorted throughout for determinism.
-    facts: BTreeMap<FactKey, BTreeMap<Value, Provenance>>,
+    facts: BTreeMap<FactKey, Values>,
     // Which entities bear each fact type — the index behind `entities_with`
     // (Vol. V Ch. 2 §2.1, clause 5). Maintained on every seed and apply; an entity is present
     // exactly when it holds at least one value of that type.
@@ -192,14 +251,11 @@ impl MemoryStore {
         for &ft in fact_types {
             let mut due = BTreeSet::new();
             for entity in self.by_type.get(&ft).into_iter().flatten() {
-                for value in self
-                    .facts
-                    .get(&FactKey::new(*entity, ft))
-                    .into_iter()
-                    .flatten()
-                {
-                    if let Value::Int(t) = value.0 {
-                        due.insert((*t, *entity));
+                if let Some(values) = self.facts.get(&FactKey::new(*entity, ft)) {
+                    for (value, _) in values.iter() {
+                        if let Value::Int(t) = value {
+                            due.insert((*t, *entity));
+                        }
                     }
                 }
             }
@@ -263,8 +319,15 @@ impl MemoryStore {
         {
             due.insert((t, key.entity));
         }
-        let values = self.facts.entry(key).or_default();
-        if values.insert(fact.value, fact.provenance).is_none() {
+        let fresh = match self.facts.get_mut(&key) {
+            Some(values) => values.insert(fact.value, fact.provenance).is_none(),
+            None => {
+                self.facts
+                    .insert(key, Values::One(fact.value, fact.provenance));
+                true
+            }
+        };
+        if fresh {
             // A genuinely new triple: fold it into the digest and the type index. Re-seeding
             // an existing value only refreshes provenance, which the digest excludes.
             self.hasher.add_fact(&triple_bytes(key, &fact.value));
@@ -277,19 +340,19 @@ impl MemoryStore {
 
     /// The total number of committed values (triples) across all facts.
     pub fn len(&self) -> usize {
-        self.facts.values().map(BTreeMap::len).sum()
+        self.facts.values().map(Values::len).sum()
     }
 
     /// Whether the world holds no committed values.
     pub fn is_empty(&self) -> bool {
-        self.facts.values().all(BTreeMap::is_empty)
+        self.facts.is_empty()
     }
 
     /// Drop every value at `key`, unfolding each from the digest and index. The shared
     /// removal path for tombstones and whole-set replacement.
     fn clear_key(&mut self, key: FactKey) {
         if let Some(values) = self.facts.remove(&key) {
-            for value in values.keys() {
+            for (value, _) in values.iter() {
                 self.hasher.remove_fact(&triple_bytes(key, value));
                 if let (Some(due), None, Value::Int(t)) =
                     (self.agenda.get_mut(&key.fact_type), key.about, value)
@@ -361,7 +424,12 @@ impl CommittedView for MemoryStore {
         }
         self.facts
             .get(&key)
-            .map(|m| m.range(*lo..=*hi).map(|(v, p)| Fact::new(*v, *p)).collect())
+            .map(|m| {
+                m.iter()
+                    .filter(|(v, _)| *v >= lo && *v <= hi)
+                    .map(|(v, p)| Fact::new(*v, *p))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -419,7 +487,7 @@ impl RealityStore for MemoryStore {
             if key.entity != entity {
                 break;
             }
-            for (v, p) in values {
+            for (v, p) in values.iter() {
                 out.push((*key, Fact::new(*v, *p)));
             }
         }

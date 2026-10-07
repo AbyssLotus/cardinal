@@ -243,6 +243,27 @@ pub fn society_config(package: &WorldPackage) -> Option<SocietyConfig> {
         courtship_step_seconds: r.courtship_step_seconds,
         bond_above: r.bond_above,
         part_below: r.part_below,
+        // The city tier's rhythm (Amendment A-23), at Living's rates: the same person hungers and
+        // tires at the same pace at every tier.
+        rhythm: package.residents_rules.map(|rr| {
+            let living = package.living_rules;
+            society::residents::RhythmRules {
+                day_seconds: package.clock.day_seconds as i64,
+                sleep_from_seconds: rr.sleep_hours.0 * 3600,
+                sleep_to_seconds: rr.sleep_hours.1 * 3600,
+                work_from_seconds: rr.work_hours.0 * 3600,
+                work_to_seconds: rr.work_hours.1 * 3600,
+                hungry_above: rr.hungry_above,
+                meal_nutrition: rr.meal_nutrition,
+                meals_per_shift: rr.meals_per_shift,
+                meal_seconds: rr.meal_minutes * 60,
+                walk_speed_cm_s: rr.walk_speed_cm_s,
+                hours_spread_seconds: rr.hours_spread_minutes * 60,
+                hunger_per_hour: living.map_or(0, |l| l.hunger_per_hour),
+                tire_per_hour: living.map_or(0, |l| l.tire_per_hour),
+                rest_per_hour: living.map_or(0, |l| l.rest_per_hour),
+            }
+        }),
     })
 }
 
@@ -829,6 +850,50 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             SocietyDomain::new(society_config(package).ok_or(LoadError::SocietyRulesMissing)?);
         systems.extend(society.systems());
         domains.push(Box::new(society));
+        // Residents at the city tier and their larders (Amendment A-23). Each first attends to
+        // its day within the first hour, staggered by id, so a city does not all wake at once.
+        let rr = society_config(package).and_then(|c| c.rhythm);
+        let hour = (3_600_000 / package.clock.tick_ms.max(1)).max(1);
+        for r in &package.residents {
+            let who = EntityId::from_raw(r.id);
+            let home = EntityId::from_raw(r.home);
+            let level = |v: i64, rate: i64| kernel::level::Level::new(v, rate, 0).to_value();
+            let mut facts = vec![
+                (society::schema::RESIDENT_HOME, Value::Entity(home)),
+                (society::schema::RESIDENT_AT, Value::Entity(home)),
+                (
+                    society::schema::RESIDENT_DOING,
+                    Value::Int(society::schema::AT_HOME),
+                ),
+                (
+                    society::schema::RESIDENT_UNTIL,
+                    Value::Int(1 + (r.id % hour) as i64),
+                ),
+                (
+                    society::schema::RESIDENT_HUNGER,
+                    level(r.hunger, rr.map_or(0, |x| x.hunger_per_hour)),
+                ),
+                (
+                    society::schema::RESIDENT_FATIGUE,
+                    level(0, rr.map_or(0, |x| x.tire_per_hour)),
+                ),
+            ];
+            if let Some(work) = r.work {
+                facts.push((
+                    society::schema::RESIDENT_WORK,
+                    Value::Entity(EntityId::from_raw(work)),
+                ));
+            }
+            for (fact, v) in facts {
+                store.seed(FactKey::new(who, fact), seeded(v));
+            }
+        }
+        for &(home, meals) in &package.larders {
+            store.seed(
+                FactKey::new(EntityId::from_raw(home), society::schema::LARDER),
+                seeded(Value::Int(meals)),
+            );
+        }
         // Jobs and who holds them (Amendment A-18).
         for job in &package.jobs {
             let id = EntityId::from_raw(job.id);

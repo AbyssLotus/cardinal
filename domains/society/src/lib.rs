@@ -49,8 +49,45 @@ pub mod schema {
     /// `from > to`.
     pub const JOB_HOURS: FactType = FactType::new("society.job.hours");
 
+    /// A resident's home, a place (Amendment A-23): a person at the city tier exists only as a
+    /// resident record (Appendix A, Ruling 19).
+    pub const RESIDENT_HOME: FactType = FactType::new("society.resident.home");
+    /// Where a resident works, a place; absent for one who does not.
+    pub const RESIDENT_WORK: FactType = FactType::new("society.resident.work");
+    /// What a resident is doing: [`SLEEPING`], [`AT_HOME`], [`WALKING`], [`WORKING`], [`EATING`].
+    pub const RESIDENT_DOING: FactType = FactType::new("society.resident.doing");
+    /// Where a resident is doing it — while walking, where they are walking to.
+    pub const RESIDENT_AT: FactType = FactType::new("society.resident.at");
+    /// The tick what a resident is doing ends: an agenda fact (Amendment A-22).
+    pub const RESIDENT_UNTIL: FactType = FactType::new("society.resident.until");
+    /// How hungry a resident is: a level (Amendment A-20), in hundredths of a percent.
+    pub const RESIDENT_HUNGER: FactType = FactType::new("society.resident.hunger");
+    /// How tired a resident is: a level, in hundredths of a percent.
+    pub const RESIDENT_FATIGUE: FactType = FactType::new("society.resident.fatigue");
+    /// How many meals a household's larder holds, on its home.
+    pub const LARDER: FactType = FactType::new("society.household.larder");
+
+    /// Asleep, at home.
+    pub const SLEEPING: i64 = 1;
+    /// At home, awake.
+    pub const AT_HOME: i64 = 2;
+    /// Walking, to [`RESIDENT_AT`].
+    pub const WALKING: i64 = 3;
+    /// At work.
+    pub const WORKING: i64 = 4;
+    /// Eating a meal at home.
+    pub const EATING: i64 = 5;
+
     /// Every fact type this domain owns.
     pub const OWNED: &[FactType] = &[
+        RESIDENT_HOME,
+        RESIDENT_WORK,
+        RESIDENT_DOING,
+        RESIDENT_AT,
+        RESIDENT_UNTIL,
+        RESIDENT_HUNGER,
+        RESIDENT_FATIGUE,
+        LARDER,
         BOND,
         ROLE,
         JOB_CARRIES,
@@ -63,7 +100,13 @@ pub mod schema {
 
     /// How fond one person is of another — **the information layer's** (a fact about a pair).
     pub const AFFECTION: FactType = FactType::new("info.affection");
+    /// Where a thing is placed in its container — **Physical Reality's**.
+    pub const POSITION: FactType = FactType::new("physical.space.position");
+    /// The container a thing is in — **Physical Reality's**.
+    pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
 }
+
+pub mod residents;
 
 /// Hermetic transformations owned by the Society domain (Vol. V Ch. 3 §3.1).
 pub mod systems {
@@ -169,6 +212,8 @@ pub struct SocietyConfig {
     pub bond_above: i64,
     /// Fondness, both ways, below which lovers part.
     pub part_below: i64,
+    /// The rhythm residents at the city tier live by (Amendment A-23), if the world has any.
+    pub rhythm: Option<residents::RhythmRules>,
 }
 
 /// The Society domain, plugged into the kernel as the owner of bonds between persons.
@@ -194,11 +239,20 @@ impl Domain for SocietyDomain {
 
     fn systems(&self) -> Vec<Box<dyn System>> {
         let c = self.config;
-        vec![Box::new(systems::Courtship::new(
+        let mut systems: Vec<Box<dyn System>> = vec![Box::new(systems::Courtship::new(
             c.clock.step(c.courtship_step_seconds.saturating_mul(1000)),
             c.bond_above,
             c.part_below,
-        ))]
+        ))];
+        if let Some(rules) = c.rhythm {
+            systems.push(Box::new(residents::Rhythm::new(c.clock, rules)));
+        }
+        systems
+    }
+
+    fn agenda(&self) -> Vec<FactType> {
+        // A resident is attended to when what they are doing ends (Amendment A-23).
+        vec![schema::RESIDENT_UNTIL]
     }
 
     fn compose(

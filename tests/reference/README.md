@@ -27,6 +27,7 @@ something Ashford lacks grows Ashford.
 | `making.rs` | two apples and a scoop of flour becoming a pie at the hearth; nothing made without the flour, or away from the hearth; a pie left baking set down in front of the hearth, where it can be reached and taken |
 | `jobs.rs` | nobody working before their hours; Carol bringing the harvest in to the kitchen; Bob baking pies for the kitchen from what he can find; the hungry eating the pies; same seed, same working day |
 | `wants.rs` | the curious courier going to see the house, and stopping once he has; Erin claiming the glass bottle no one owns and keeping it in her bedroom, past Bob's lamp, which she leaves alone; what is someone else's left where it lies; a claim needing the thing in hand and no owner |
+| `residents.rs` | the Lanes at the city tier: asleep at home by night, at the workshop in working hours, home by evening; eating from larders their shifts keep stocked; costing nothing while nothing ends; same seed, same Lanes; a resident never also an organism (Ruling 19) |
 | `week.rs` | a week with nobody directed: everyone eats and nobody starves; Carol and Bob work every day and the pies get eaten; the household sleeps every night; every choice explained; same seed, same week |
 | `living.rs` | body heat against the air of whatever encloses a body; tick-length invariance; Living never perturbing Physical |
 | `engine.rs` | replay determinism, seed divergence, the spatial index invisible and exact, declared reads, every fact a system names owned by some domain, tick abort on a broken invariant, the loader's refusals and validation problems |
@@ -38,8 +39,12 @@ take, drop, eat, pick, rest, make, or claim — the same intents a player or a m
 aside (Amendment A-14). `City::quiet` and `without_minds` give an Ashford where nobody acts unless
 told; `well_fed` one where nobody grows hungry, for tests of other drives.
 
-Kernel contract tests stay in `kernel/tests/`, and each crate keeps its unit tests beside
-its code.
+Kernel contract tests stay in `kernel/tests/` — among them tick continuity, change memory (A-21),
+and the agenda (A-22) — and each crate keeps its unit tests beside its code.
+
+`examples/scale.rs` and `examples/city.rs` are the benches: the scene (N villagers with minds and
+sight; `METERS=1` breaks a tick down by system) and the city tier (N residents in generated
+districts). Run them in release.
 
 ## Destined
 

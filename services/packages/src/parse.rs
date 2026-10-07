@@ -10,7 +10,8 @@ use crate::model::{
     Flag, FlagSpec, InformationRules, JobSpec, JobWork, LivingRules, MadeOfSpec, Manifest,
     MaterialProperty, MaterialSpec, MindsRules, MotionSpec, NeedKindSpec, OrganismSpec,
     PhysicalRules, PortalDangerSpec, PortalSpec, PositionSpec, RecipeSpec, RegionMembershipSpec,
-    RegionSpec, ResourcesRules, SocietyRules, TerrainSpec, TravelSpec, WorldPackage,
+    RegionSpec, ResidentSpec, ResidentsRules, ResourcesRules, SocietyRules, TerrainSpec,
+    TravelSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -137,6 +138,17 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut jobs: Vec<JobSpec> = Vec::new();
     let mut roles: Vec<(u64, u64)> = Vec::new();
     let mut owners: Vec<(u64, u64)> = Vec::new();
+    let mut residents: Vec<ResidentSpec> = Vec::new();
+    let mut larders: Vec<(u64, i64)> = Vec::new();
+    let mut r_sleep: Option<(i64, i64)> = None;
+    let mut r_work: Option<(i64, i64)> = None;
+    let mut r_hungry: Option<i64> = None;
+    let mut r_meal: Option<i64> = None;
+    let mut r_meals_per_shift: Option<i64> = None;
+    let mut r_meal_minutes: Option<i64> = None;
+    let mut r_walk: Option<i64> = None;
+    let mut r_spread: Option<i64> = None;
+    let mut has_residents_rules = false;
     let mut curiosity: Vec<(u64, i64)> = Vec::new();
     let mut likes: Vec<(u64, u64, i64)> = Vec::new();
     let mut home: Vec<(u64, u64)> = Vec::new();
@@ -388,6 +400,30 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             }
             "roles" => roles.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
             "owners" => owners.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
+            "rules.residents" => {
+                has_residents_rules = true;
+                match key {
+                    "sleep_hours" => r_sleep = Some(parse_hours(value, line_no)?),
+                    "work_hours" => r_work = Some(parse_hours(value, line_no)?),
+                    "hungry_above" => r_hungry = Some(parse_num(value, line_no)?),
+                    "meal_nutrition" => r_meal = Some(parse_num(value, line_no)?),
+                    "meals_per_shift" => r_meals_per_shift = Some(parse_num(value, line_no)?),
+                    "meal_minutes" => r_meal_minutes = Some(parse_num(value, line_no)?),
+                    "walk_speed_cm_s" => r_walk = Some(parse_num(value, line_no)?),
+                    "hours_spread_minutes" => r_spread = Some(parse_num(value, line_no)?),
+                    other => {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("unknown residents rule {other:?}"),
+                        ))
+                    }
+                }
+            }
+            "residents" => {
+                let id: u64 = parse_num(key, line_no)?;
+                residents.push(parse_resident(id, value, line_no)?);
+            }
+            "larders" => larders.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
             "curiosity" => curiosity.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
             "home" => home.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
             "likes" => {
@@ -887,6 +923,22 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         jobs,
         roles,
         owners,
+        residents_rules: if has_residents_rules {
+            Some(ResidentsRules {
+                sleep_hours: require(r_sleep, "rules.residents.sleep_hours")?,
+                work_hours: require(r_work, "rules.residents.work_hours")?,
+                hungry_above: require(r_hungry, "rules.residents.hungry_above")?,
+                meal_nutrition: require(r_meal, "rules.residents.meal_nutrition")?,
+                meals_per_shift: require(r_meals_per_shift, "rules.residents.meals_per_shift")?,
+                meal_minutes: require(r_meal_minutes, "rules.residents.meal_minutes")?,
+                walk_speed_cm_s: require(r_walk, "rules.residents.walk_speed_cm_s")?,
+                hours_spread_minutes: require(r_spread, "rules.residents.hours_spread_minutes")?,
+            })
+        } else {
+            None
+        },
+        residents,
+        larders,
         curiosity,
         likes,
         home,
@@ -1045,6 +1097,33 @@ fn parse_job(id: u64, value: &str, line_no: usize) -> Result<JobSpec, ParseError
         to: to.ok_or_else(|| missing("to"))?,
         keep: keep.ok_or_else(|| missing("keep"))?,
         hours: hours.ok_or_else(|| missing("hours"))?,
+    })
+}
+
+/// Parse a resident (Amendment A-23): `home:H[, work:W][, hunger:N]`.
+fn parse_resident(id: u64, value: &str, line_no: usize) -> Result<ResidentSpec, ParseError> {
+    let (mut home, mut work, mut hunger) = (None, None, 0);
+    for part in value.split(',') {
+        let (k, v) = part
+            .split_once(':')
+            .ok_or_else(|| ParseError::at(line_no, format!("expected key:value, got {part:?}")))?;
+        match k.trim() {
+            "home" => home = Some(parse_num(v, line_no)?),
+            "work" => work = Some(parse_num(v, line_no)?),
+            "hunger" => hunger = parse_num(v, line_no)?,
+            other => {
+                return Err(ParseError::at(
+                    line_no,
+                    format!("unknown resident field {other:?}"),
+                ))
+            }
+        }
+    }
+    Ok(ResidentSpec {
+        id,
+        home: home.ok_or_else(|| ParseError::at(line_no, format!("resident {id} lacks home")))?,
+        work,
+        hunger,
     })
 }
 

@@ -355,6 +355,27 @@ the thing is.
 (§4.4). Keeping where a thing is apart from whose it is lets theft exist without the engine
 pretending it cannot.
 
+## Ruling 19 — Fidelity: one person, one tier at a time
+
+*Amendment A-23 (2026-10).*
+
+**Dispute:** A city of a million cannot keep a body, an organism, and a mind for everyone. When a
+person is simulated at the city tier, as a resident following the rhythm of their settlement,
+who owns their hunger, their whereabouts, their day?
+
+**Decision:** Ruling 12's answer, one rung up.
+- **While at the city tier,** a person exists only as Society's resident record: home, work,
+  what they are doing and where, until when, and how hungry and tired they are.
+- **While in the scene,** they are fully a Physical body, a Living organism, and a mind with
+  beliefs, and Society holds no record of their state.
+
+Promotion and demotion carry the person across the seam exactly, in both directions: the record's
+levels become the organism's, and back.
+
+**Reason:** Double existence (a resident record *and* an organism) double-counts every meal and
+every hour of sleep. As with the deer, the seam is explicit so the books balance, and Law 14 (scale
+must not change truth) has a place to be tested.
+
 ---
 
 # Amending This Matrix

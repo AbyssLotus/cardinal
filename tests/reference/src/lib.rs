@@ -65,6 +65,13 @@ pub mod id {
     pub const VIALS: [u64; 4] = [3001, 3002, 3003, 3004];
     pub const BOTTLE: u64 = 3005;
     pub const BILBERRIES: u64 = 3104;
+    // The Lanes, at the city tier (Amendment A-23).
+    pub const LANES: u64 = 150;
+    pub const WORKSHOP: u64 = 157;
+    pub const RESIDENTS: [u64; 12] = [
+        5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010, 5011, 5012,
+    ];
+    pub const IDLE_RESIDENTS: [u64; 2] = [5006, 5010];
     pub const MILLERS_LOAVES: u64 = 3109;
     pub const WAGON: u64 = 130;
     pub const CART: u64 = 140;
@@ -464,6 +471,8 @@ impl City {
             living::schema::FATIGUE,
             information::schema::FELT_HUNGER,
             information::schema::FELT_FATIGUE,
+            society::schema::RESIDENT_HUNGER,
+            society::schema::RESIDENT_FATIGUE,
         ];
         if levels.contains(&fact) {
             let level = kernel::level::Level::from_value(value)?;
