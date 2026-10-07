@@ -38,6 +38,9 @@ pub mod schema {
     pub const YIELD_CAP: FactType = FactType::new("resources.yield.cap");
     /// The tick of the last pick judged for a picker, so each pick yields once.
     pub const PICK_JUDGED: FactType = FactType::new("resources.pick_judged");
+    /// Whole units delivered to a deposit, to be added to its stock (Amendment A-26): an intent
+    /// open to anyone. Deliveries proposed in one tick add up; the deposit takes them in the next.
+    pub const RESTOCK: FactType = FactType::new("resources.act.restock");
 
     /// Every fact type this domain owns.
     pub const OWNED: &[FactType] = &[
@@ -47,6 +50,7 @@ pub mod schema {
         YIELD_PER_DAY,
         YIELD_CAP,
         PICK_JUDGED,
+        RESTOCK,
     ];
 
     /// One whole unit of stock, in the stock's hundredths.
@@ -60,13 +64,21 @@ pub mod schema {
     pub const BODY_SIZE: FactType = FactType::new("physical.body.size");
     /// A request that a thing arrive in the world — **Physical Reality's**.
     pub const ACT_ARRIVE: FactType = FactType::new("physical.act.arrive");
+
+    /// A household's larder coming into the scene as its pantry, naming the home it stands in —
+    /// **Society's** (Amendment A-26).
+    pub const PANTRY_CROSSING: FactType = FactType::new("society.pantry.crossing");
+    /// A household's pantry leaving the scene — **Society's**.
+    pub const PANTRY_LEAVING: FactType = FactType::new("society.pantry.leaving");
+    /// How many meals a household's larder holds, on its home — **Society's**.
+    pub const LARDER: FactType = FactType::new("society.household.larder");
 }
 
 /// Hermetic transformations owned by the Resources domain (Vol. V Ch. 3 §3.1).
 pub mod systems {
     use crate::schema::{
-        ACT_ARRIVE, BODY_SIZE, MADE_OF, PICKED, PICK_JUDGED, STOCK, UNIT, YIELD_CAP, YIELD_MADE_OF,
-        YIELD_PER_DAY, YIELD_SIZE,
+        ACT_ARRIVE, BODY_SIZE, LARDER, MADE_OF, PANTRY_CROSSING, PANTRY_LEAVING, PICKED,
+        PICK_JUDGED, RESTOCK, STOCK, UNIT, YIELD_CAP, YIELD_MADE_OF, YIELD_PER_DAY, YIELD_SIZE,
     };
     use kernel::fact::{Cause, FactKey, FactType, SystemId};
     use kernel::fixed::div_dither;
@@ -84,14 +96,17 @@ pub mod systems {
         YIELD_CAP,
         PICKED,
         PICK_JUDGED,
+        RESTOCK,
     ];
-    const DEPOSIT_WRITES: &[FactType] = &[STOCK, PICK_JUDGED, MADE_OF, BODY_SIZE, ACT_ARRIVE];
+    const DEPOSIT_WRITES: &[FactType] =
+        &[STOCK, PICK_JUDGED, MADE_OF, BODY_SIZE, ACT_ARRIVE, RESTOCK];
 
     /// Deposits (Vol. III Ch. 3; Amendment A-15): every tick, each pick Physical Reality reported
     /// and this domain has not judged takes one whole unit from the deposit — the lower picker id
     /// first, while there is one — and brings a new item, made of the deposit's material and of
     /// its size, into the picker's hand. Every `regrow_ticks` ticks the stock regrows at the
-    /// deposit's daily rate, up to its cap. A bare deposit yields nothing.
+    /// deposit's daily rate, up to its cap. A bare deposit yields nothing. Units delivered to it
+    /// (Amendment A-26) are added before anything is picked.
     pub struct Deposits {
         regrow_ticks: u64,
         regrow_ms: u64,
@@ -157,6 +172,14 @@ pub mod systems {
             for deposit in view.entities_with(STOCK) {
                 let before = int(view, FactKey::new(deposit, STOCK)).unwrap_or(0);
                 let mut stock = before;
+                if let Some(units) = int(view, FactKey::new(deposit, RESTOCK)) {
+                    stock += units.max(0) * UNIT;
+                    push(
+                        FactKey::new(deposit, RESTOCK),
+                        Change::Tombstone,
+                        "restocked",
+                    );
+                }
                 for picker in picks.remove(&deposit).unwrap_or_default() {
                     if stock < UNIT {
                         continue; // bare: the hand comes away empty
@@ -206,6 +229,90 @@ pub mod systems {
             out
         }
     }
+
+    /// How a household's larder stands in the scene as its pantry (Amendment A-26): what each
+    /// meal is made of, and how big it is.
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub struct PantryRules {
+        /// The material a meal is made of.
+        pub meal_material: EntityId,
+        /// A meal's size, `[half-width, half-depth, height]`, cm.
+        pub meal_size: [i64; 3],
+    }
+
+    const SEAM_READS: &[FactType] = &[PANTRY_CROSSING, PANTRY_LEAVING, LARDER];
+    const SEAM_WRITES: &[FactType] = &[STOCK, YIELD_MADE_OF, YIELD_SIZE, YIELD_PER_DAY, YIELD_CAP];
+
+    /// Resources' side of the seam for larders (Amendment A-26): a household's larder coming into
+    /// the scene becomes its pantry, a deposit holding the larder's meals that does not regrow;
+    /// a pantry leaving the scene is retired from this domain's keeping, and Society counts what
+    /// is left back into the larder.
+    pub struct Seam {
+        rules: PantryRules,
+    }
+
+    impl Seam {
+        /// Pantries of meals by `rules`.
+        pub const fn new(rules: PantryRules) -> Self {
+            Self { rules }
+        }
+    }
+
+    impl System for Seam {
+        fn id(&self) -> SystemId {
+            SystemId::new("resources.seam")
+        }
+        fn reads(&self) -> &'static [FactType] {
+            SEAM_READS
+        }
+        fn writes(&self) -> &'static [FactType] {
+            SEAM_WRITES
+        }
+        fn cadence(&self) -> Cadence {
+            Cadence::EveryTick
+        }
+        fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+            let r = &self.rules;
+            let mut out: Vec<Proposal> = view
+                .entities_with(PANTRY_LEAVING)
+                .into_iter()
+                .map(|pantry| {
+                    Proposal::new(
+                        self.id(),
+                        FactKey::new(pantry, STOCK),
+                        ctx.basis_tick(),
+                        Change::Retire,
+                        Cause::new("left_the_scene"),
+                    )
+                })
+                .collect();
+            for pantry in view.entities_with(PANTRY_CROSSING) {
+                let Some(Value::Entity(home)) = view
+                    .read(FactKey::new(pantry, PANTRY_CROSSING))
+                    .map(|f| f.value)
+                else {
+                    continue;
+                };
+                let meals = int(view, FactKey::new(home, LARDER)).unwrap_or(0).max(0);
+                for (fact, value) in [
+                    (STOCK, Value::Int(meals * UNIT)),
+                    (YIELD_MADE_OF, Value::Entity(r.meal_material)),
+                    (YIELD_SIZE, Value::Vec3(r.meal_size)),
+                    (YIELD_PER_DAY, Value::Int(0)),
+                    (YIELD_CAP, Value::Int(0)),
+                ] {
+                    out.push(Proposal::new(
+                        self.id(),
+                        FactKey::new(pantry, fact),
+                        ctx.basis_tick(),
+                        Change::Set(value),
+                        Cause::new("crossed"),
+                    ));
+                }
+            }
+            out
+        }
+    }
 }
 
 /// The rules deposits follow, from the world package (Vol. IV Ch. 2 §2.2).
@@ -215,6 +322,9 @@ pub struct ResourcesConfig {
     pub clock: SimClock,
     /// How often deposits regrow, in seconds of simulated time.
     pub regrow_step_seconds: u64,
+    /// How households' larders stand in the scene as pantries (Amendment A-26), if the world's
+    /// residents have them.
+    pub pantries: Option<systems::PantryRules>,
 }
 
 /// The Resources domain, plugged into the kernel as the owner of deposits and their stocks.
@@ -241,18 +351,40 @@ impl Domain for ResourcesDomain {
     fn systems(&self) -> Vec<Box<dyn System>> {
         let c = self.config;
         let step = c.clock.step(c.regrow_step_seconds.saturating_mul(1000));
-        vec![Box::new(systems::Deposits::new(
+        let mut systems: Vec<Box<dyn System>> = vec![Box::new(systems::Deposits::new(
             step.period_ticks,
             step.dt_ms,
-        ))]
+        ))];
+        if let Some(pantries) = c.pantries {
+            systems.push(Box::new(systems::Seam::new(pantries)));
+        }
+        systems
     }
 
     fn compose(
         &self,
-        _fact_type: FactType,
+        fact_type: FactType,
         _current: Option<Value>,
         changes: &[Change],
     ) -> Result<Resolved, ResolveError> {
+        // Deliveries add up; the deposit taking in the last tick's clears it, and any made in
+        // the same tick are the next to be taken in (Amendment A-26).
+        if fact_type == schema::RESTOCK {
+            let mut units = 0i64;
+            let mut taken = false;
+            for change in changes {
+                match change {
+                    Change::Delta(n) => units = units.saturating_add(*n),
+                    Change::Tombstone => taken = true,
+                    _ => return Err(ResolveError::new("a delivery is a number of units")),
+                }
+            }
+            return match (units, taken) {
+                (0, true) => Ok(Resolved::Tombstone),
+                (0, false) => Err(ResolveError::new("an empty delivery")),
+                (n, _) => Ok(Resolved::Write(Value::Int(n))),
+            };
+        }
         match changes {
             [Change::Set(v) | Change::Create(v)] => Ok(Resolved::Write(*v)),
             [Change::Tombstone] => Ok(Resolved::Tombstone),

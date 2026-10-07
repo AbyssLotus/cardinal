@@ -224,6 +224,13 @@ pub fn resources_config(package: &WorldPackage) -> Option<ResourcesConfig> {
     Some(ResourcesConfig {
         clock: SimClock::new(package.clock.tick_ms),
         regrow_step_seconds: r.regrow_step_seconds,
+        // Households' larders in the scene (Amendment A-26), if any household has a pantry.
+        pantries: pantry_rules(package).map(|(meal_material, meal_size, _)| {
+            resources::systems::PantryRules {
+                meal_material: EntityId::from_raw(meal_material),
+                meal_size,
+            }
+        }),
     })
 }
 
@@ -315,6 +322,7 @@ pub fn information_config(package: &WorldPackage) -> Option<InformationConfig> {
         affection_per_hour: rules.affection_per_hour,
         affection_fade_per_day: rules.affection_fade_per_day,
         residents: package.residents_rules.is_some(),
+        meal_material: pantry_rules(package).map(|(m, _, _)| EntityId::from_raw(m)),
     })
 }
 
@@ -349,7 +357,18 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
         sight_min_illumination: r.sight_min_illumination,
         carry_limit_kg: r.carry_limit_kg,
         resident_body: package.residents_rules.map(|rr| rr.body),
+        pantry_body: pantry_rules(package).map(|(_, _, body)| body),
     }
+}
+
+/// What households' pantries need (Amendment A-26) — the meal material, a meal's size, and a
+/// pantry's — if any household has one and the rules declare all three.
+fn pantry_rules(package: &WorldPackage) -> Option<(u64, [i64; 3], [i64; 3])> {
+    let rr = package.residents_rules?;
+    if package.pantries.is_empty() {
+        return None;
+    }
+    Some((rr.meal_material?, rr.meal_size?, rr.pantry_body?))
 }
 
 /// The engine version this build presents to packages (from the crate version).
@@ -903,6 +922,20 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 FactKey::new(EntityId::from_raw(home), society::schema::LARDER),
                 seeded(Value::Int(meals)),
             );
+        }
+        // Households' pantries (Amendment A-26): which entity each larder becomes in the scene,
+        // owned by the household — its home.
+        for &(home, pantry) in &package.pantries {
+            store.seed(
+                FactKey::new(EntityId::from_raw(home), society::schema::PANTRY),
+                seeded(Value::Entity(EntityId::from_raw(pantry))),
+            );
+            if has_economy {
+                store.seed(
+                    FactKey::new(EntityId::from_raw(pantry), economy::schema::OWNER),
+                    seeded(Value::Entity(EntityId::from_raw(home))),
+                );
+            }
         }
         // Places' rungs on the residency ladder (Amendment A-24).
         for &(place, rung) in &package.residency {

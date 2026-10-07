@@ -106,6 +106,9 @@ pub struct WorldPackage {
     pub residents: Vec<ResidentSpec>,
     /// How many meals each household's larder holds at the start: `(home, meals)`.
     pub larders: Vec<(u64, i64)>,
+    /// Each household's pantry: `(home, pantry)`, the entity its larder becomes in the scene
+    /// (Amendment A-26). Declared with the larder: `home = meals, pantry:id`.
+    pub pantries: Vec<(u64, u64)>,
     /// Places' rungs on the residency ladder at the start: `(place, rung)`, Society's
     /// `CITY` or `SCENE` (Amendment A-24). A place declaring none takes its container's; with
     /// none declared above it, it is in the scene.
@@ -490,6 +493,13 @@ pub struct ResidentsRules {
     pub body: [i64; 3],
     /// How far a resident sees once in the scene, in centimetres.
     pub sight_cm: i64,
+    /// What a meal is made of, in a household's pantry in the scene (Amendment A-26): an edible
+    /// material feeding exactly a meal's nutrition. Required if any larder has a pantry.
+    pub meal_material: Option<u64>,
+    /// A meal's size, `[half-width, half-depth, height]`, cm.
+    pub meal_size: Option<[i64; 3]>,
+    /// A pantry's size in the scene, `[half-width, half-depth, height]`, cm.
+    pub pantry_body: Option<[i64; 3]>,
 }
 
 /// A person at the city tier (Amendment A-23): where they live and work, and how hungry they

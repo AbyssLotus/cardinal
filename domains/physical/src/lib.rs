@@ -131,6 +131,9 @@ pub struct PhysicalConfig {
     /// The body a resident is given on crossing into the scene — half-width, half-depth, height,
     /// in centimetres (Amendment A-24) — if the world has residents.
     pub resident_body: Option<[i64; 3]>,
+    /// The size of a household's pantry in the scene (Amendment A-26), if the world's residents
+    /// have them.
+    pub pantry_body: Option<[i64; 3]>,
 }
 
 impl PhysicalConfig {
@@ -361,7 +364,7 @@ impl Domain for PhysicalDomain {
         ];
         // Bodies for residents crossing into the scene (Amendment A-24).
         if let Some(body) = c.resident_body {
-            systems.push(Box::new(seam::Seam::new(body)));
+            systems.push(Box::new(seam::Seam::new(body, c.pantry_body)));
         }
         systems
     }

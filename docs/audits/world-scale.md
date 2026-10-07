@@ -370,3 +370,36 @@ chronicle, digest, change memory, and indexes.
 - households' larders as food in the scene;
 - generating streets and buildings, so every district has doors as the Lanes do;
 - a cheaper commit.
+
+---
+
+## 11. Both ways across the seam, with people eating, measured (2026-10-07)
+
+Demotion (A-25) and pantries (A-26) are built. `examples/city.rs` now builds its city with the
+test's generator: every district has a gate onto the city's ground, and only scene districts have
+doors on every home. Attention is on the first district from the start, and people cross all day as
+they commute. One day at minute ticks, a 600-person scene district (`SCENE=1 HOMES=200`):
+
+| City | Mean tick | Sight | Perception | Minds | Commit | Travel | Crossed in / out | Hungriest | Peak memory |
+|---|---|---|---|---|---|---|---|---|---|
+| 100,000 | 211 ms | 74 ms | 54 ms | 50 ms | 22 ms | 2.3 ms | 1,400 / 800 | 53% | — |
+| 1,000,000 | 297 ms | 119 ms | 56 ms | 55 ms | 43 ms | 4.1 ms | 1,400 / 800 | 73% | 2.7 GB |
+
+**What the generated city exposed, and what was fixed** (every fix exact; see A-25):
+- nobody could leave the scene for a district without doors: every district now has its gate;
+- sight scanned every bare place in a frame for every line: they are now found by one indexed
+  search, and frames that could block nothing are known once per evaluation;
+- travel searched the whole city's gates for every walker: routes are now shared per tick (37 ms
+  down to 4 ms at a million);
+- "what is within 30 m" on the city's ground looked at every district: the index now answers which
+  branches to enter (`subframes_meeting`);
+- minds checked every belief against every opening: now gathered once per decision.
+
+**Still open:**
+- At a million, sight costs about 45 ms a tick more than at 100,000 for the same scene. A profile is
+  the next step. It may be one more city-sized walk, or simply slower lookups in an 8-million-fact
+  store; the hot store would answer the second.
+- A 600-person district costs about 200 ms a tick: within the scene's one-second budget, on one
+  thread. A 3,000-person district would not fit yet. Incremental sight and perception — skipping
+  people and places where nothing changed — and parallel evaluation are the levers.
+- Commit grows with the city (22 ms to 43 ms).

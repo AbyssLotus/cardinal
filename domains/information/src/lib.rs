@@ -45,6 +45,8 @@ pub struct InformationConfig {
     /// Whether the world has residents, who may cross into the scene knowing their street
     /// (Amendment A-24).
     pub residents: bool,
+    /// What the meals in residents' pantries are made of (Amendment A-26), if they have pantries.
+    pub meal_material: Option<kernel::identity::EntityId>,
 }
 
 /// The information layer, plugged into the kernel as the owner of observation, belief, and
@@ -97,7 +99,7 @@ impl Domain for InformationDomain {
         ];
         // What residents crossing into the scene know (Amendment A-24).
         if c.residents {
-            systems.push(Box::new(seam::Seam));
+            systems.push(Box::new(seam::Seam::new(c.meal_material)));
         }
         systems
     }

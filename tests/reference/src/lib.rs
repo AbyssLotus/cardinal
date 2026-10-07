@@ -30,6 +30,8 @@ use physical::schema::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+pub mod generate;
+
 /// The world file, as shipped.
 pub const ASHFORD: &str = include_str!("../../../worlds/ashford.world");
 

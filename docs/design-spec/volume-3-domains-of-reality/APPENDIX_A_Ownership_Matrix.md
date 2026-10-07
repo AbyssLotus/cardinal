@@ -390,6 +390,18 @@ same committed record and gives the person its own facts, while Society retires 
 state, keeping who they are (home and work). One commit: no tick holds both. Each domain creates
 its own facts; none writes another's.
 
+*Amendment A-25 (2026-10): how a person leaves it.* A resident in the scene standing in a place at
+the city tier, alive and carrying nothing, is marked leaving. On the next tick every other domain
+retires them from its keeping (Vol. V Ch. 3, *Retirement*) and Society takes up their record
+again, their hunger and fatigue exactly as their body had them. What the city tier does not keep —
+memory, needs that arose, dependence — ends at the seam. A round trip while nothing happens changes
+nothing: the world's state is the same, to the bit, as if no one had looked.
+
+*Amendment A-26 (2026-10): a household's larder crosses too.* While its home is in the scene, a
+larder is its pantry: a deposit of meals Resources keeps, standing in the home. While the home is at
+the city tier it is Society's count. Never both: the rhythm lets the count go as the pantry crosses
+in, and counts the pantry back in as it leaves.
+
 ---
 
 # Amending This Matrix

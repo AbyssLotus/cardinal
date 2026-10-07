@@ -114,6 +114,9 @@ walk_speed_cm_s = 120
 hours_spread_minutes = 45           # each keeps the hours up to 45 minutes their own way
 body = 25, 15, 175                  # crossing into the scene (Amendment A-24): a body this size
 sight_cm = 3000                     # and sight to 30 m
+meal_material = 711                 # a larder in the scene is a pantry of meals (Amendment A-26),
+meal_size = 8, 8, 6                 # each feeding what a meal feeds at the city tier
+pantry_body = 40, 30, 120
 
 [rules.society]
 courtship_step_seconds = 600
@@ -748,6 +751,7 @@ part_below = 3000                   # both this cool: they part
 708 = density:600, hardness:0, flammability:1000, edible:10000, nutrition:1500    # berries
 709 = density:300, hardness:300, flammability:3000, edible:10000, nutrition:5000  # bread
 710 = density:900, hardness:500, flammability:1000, edible:10000, nutrition:4000  # smoked fish
+711 = density:800, hardness:200, flammability:1000, edible:10000, nutrition:4000  # a household's meal (Amendment A-26)
 
 [made_of]
 121 = 701               # the lamp: glass
@@ -856,10 +860,10 @@ part_below = 3000                   # both this cool: they part
 150 = city
 
 [larders]
-# home = meals in the larder at the start
-151 = 4
-152 = 4
-153 = 3
-154 = 4
-155 = 2
-156 = 4
+# home = meals in the larder at the start, and the pantry it is in the scene (Amendment A-26)
+151 = 4, pantry:1511
+152 = 4, pantry:1512
+153 = 3, pantry:1513
+154 = 4, pantry:1514
+155 = 2, pantry:1515
+156 = 4, pantry:1516

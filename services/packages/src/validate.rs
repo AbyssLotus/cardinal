@@ -85,8 +85,10 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     declared.extend(package.exposure.iter().map(|x| x.region_id));
     declared.extend(package.in_region.iter().map(|m| m.location_id));
     declared.extend(package.places.iter().map(|(p, _)| *p));
-    // Recipes and jobs are entities too, which a mind can be told of (Amendments A-17, A-18).
+    // Recipes and jobs are entities too, which a mind can be told of (Amendments A-17, A-18);
+    // and pantries, made by being declared with their larders (Amendment A-26).
     declared.extend(package.recipes.iter().map(|r| r.id));
+    declared.extend(package.pantries.iter().map(|(_, p)| *p));
     declared.extend(package.jobs.iter().map(|j| j.id));
     // Classification regions are made by being named (§1.7).
     declared.extend(package.in_region.iter().map(|m| m.region_id));
@@ -167,6 +169,9 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     }
     for &(place, _) in &package.residency {
         must_exist(place, place, "the place given a rung");
+    }
+    if let Some(m) = package.residents_rules.and_then(|r| r.meal_material) {
+        must_exist(m, m, "the material meals are made of");
     }
     for &(thing, owner) in &package.owners {
         must_exist(thing, thing, "the thing given an owner");
@@ -493,6 +498,46 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
         }
     }
 
+    // Pantries (Amendment A-26): each for a household with a larder, with the rules to make it;
+    // and a meal feeds the same at either tier (Law 14).
+    for &(home, pantry) in &package.pantries {
+        if !package.larders.iter().any(|(h, _)| *h == home) {
+            problem(
+                Layer::Coherence,
+                pantry,
+                format!("a pantry belongs to a household with a larder, and {home} has none"),
+            );
+        }
+    }
+    if let (false, Some(rr)) = (package.pantries.is_empty(), package.residents_rules) {
+        match (rr.meal_material, rr.meal_size, rr.pantry_body) {
+            (Some(m), Some(_), Some(_)) => {
+                let nutrition = package.materials.iter().find(|x| x.id == m).and_then(|x| {
+                    x.properties
+                        .iter()
+                        .find(|(p, _)| *p == crate::model::MaterialProperty::Nutrition)
+                        .map(|(_, v)| *v)
+                });
+                if nutrition != Some(rr.meal_nutrition) {
+                    problem(
+                        Layer::Coherence,
+                        m,
+                        format!(
+                            "a meal feeds {} at the city tier, so its material must feed the same \
+                             (Law 14)",
+                            rr.meal_nutrition
+                        ),
+                    );
+                }
+            }
+            _ => problem(
+                Layer::Coherence,
+                package.pantries[0].1,
+                "pantries need meal_material, meal_size, and pantry_body in [rules.residents]"
+                    .into(),
+            ),
+        }
+    }
     // A resident begins at home, and at home they are a record: their home is at the city tier
     // (Ruling 19; Amendment A-24). A home in the scene would have them cross on the first tick,
     // which a world that means them to be organisms there should declare as organisms instead.

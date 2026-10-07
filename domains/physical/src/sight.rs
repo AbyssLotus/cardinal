@@ -31,7 +31,7 @@ use crate::space::{lower, portals_in, position_in};
 use crate::terrain::{is_true, spacing, terrain_height};
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::fixed::{div_round, isqrt};
-use kernel::hierarchy::{ancestry, lowest_common_ancestor};
+use kernel::hierarchy::ancestry;
 use kernel::identity::EntityId;
 use kernel::proposal::{Change, Proposal};
 use kernel::spatial::Aabb;
@@ -45,26 +45,200 @@ use std::collections::BTreeSet;
 /// allows, so a line through the middle of a doorway is never refused for a rounding.
 const OPENING_SLACK: i64 = 4;
 
-/// For one evaluation of sight: each frame's places that have no body of their own, worked out
-/// once and shared by every line tested — not kept from one tick to the next, so sight stays a
-/// function of committed reality alone.
-#[derive(Default)]
-pub struct Bare(std::cell::RefCell<std::collections::BTreeMap<EntityId, Vec<EntityId>>>);
+/// For one evaluation of sight: each frame's places that have no body of their own and might hold
+/// something in the way, which frames hold nothing that could block a line at all, and how lit
+/// each place is — worked out once and shared by every line tested, not kept from one tick to the
+/// next, so sight stays a function of committed reality alone.
+pub struct Bare {
+    bare: std::cell::RefCell<std::collections::BTreeMap<EntityId, BareFrames>>,
+    clear: std::cell::RefCell<std::collections::BTreeMap<EntityId, bool>>,
+    light: std::cell::RefCell<std::collections::BTreeMap<EntityId, Option<i64>>>,
+    chains: std::cell::RefCell<std::collections::BTreeMap<EntityId, std::rc::Rc<[EntityId]>>>,
+    positions:
+        std::cell::RefCell<std::collections::BTreeMap<(EntityId, EntityId), Option<[i64; 3]>>>,
+    walk: std::cell::Cell<usize>,
+}
+
+/// A frame's places with no body of their own, and the farthest any of their contents reaches
+/// from where each stands — so those a line could meet are found by one search of the index.
+#[derive(Clone, Default)]
+struct BareFrames {
+    places: std::collections::BTreeSet<EntityId>,
+    reach: i64,
+}
+
+/// The most things sight looks over to judge one frame clear, counting everything within it. A
+/// frame holding more — a city's open ground — is looked into near each line instead, which gives
+/// the same answer; frames within it finished on the way stay known.
+const CLEAR_WALK: usize = 16_384;
+
+impl Default for Bare {
+    fn default() -> Self {
+        Self {
+            bare: Default::default(),
+            clear: Default::default(),
+            light: Default::default(),
+            chains: Default::default(),
+            positions: Default::default(),
+            walk: std::cell::Cell::new(0),
+        }
+    }
+}
 
 impl Bare {
-    fn of(&self, view: &dyn CommittedView, f: EntityId) -> Vec<EntityId> {
-        if let Some(known) = self.0.borrow().get(&f) {
-            return known.clone();
-        }
-        let bare: Vec<EntityId> = view.spatial().map_or_else(Vec::new, |index| {
-            index
+    /// `f`'s places with no body of their own whose contents could reach `span`, and which hold
+    /// something that could block a line there.
+    fn near(&self, view: &dyn CommittedView, f: EntityId, span: &Aabb) -> Vec<EntityId> {
+        let Some(index) = view.spatial() else {
+            return Vec::new();
+        };
+        let known = self.bare.borrow().get(&f).cloned();
+        let frames = known.unwrap_or_else(|| {
+            let places: std::collections::BTreeSet<EntityId> = index
                 .subframes(f)
                 .into_iter()
                 .filter(|s| crate::index::size_of(view, *s).is_none())
-                .collect()
+                .collect();
+            let reach = places
+                .iter()
+                .map(|s| index.reach(*s).min(i64::MAX as u64 / 4) as i64)
+                .max()
+                .unwrap_or(0);
+            let frames = BareFrames { places, reach };
+            self.bare.borrow_mut().insert(f, frames.clone());
+            frames
         });
-        self.0.borrow_mut().insert(f, bare.clone());
-        bare
+        if frames.places.is_empty() {
+            return Vec::new();
+        }
+        // Every bare place whose contents could reach the span stands within the farthest reach
+        // of it; then each is held to its own reach, and to whether it holds anything at all
+        // that could block.
+        index
+            .candidates(f, &span.expand(frames.reach))
+            .into_iter()
+            .map(|(s, _)| s)
+            .filter(|s| frames.places.contains(s))
+            .filter(|s| {
+                let reach = index.reach(*s).min(i64::MAX as u64 / 4) as i64;
+                index
+                    .placement(*s)
+                    .map_or(true, |p| span.expand(reach).intersects(&p.bounds))
+            })
+            .filter(|s| !self.clear(view, *s))
+            .collect()
+    }
+
+    /// `entity` and everything holding it, innermost first — [`ancestry`], each worked out once.
+    fn chain(&self, view: &dyn CommittedView, entity: EntityId) -> std::rc::Rc<[EntityId]> {
+        if let Some(known) = self.chains.borrow().get(&entity) {
+            return std::rc::Rc::clone(known);
+        }
+        let chain: std::rc::Rc<[EntityId]> = ancestry(view, entity, CONTAINED_IN).into();
+        self.chains
+            .borrow_mut()
+            .insert(entity, std::rc::Rc::clone(&chain));
+        chain
+    }
+
+    /// The deepest place holding both `a` and `b` (each holds itself) — the kernel's
+    /// `lowest_common_ancestor`, from the chains above.
+    fn common(&self, view: &dyn CommittedView, a: EntityId, b: EntityId) -> Option<EntityId> {
+        let of_b = self.chain(view, b);
+        self.chain(view, a)
+            .iter()
+            .copied()
+            .find(|e| of_b.contains(e))
+    }
+
+    /// Where `entity` stands in `frame`'s coordinates — [`position_in`], each worked out once.
+    fn position_in(
+        &self,
+        view: &dyn CommittedView,
+        entity: EntityId,
+        frame: EntityId,
+    ) -> Option<[i64; 3]> {
+        if let Some(known) = self.positions.borrow().get(&(entity, frame)) {
+            return *known;
+        }
+        let at = position_in(view, entity, frame);
+        self.positions.borrow_mut().insert((entity, frame), at);
+        at
+    }
+
+    /// Whether `entity` is lit to at least `min` — [`lit`], with each place's light looked up
+    /// once: a thing that carries no light of its own is in its place's.
+    fn lit(&self, view: &dyn CommittedView, entity: EntityId, min: i64) -> bool {
+        let own = view
+            .read(FactKey::new(entity, ILLUMINATION))
+            .and_then(|f| f.value.as_int());
+        let light = match (own, crate::index::container_of(view, entity)) {
+            (Some(l), _) => Some(l),
+            (None, None) => None,
+            (None, Some(place)) => {
+                let known = self.light.borrow().get(&place).copied();
+                known.unwrap_or_else(|| {
+                    let l = crate::climate::ambient(view, place, ILLUMINATION).map(|(_, l)| l);
+                    self.light.borrow_mut().insert(place, l);
+                    l
+                })
+            }
+        };
+        light.map_or(true, |l| l >= min)
+    }
+
+    /// Whether nothing in `f`, however deep, could block a line: no ground of its own or below
+    /// it, and nothing walled or opaque. A line through such a frame is never blocked in it —
+    /// the answer [`blocked_in`] would reach the long way. Openings never block. `false` when
+    /// there is more in `f` than [`CLEAR_WALK`] things, or no index to look by.
+    fn clear(&self, view: &dyn CommittedView, f: EntityId) -> bool {
+        if let Some(known) = self.clear.borrow().get(&f) {
+            return *known;
+        }
+        self.walk.set(CLEAR_WALK);
+        let clear = self.clear_within(view, f).unwrap_or(false);
+        self.clear.borrow_mut().insert(f, clear);
+        clear
+    }
+
+    /// [`Bare::clear`] for `f`, within what is left of the walk: `None` if it ran out first.
+    /// Every frame within `f` finished on the way is remembered.
+    fn clear_within(&self, view: &dyn CommittedView, f: EntityId) -> Option<bool> {
+        let Some(index) = view.spatial() else {
+            return Some(false);
+        };
+        if spacing(view, f).is_some() {
+            return Some(false);
+        }
+        for c in index.children(f) {
+            let left = self.walk.get();
+            if left == 0 {
+                return None;
+            }
+            self.walk.set(left - 1);
+            if view.read(FactKey::new(c, LEADS_TO)).is_some() {
+                continue;
+            }
+            if is_true(view, c, ENCLOSED) || is_true(view, c, OPAQUE) {
+                return Some(false);
+            }
+            if index.reach(c) == 0 {
+                continue; // holds nothing
+            }
+            let known = self.clear.borrow().get(&c).copied();
+            let inner = match known {
+                Some(k) => k,
+                None => {
+                    let k = self.clear_within(view, c)?;
+                    self.clear.borrow_mut().insert(c, k);
+                    k
+                }
+            };
+            if !inner {
+                return Some(false);
+            }
+        }
+        Some(true)
     }
 }
 
@@ -109,12 +283,12 @@ fn line_of_sight_with(
         let t = crate::space::local_position(view, target);
         return clear_between(view, common, (observer, o, &[]), (target, t, &[]), bare);
     }
-    let Some(common) = lowest_common_ancestor(view, observer, target, CONTAINED_IN) else {
+    let Some(common) = bare.common(view, observer, target) else {
         return false;
     };
     let (Some(o), Some(t)) = (
-        position_in(view, observer, common),
-        position_in(view, target, common),
+        bare.position_in(view, observer, common),
+        bare.position_in(view, target, common),
     ) else {
         return false;
     };
@@ -122,7 +296,7 @@ fn line_of_sight_with(
     // thing in the hand, the cart one rides in — the common one is that end itself, and there is
     // nothing in between.
     let inside = |e: EntityId| -> Vec<EntityId> {
-        let chain = ancestry(view, e, CONTAINED_IN);
+        let chain = bare.chain(view, e);
         let stop = chain
             .iter()
             .position(|c| *c == common)
@@ -192,6 +366,9 @@ fn line_is_clear(
         .chain(side_o.iter().copied())
         .chain(side_t.iter().copied());
     for f in frames {
+        if bare.clear(view, f) {
+            continue;
+        }
         let (Some(a), Some(b)) = (lower(view, eye, f, common), lower(view, mark, f, common)) else {
             continue;
         };
@@ -236,6 +413,9 @@ fn blocked_in(
     ignore: &[EntityId],
     bare: &Bare,
 ) -> bool {
+    if bare.clear(view, f) {
+        return false;
+    }
     if ground_rises(view, f, a, b) {
         return true;
     }
@@ -246,20 +426,12 @@ fn blocked_in(
     // place holds lies within the index's reach of wherever the place is, so a place farther than
     // that from the span holds nothing the line can meet.
     let candidates: Vec<EntityId> = match view.spatial() {
-        Some(index) => {
-            let could_reach = |s: &EntityId| {
-                let reach = index.reach(*s).min(i64::MAX as u64 / 4) as i64;
-                index
-                    .placement(*s)
-                    .map_or(true, |p| span.expand(reach).intersects(&p.bounds))
-            };
-            index
-                .candidates(f, &span)
-                .into_iter()
-                .map(|(e, _)| e)
-                .chain(bare.of(view, f).into_iter().filter(could_reach))
-                .collect()
-        }
+        Some(index) => index
+            .candidates(f, &span)
+            .into_iter()
+            .map(|(e, _)| e)
+            .chain(bare.near(view, f, &span))
+            .collect(),
         None => contents(view, f),
     };
     let mut seen = std::collections::BTreeSet::new();
@@ -354,10 +526,12 @@ fn in_view_with(
     let mut seen: BTreeSet<EntityId> = within(view, observer, range)
         .into_iter()
         .map(|(e, _)| e)
-        .filter(|e| lit(view, *e, min_illumination) && line_of_sight_with(view, observer, *e, bare))
+        .filter(|e| {
+            bare.lit(view, *e, min_illumination) && line_of_sight_with(view, observer, *e, bare)
+        })
         .collect();
     if let Some(here) = crate::index::container_of(view, observer) {
-        if lit(view, here, min_illumination) {
+        if bare.lit(view, here, min_illumination) {
             seen.insert(here);
         }
     }

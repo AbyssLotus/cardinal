@@ -28,10 +28,15 @@ something Ashford lacks grows Ashford.
 | `jobs.rs` | nobody working before their hours; Carol bringing the harvest in to the kitchen; Bob baking pies for the kitchen from what he can find; the hungry eating the pies; same seed, same working day |
 | `wants.rs` | the curious courier going to see the house, and stopping once he has; Erin claiming the glass bottle no one owns and keeping it in her bedroom, past Bob's lamp, which she leaves alone; what is someone else's left where it lies; a claim needing the thing in hand and no owner |
 | `residents.rs` | the Lanes at the city tier: asleep at home by night, at the workshop in working hours, home by evening; eating from larders their shifts keep stocked; costing nothing while nothing ends; same seed, same Lanes; a resident never also an organism (Ruling 19) |
-| `crossing.rs` | attention on the Lanes at night: its residents becoming organisms in one tick, asleep in their beds, as hungry and tired as their records to the bit; then up at their own hours, out of their doors and into the workshop, and home by evening; a worker crossing on arriving at the workshop; a home kept at the city tier keeping its household; same seed, same crossing; no resident beginning in the scene (Ruling 19) |
+| `crossing.rs` | attention on the Lanes at night: its residents becoming organisms in one tick, asleep in their beds, as hungry and tired as their records to the bit; then up at their own hours, out of their doors and into the workshop, and home by evening; a worker crossing on arriving at the workshop; a home kept at the city tier keeping its household; same seed, same crossing; no resident beginning in the scene (Ruling 19); and back: the Lanes brought into the scene and let go again leaving the whole world identical, to the bit, to one where no one looked (Law 14); larders set out as pantries their households know, eat from, and restock with work, and counted back exactly |
+| `commute.rs` | a day in a generated town of four districts, attention on two, most people working in the next district along: crossings into the scene and out of it all morning and evening; every resident exactly one thing at every tick; hunger the same to the unit across every crossing; every worker at work at eleven, at whichever tier; those living in the scene eating from their pantries, and nobody near starving; everyone home at day's end |
 | `week.rs` | a week with nobody directed: everyone eats and nobody starves; Carol and Bob work every day and the pies get eaten; the household sleeps every night; every choice explained; same seed, same week |
 | `living.rs` | body heat against the air of whatever encloses a body; tick-length invariance; Living never perturbing Physical |
 | `engine.rs` | replay determinism, seed divergence, the spatial index invisible and exact, declared reads, every fact a system names owned by some domain, tick abort on a broken invariant, the loader's refusals and validation problems |
+
+`src/generate.rs` builds a city on top of Ashford for the commuting test and the city bench:
+districts that are streets with a gate onto the city's ground, homes and workshops with doors onto
+them, and residents who live in one district and work in the next.
 
 `src/lib.rs` is the harness: Ashford's ids by name, and `City`, a running Ashford with a
 front door through which a test asks people to go somewhere, open or shut something, turn,
@@ -47,7 +52,8 @@ code.
 
 `examples/scale.rs` and `examples/city.rs` are the benches: the scene (N villagers with minds and
 sight; `METERS=1` breaks a tick down by system) and the city tier (N residents in generated
-districts, a day, then attention on one district; `METERS=1` too). Run them in release.
+districts, a day with attention on the first `SCENE` of them and people crossing all day;
+`METERS=1` too). Run them in release.
 
 ## Destined
 

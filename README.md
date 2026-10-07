@@ -137,8 +137,11 @@ reference engine is being built here, from the specification, in roadmap order
       3 GB at 27 ms per simulated minute
 - [x] Crossing into the scene (A-24): attention on a place turns its residents into organisms
       in one tick, levels exact; a district of 3,000 in about 50 ms at any city size
-- [ ] Demotion back to the city tier (Law 14's round trip); city generation; the hot store;
-      parallel shards
+- [x] Crossing back (A-25): kernel retirement; residents leaving the scene become records again
+      in one tick; Law 14's round trip identical to the bit; a generated town where people cross
+      the seam all day as they commute
+- [ ] Larders as food in the scene; carrying things across; city generation at scale; the hot
+      store; parallel shards
 - [ ] Hardening, from the hostile audit: a sealed mutation path, multi-cause provenance,
       benchmark gates in CI
 - [ ] Agents, next: talking and rumour, model-backed minds as recorded inputs

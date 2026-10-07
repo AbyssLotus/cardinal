@@ -150,6 +150,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut r_spread: Option<i64> = None;
     let mut r_body: Option<[i64; 3]> = None;
     let mut r_sight: Option<i64> = None;
+    let mut r_meal_material: Option<u64> = None;
+    let mut r_meal_size: Option<[i64; 3]> = None;
+    let mut r_pantry_body: Option<[i64; 3]> = None;
+    let mut pantries: Vec<(u64, u64)> = Vec::new();
     let mut residency: Vec<(u64, i64)> = Vec::new();
     let mut has_residents_rules = false;
     let mut curiosity: Vec<(u64, i64)> = Vec::new();
@@ -426,6 +430,21 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                         r_body = Some(body);
                     }
                     "sight_cm" => r_sight = Some(parse_num(value, line_no)?),
+                    "meal_material" => r_meal_material = Some(parse_num(value, line_no)?),
+                    "meal_size" => {
+                        r_meal_size = Some(parse_ints::<3>(
+                            value,
+                            line_no,
+                            "half_width, half_depth, height",
+                        )?)
+                    }
+                    "pantry_body" => {
+                        r_pantry_body = Some(parse_ints::<3>(
+                            value,
+                            line_no,
+                            "half_width, half_depth, height",
+                        )?)
+                    }
                     other => {
                         return Err(ParseError::at(
                             line_no,
@@ -438,7 +457,26 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 let id: u64 = parse_num(key, line_no)?;
                 residents.push(parse_resident(id, value, line_no)?);
             }
-            "larders" => larders.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
+            "larders" => {
+                // home = meals[, pantry:id]
+                let home: u64 = parse_num(key, line_no)?;
+                let mut parts = value.split(',').map(str::trim);
+                let meals = parse_num(parts.next().unwrap_or(""), line_no)?;
+                larders.push((home, meals));
+                for part in parts {
+                    match part.split_once(':') {
+                        Some(("pantry", id)) => {
+                            pantries.push((home, parse_num(id.trim(), line_no)?))
+                        }
+                        _ => {
+                            return Err(ParseError::at(
+                                line_no,
+                                format!("a larder takes meals, then pantry:id, not {part:?}"),
+                            ))
+                        }
+                    }
+                }
+            }
             "residency" => {
                 let rung = match value {
                     "city" => society::schema::CITY,
@@ -963,12 +1001,16 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 hours_spread_minutes: require(r_spread, "rules.residents.hours_spread_minutes")?,
                 body: require(r_body, "rules.residents.body")?,
                 sight_cm: require(r_sight, "rules.residents.sight_cm")?,
+                meal_material: r_meal_material,
+                meal_size: r_meal_size,
+                pantry_body: r_pantry_body,
             })
         } else {
             None
         },
         residents,
         larders,
+        pantries,
         residency,
         curiosity,
         likes,

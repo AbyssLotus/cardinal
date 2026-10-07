@@ -67,6 +67,18 @@ pub mod schema {
     /// How many meals a household's larder holds, on its home.
     pub const LARDER: FactType = FactType::new("society.household.larder");
 
+    /// A household's pantry (Amendment A-26), on its home: the entity its larder becomes in the
+    /// scene. A larder with none cannot come into the scene.
+    pub const PANTRY: FactType = FactType::new("society.household.pantry");
+    /// A household's larder coming into the scene as its pantry: on the pantry, naming the home.
+    /// Every domain gives the pantry its own facts the tick after it is set.
+    pub const PANTRY_CROSSING: FactType = FactType::new("society.pantry.crossing");
+    /// A pantry in the scene, naming its home: the larder's meals are the pantry's stock.
+    pub const PANTRY_IN_SCENE: FactType = FactType::new("society.pantry.in_scene");
+    /// A pantry leaving the scene, naming its home: every other domain lets it go the tick after,
+    /// and what it holds is counted back into the larder.
+    pub const PANTRY_LEAVING: FactType = FactType::new("society.pantry.leaving");
+
     /// A place's rung on the residency ladder (Amendment A-24): [`CITY`] or [`SCENE`]. A place
     /// without one takes the rung of the nearest place holding it that has one; with none, it is
     /// in the scene. Policy, set by whoever directs attention; it changes what is computed, never
@@ -75,6 +87,13 @@ pub mod schema {
     /// A resident crossing into the scene (Amendment A-24): the place they cross into. Every
     /// domain gives them its own facts the tick after it is set, and Society retires the record.
     pub const RESIDENT_CROSSING: FactType = FactType::new("society.resident.crossing");
+    /// A resident in the scene (Amendment A-24): crossed in, and not yet out. The record holds
+    /// only who they are; their state is every other domain's.
+    pub const RESIDENT_IN_SCENE: FactType = FactType::new("society.resident.in_scene");
+    /// A resident leaving the scene (Amendment A-25): the place at the city tier they stand in.
+    /// Every other domain lets go of them the tick after it is set, and Society takes up their
+    /// record again.
+    pub const RESIDENT_LEAVING: FactType = FactType::new("society.resident.leaving");
 
     /// Asleep, at home.
     pub const SLEEPING: i64 = 1;
@@ -102,8 +121,14 @@ pub mod schema {
         RESIDENT_HUNGER,
         RESIDENT_FATIGUE,
         RESIDENT_CROSSING,
+        RESIDENT_IN_SCENE,
+        RESIDENT_LEAVING,
         RESIDENCY,
         LARDER,
+        PANTRY,
+        PANTRY_CROSSING,
+        PANTRY_IN_SCENE,
+        PANTRY_LEAVING,
         BOND,
         ROLE,
         JOB_CARRIES,
@@ -131,6 +156,20 @@ pub mod schema {
     pub const MOTION_START: FactType = FactType::new("physical.motion.start");
     /// When it arrives — **Physical Reality's**.
     pub const MOTION_END: FactType = FactType::new("physical.motion.end");
+    /// How hungry an organism is, a level — **Living Systems'**.
+    pub const LIVING_HUNGER: FactType = FactType::new("living.vital.hunger");
+    /// How tired an organism is, a level — **Living Systems'**.
+    pub const LIVING_FATIGUE: FactType = FactType::new("living.vital.fatigue");
+    /// How alive an organism is; zero is dead — **Living Systems'**.
+    pub const LIVING_HEALTH: FactType = FactType::new("living.vital.health");
+    /// Whether an organism has lain down to rest — **Living Systems'** intent.
+    pub const LIVING_REST: FactType = FactType::new("living.act.rest");
+    /// A deposit's stock, in hundredths of a unit — **Resources'**.
+    pub const STOCK: FactType = FactType::new("resources.stock");
+    /// Whole units delivered to a deposit, not yet taken in — **Resources'** intent.
+    pub const RESTOCK: FactType = FactType::new("resources.act.restock");
+    /// One whole unit of a deposit's stock, in its hundredths — **Resources'**.
+    pub const UNIT: i64 = 100;
 }
 
 pub mod residents;
@@ -274,7 +313,7 @@ impl Domain for SocietyDomain {
         ))];
         if let Some(rules) = c.rhythm {
             systems.push(Box::new(residents::Rhythm::new(c.clock, rules)));
-            systems.push(Box::new(seam::Crossing));
+            systems.push(Box::new(seam::Crossing::new(c.clock, rules)));
         }
         systems
     }

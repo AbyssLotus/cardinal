@@ -719,3 +719,160 @@ and peak at 2.7 GB.
 
 **Rationale.** `docs/audits/world-scale.md` §9: the player turns into a street of the city, and its
 people are there, as themselves.
+
+---
+
+## A-25 — Crossing back: demotion, and retirement (2026-10)
+
+**Edits:**
+- Appendix A (Ruling 19: how a person leaves the scene)
+- Vol. V Ch. 3 §3.1 (Resolve: retirement)
+- Vol. V Ch. 5 §5.2 (the residency ladder: both directions built; the round trip tested)
+- Vol. I, Law 14 (scale must not change truth: tested to the bit)
+
+**Change.**
+- **Retirement** (kernel). A new kind of change, `Retire`. It is proposed on any fact of an
+  entity, and retires the entity from the keeping of that fact type's owner:
+  - every fact the entity holds whose type that owner owns ends this tick, those about a pair
+    included;
+  - every other change proposed this tick to such a fact is moot, and is dropped before
+    resolution;
+  - a fact the owner keeps for its own systems (Amendment A-5) is retired only by one of them;
+  - each fact retired is chronicled under the retirement's cause;
+  - facts other owners keep for the entity, and facts others hold *about* it, are untouched.
+
+  The kernel carries it out; an owner's composition never sees it. This is how a domain lets go
+  of a person at once, whatever its other systems were about to write about them that tick,
+  without every system having to know that people leave.
+- **Leaving the scene** (Society). A resident in the scene who stands in a place at the city tier,
+  alive and carrying nothing, is marked *leaving*. On the next tick:
+  - Physical Reality, Living Systems, the information layer, and decision systems each retire
+    them;
+  - Society takes up their record again. Their hunger and fatigue are their body's, exactly. If
+    they were lying down at home in their own night, they are asleep until their own morning, as
+    the rhythm would have had them. At home or at work they have otherwise just arrived, and the
+    rhythm takes them up on the next tick. Anywhere else they walk on from where they stand: to
+    work in their working hours, otherwise home, taking the time the distance takes.
+
+  A resident in the scene is recorded as such (`society.resident.in_scene`), so finding who might
+  leave costs what the scene costs.
+- **What the city tier keeps and does not.** It keeps who a person is (home and work), how hungry
+  and tired they are, and where they are going. It keeps no memory, needs that arose, or
+  dependence: these end at the seam. A person who returns to the scene knows what a resident
+  knows.
+- **Away from home and work, in working hours** (the rhythm). A resident who is at neither,
+  having just come out of the scene, walks to work in working hours. Before this amendment no
+  resident could be anywhere else, so the rule changes nothing that was.
+- **Knowing the way across a city** (the information layer). A resident crossing in knows the
+  openings of their home, their work, and where they stand, and of every place holding each,
+  between it and the next out: the door onto the street, and the street's gate onto the city. So
+  one who lives in one district and works in another can walk between them in the scene.
+
+**Law 14, tested.** Ashford's Lanes brought into the scene at three in the morning and let go at
+half past leave the whole world's state hash identical, a day later, to a run where no one looked
+(`crossing.rs`).
+
+**A day of crossings** (`commute.rs`). In a generated town of four districts, with attention on
+two, people cross the seam all day as they commute:
+- at every tick each resident is exactly one thing, a record or an organism;
+- at every crossing, either way, their hunger is the same to the unit;
+- at eleven, every worker is at work, at whichever tier their workshop is;
+- at day's end, everyone is home.
+
+**The scene, cheaper and exact.** Generated districts showed the scene's systems doing work that
+grew with the city, not the scene. Each fix keeps every answer the same.
+- **Clear frames** (sight). Each evaluation works out once which frames hold nothing that could
+  block a line: no ground, and nothing walled or opaque anywhere within. A line through such a
+  frame is never tested inside it, and such a place is never scanned as an obstacle. A frame is
+  judged by looking over at most 16,384 things within it. One holding more — a city's open
+  ground — is looked into near each line instead, and the frames within it finished on the way
+  stay known.
+- **Bare places near a line** (sight). The places with no body of their own that a line could meet
+  are found by one search of the index, widened by the farthest any of them reaches, not by
+  scanning every such place in the frame for every line.
+- **Once per evaluation** (sight). Each thing's chain of containers, where it stands in each
+  frame, and each place's light are worked out once and shared by every line.
+- **Which branches a search enters** (kernel). The spatial index answers which subframes of a
+  frame could hold something within a box (`subframes_meeting`). Each frame keeps a bound on its
+  subframes' reach, so the answer is one search of the index widened by it, not a look at every
+  subframe. "What is within 30 m", asked by someone on a city's open ground, no longer looks at
+  every district in the city. Without the index, a scan gives the same answer.
+- **Routes once per tick** (travel). The way from one region to another, through openings a body
+  of a given size can use, is searched once per tick and shared: a crowd leaving one street for
+  another searches the city's openings once, not once each.
+- **Known places once per decision** (minds). Where a mind believes its openings lead is gathered
+  once per decision, not once per thing it knows of.
+
+In the commuting town, sight fell from 9.0 to 3.3 ms a tick. In the village bench, a tick at a
+thousand agents fell from 51 to 40 ms.
+
+**A gate for every district.** The city bench (`examples/city.rs`) now builds its city with the same
+generator as the test, with attention on its first districts and people crossing all day. Its first
+run found a gap: people in the scene who worked in a district without doors never left. Every
+generated district now has its gate onto the city's ground; only districts meant for the scene
+have doors on every home. A mind that knows no door into its workshop heads for the district it
+is in, and leaves the scene at the gate.
+
+**Not yet:**
+- carrying held things across (one carrying something stays in the scene until they set it down);
+- households' larders as food in the scene;
+- the economy's and resources' facts for a person crossing.
+
+**Rationale.** `docs/audits/world-scale.md` §10: the player walks out of the district, and its
+people go back to being the city's, costing nothing; walks back in, and there they are.
+
+---
+
+## A-26 — Larders in the scene: pantries (2026-10)
+
+**Edits:**
+- Appendix A (Ruling 19: a household's larder crosses the seam as its people do)
+- Vol. III Ch. 3 (deposits: deliveries)
+- Vol. III Ch. 5 (households: the larder in the scene; work in the scene earns)
+- Vol. I, *Conservation* (the larder's meals are counted across the seam, both ways)
+
+**Change.**
+- **A pantry** (Society, declared by the package). A household's larder may have a pantry: an
+  entity, declared with the larder (`home = meals, pantry:id`), that the larder becomes in the
+  scene. At the city tier it has no facts but its owner (Economy): the household, named by its
+  home.
+- **Setting the larder out.** When attention brings a home into the scene, its larder crosses as
+  its people do (A-24):
+  - Society marks the pantry crossing;
+  - on the next tick Physical Reality stands it in the home, at the world's pantry size;
+  - Resources makes it a deposit holding the larder's meals. It does not regrow. Each meal is the
+    world's meal material, which must feed exactly what a meal feeds at the city tier (Law 14,
+    validated);
+  - the rhythm lets the count go.
+- **Counting it back.** When the home is at the city tier again, the pantry is marked leaving. On the
+  next tick Physical Reality and Resources retire it (A-25). The rhythm counts the larder back:
+  the pantry's stock, plus any delivery not yet taken in.
+- **One book-keeper.** The rhythm keeps every larder's count across the seam. It lets the count go,
+  sends what is earned meanwhile to the pantry, and counts the pantry back in. No two systems ever
+  write one larder in one tick.
+- **Deliveries** (Resources). `resources.act.restock`, an intent open to anyone, carries whole units
+  to a deposit. Deliveries in one tick add up, and the deposit takes them in on the next.
+- **Work in the scene earns.** A resident in the scene standing at their work as their own hours
+  end earns their household its meals, as a finished shift does at the city tier. With the pantry
+  out, the meals are delivered to it.
+- **Knowing one's pantry.** A resident crossing in knows their household's pantry: where it is,
+  that it is theirs, how many meals it holds, and how filling a meal is. Those who are hungry fetch
+  a meal from it and eat it, as anyone eats from a tree they know (A-16).
+- **A household's things are its own.** A mind does not count as someone else's what its own
+  household owns (A-19). People in the scene, who can see into their neighbours' homes, leave
+  their neighbours' pantries alone.
+
+**Measured.**
+- Ashford's Lanes, a day in the scene: people eat from their pantries, a shift restocks one, and
+  nobody passes 90% hungry. When attention leaves, every larder is counted back exactly
+  (`crossing.rs`).
+- In the generated town, those living in the scene districts eat at home in the scene
+  (`commute.rs`).
+
+**Not yet:**
+- a meal picked but not eaten when its pantry leaves is not counted back;
+- one carrying something stays in the scene until they set it down (A-25).
+
+**Rationale.** Without this, a household whose home is in the scene could eat only at the city tier,
+at home, where its people never are while the home is in the scene. Within two days the scene
+would starve the people the city tier kept fed.

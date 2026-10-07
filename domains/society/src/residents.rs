@@ -8,9 +8,10 @@
 //! levels (Amendment A-20), written only when they change course.
 
 use crate::schema::{
-    AT_HOME, CONTAINED_IN, EATING, LARDER, POSITION, RESIDENCY, RESIDENT_AT, RESIDENT_CROSSING,
-    RESIDENT_DOING, RESIDENT_FATIGUE, RESIDENT_HOME, RESIDENT_HUNGER, RESIDENT_UNTIL,
-    RESIDENT_WORK, SCENE, SLEEPING, WALKING, WORKING,
+    AT_HOME, CONTAINED_IN, EATING, LARDER, PANTRY, PANTRY_CROSSING, PANTRY_IN_SCENE,
+    PANTRY_LEAVING, POSITION, RESIDENCY, RESIDENT_AT, RESIDENT_CROSSING, RESIDENT_DOING,
+    RESIDENT_FATIGUE, RESIDENT_HOME, RESIDENT_HUNGER, RESIDENT_IN_SCENE, RESIDENT_UNTIL,
+    RESIDENT_WORK, RESTOCK, SCENE, SLEEPING, STOCK, UNIT, WALKING, WORKING,
 };
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::fixed::isqrt;
@@ -71,6 +72,13 @@ const RHYTHM_READS: &[FactType] = &[
     CONTAINED_IN,
     RESIDENCY,
     RESIDENT_CROSSING,
+    PANTRY,
+    PANTRY_CROSSING,
+    PANTRY_IN_SCENE,
+    PANTRY_LEAVING,
+    STOCK,
+    RESTOCK,
+    RESIDENT_IN_SCENE,
 ];
 const RHYTHM_WRITES: &[FactType] = &[
     RESIDENT_CROSSING,
@@ -80,7 +88,17 @@ const RHYTHM_WRITES: &[FactType] = &[
     RESIDENT_HUNGER,
     RESIDENT_FATIGUE,
     LARDER,
+    RESTOCK,
 ];
+
+/// Where a household's larder is this tick (Amendment A-26): crossing into the scene as its
+/// pantry, in the scene, or leaving it — each naming the pantry.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pantry {
+    Crossing(EntityId),
+    InScene(EntityId),
+    Leaving(EntityId),
+}
 
 /// The rhythm of a settlement (Amendment A-23): every tick, each resident whose segment has ended
 /// — and only those — is given the next one, from the hour and their state:
@@ -122,6 +140,53 @@ impl Rhythm {
     fn ticks_for(&self, ms: i64) -> u64 {
         let tick_ms = self.clock.tick_ms() as i64;
         ((ms.max(0) + tick_ms - 1) / tick_ms).max(1) as u64
+    }
+
+    /// The record of a resident coming out of the scene at `now` into `place`, a place at the
+    /// city tier, standing at `from` (Amendment A-25): what they are doing, where, and until when.
+    /// Lying down at home in their night, they are asleep until their morning, as the rhythm
+    /// would have had them. Otherwise, at their home or their work they have arrived, and the
+    /// rhythm takes them up on the next tick. Anywhere else they walk on from where they stand —
+    /// to work in their working hours, otherwise home — taking the time that takes.
+    pub(crate) fn emerging(
+        &self,
+        view: &dyn CommittedView,
+        who: EntityId,
+        place: EntityId,
+        from: [i64; 2],
+        resting: bool,
+        now: u64,
+    ) -> (i64, EntityId, u64) {
+        let r = &self.rules;
+        let home = entity(view, FactKey::new(who, RESIDENT_HOME));
+        let work = entity(view, FactKey::new(who, RESIDENT_WORK));
+        let day = r.day_seconds.max(1);
+        let own = |s: i64| (s + personal_offset(who, r.hours_spread_seconds)).rem_euclid(day);
+        let night = in_window(
+            self.time_of_day(now),
+            own(r.sleep_from_seconds),
+            own(r.sleep_to_seconds),
+        );
+        if Some(place) == home && resting && night {
+            return (SLEEPING, place, self.next(now, own(r.sleep_to_seconds)));
+        }
+        if Some(place) == home || Some(place) == work {
+            return (WALKING, place, now + 1);
+        }
+        let working_hours = in_window(
+            self.time_of_day(now),
+            own(r.work_from_seconds),
+            own(r.work_to_seconds),
+        );
+        let to = match (working_hours, work) {
+            (true, Some(work)) => work,
+            _ => home.unwrap_or(place),
+        };
+        let [bx, by] = whereabouts(view, to);
+        let (dx, dy) = ((from[0] - bx) as i128, (from[1] - by) as i128);
+        let cm = isqrt((dx * dx + dy * dy) as u128) as i64;
+        let until = now + self.ticks_for(cm * 1000 / r.walk_speed_cm_s.max(1));
+        (WALKING, to, until)
     }
 }
 
@@ -184,7 +249,7 @@ fn level(view: &dyn CommittedView, key: FactKey) -> Option<Level> {
 /// Where `place` stands, as the crow flies, through every frame that holds it: its position in its
 /// container, plus its container's, and so on up. Frames are not turned here, so a walk measured
 /// between places in turned frames is an estimate — good enough for how long a walk takes.
-fn whereabouts(view: &dyn CommittedView, place: EntityId) -> [i64; 2] {
+pub(crate) fn whereabouts(view: &dyn CommittedView, place: EntityId) -> [i64; 2] {
     let mut at = [0i64; 2];
     let mut here = Some(place);
     let mut hops = 0;
@@ -231,6 +296,32 @@ impl System for Rhythm {
         // in ascending order of resident.
         let mut larders: BTreeMap<EntityId, i64> = BTreeMap::new();
         let mut stocked: BTreeMap<EntityId, i64> = BTreeMap::new();
+        // Larders in the scene as pantries, by home (Amendment A-26). The rhythm keeps every
+        // larder's books across the seam: it lets the count go as the pantry crosses in, sends
+        // what is earned meanwhile to the pantry, and counts the pantry back in as it leaves.
+        let mut pantries: BTreeMap<EntityId, Pantry> = BTreeMap::new();
+        for (fact, state) in [
+            (PANTRY_IN_SCENE, Pantry::InScene as fn(EntityId) -> Pantry),
+            (PANTRY_CROSSING, Pantry::Crossing),
+            (PANTRY_LEAVING, Pantry::Leaving),
+        ] {
+            for pantry in view.entities_with(fact) {
+                if let Some(home) = entity(view, FactKey::new(pantry, fact)) {
+                    pantries.insert(home, state(pantry));
+                }
+            }
+        }
+        // What a larder holds now: its count, or, as its pantry leaves, what the pantry holds and
+        // what was delivered to it and not yet taken in. In the scene it holds nothing here: its
+        // meals are the pantry's.
+        let held_in = |home: EntityId| match pantries.get(&home) {
+            None => int(view, FactKey::new(home, LARDER)).unwrap_or(0),
+            Some(Pantry::Leaving(p)) => {
+                int(view, FactKey::new(*p, STOCK)).unwrap_or(0) / UNIT
+                    + int(view, FactKey::new(*p, RESTOCK)).unwrap_or(0)
+            }
+            Some(_) => 0,
+        };
         let time = self.time_of_day(now);
         let day = r.day_seconds.max(1);
         // The scene (Amendment A-24). Those crossing are the seam's. A resident's place changes
@@ -288,9 +379,7 @@ impl System for Rhythm {
 
             // A finished shift earns the household its keep: a boundary process standing in for
             // the economy the city tier does not simulate (Vol. I, Conservation).
-            let held = *larders
-                .entry(home)
-                .or_insert_with(|| int(view, FactKey::new(home, LARDER)).unwrap_or(0));
+            let held = *larders.entry(home).or_insert_with(|| held_in(home));
             let mut in_larder = held + stocked.get(&home).copied().unwrap_or(0);
             if doing == WORKING {
                 *stocked.entry(home).or_insert(0) += r.meals_per_shift;
@@ -329,6 +418,10 @@ impl System for Rhythm {
                 }
             } else if Some(at) == work && working_hours {
                 (WORKING, at, self.next(now, work_to), "working")
+            } else if let (true, Some(work)) = (working_hours && Some(at) != work, work) {
+                // Neither home nor at work — just come out of the scene (Amendment A-25) — in
+                // working hours: on to work.
+                (WALKING, work, walk(at, work), "walking_to_work")
             } else {
                 (WALKING, home, walk(at, home), "walking_home")
             };
@@ -382,17 +475,73 @@ impl System for Rhythm {
                 );
             }
         }
-        // One write per household whose larder changed.
+        // A shift worked in the scene earns its keep as one at the city tier does (Amendment
+        // A-26): a resident in the scene standing at their work as their own hours end.
+        if now > 0 {
+            let before = self.time_of_day(now - 1);
+            for who in view.entities_with(RESIDENT_IN_SCENE) {
+                let (Some(home), Some(work)) = (
+                    entity(view, FactKey::new(who, RESIDENT_HOME)),
+                    entity(view, FactKey::new(who, RESIDENT_WORK)),
+                ) else {
+                    continue;
+                };
+                let end = (r.work_to_seconds + personal_offset(who, r.hours_spread_seconds))
+                    .rem_euclid(day);
+                let ended = if before <= time {
+                    before < end && end <= time
+                } else {
+                    end > before || end <= time
+                };
+                if ended && entity(view, FactKey::new(who, CONTAINED_IN)) == Some(work) {
+                    larders.entry(home).or_insert_with(|| held_in(home));
+                    *stocked.entry(home).or_insert(0) += r.meals_per_shift;
+                }
+            }
+        }
+        // One write per household whose larder changed — and every larder crossing the seam.
+        for (&home, state) in &pantries {
+            if !matches!(state, Pantry::InScene(_)) {
+                larders.entry(home).or_insert_with(|| held_in(home));
+            }
+        }
         for (home, taken) in &larders {
             let earned = stocked.get(home).copied().unwrap_or(0);
-            let held = int(view, FactKey::new(*home, LARDER)).unwrap_or(0);
-            let now_held = taken + earned;
-            if now_held != held {
-                push(
+            match pantries.get(home) {
+                None => {
+                    let held = int(view, FactKey::new(*home, LARDER)).unwrap_or(0);
+                    let now_held = taken + earned;
+                    if now_held != held {
+                        push(
+                            FactKey::new(*home, LARDER),
+                            Change::Set(Value::Int(now_held.max(0))),
+                            "larder",
+                        );
+                    }
+                }
+                Some(Pantry::Leaving(_)) => push(
                     FactKey::new(*home, LARDER),
-                    Change::Set(Value::Int(now_held.max(0))),
-                    "larder",
-                );
+                    Change::Set(Value::Int((taken + earned).max(0))),
+                    "larder_counted_back",
+                ),
+                Some(Pantry::Crossing(pantry) | Pantry::InScene(pantry)) => {
+                    if matches!(pantries.get(home), Some(Pantry::Crossing(_)))
+                        && view.read(FactKey::new(*home, LARDER)).is_some()
+                    {
+                        push(
+                            FactKey::new(*home, LARDER),
+                            Change::Tombstone,
+                            "larder_set_out",
+                        );
+                    }
+                    if earned > 0 {
+                        push(
+                            FactKey::new(*pantry, RESTOCK),
+                            Change::Delta(earned),
+                            "larder",
+                        );
+                    }
+                }
             }
         }
         out

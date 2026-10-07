@@ -176,6 +176,7 @@ struct Planner<'v> {
     walls: BTreeMap<EntityId, Vec<(EntityId, BodyBox)>>,
     slopes: BTreeMap<(EntityId, i64, i64), Option<i64>>,
     grids: BTreeMap<(EntityId, i64), Grid>,
+    routes: BTreeMap<(EntityId, EntityId, Option<[i64; 3]>), Option<Vec<EntityId>>>,
 }
 
 impl<'v> Planner<'v> {
@@ -195,7 +196,27 @@ impl<'v> Planner<'v> {
             walls: BTreeMap::new(),
             slopes: BTreeMap::new(),
             grids: BTreeMap::new(),
+            routes: BTreeMap::new(),
         }
+    }
+
+    /// The way from region `from` to region `to` for `body`, through openings it fits that are
+    /// open and in reach — [`route_where`], found once per tick for every body of one size: which
+    /// openings are usable depends on nothing else about the body, so a crowd leaving one street
+    /// for another searches the city's openings once, not once each.
+    fn route(&mut self, body: EntityId, from: EntityId, to: EntityId) -> Option<Vec<EntityId>> {
+        let view = self.view;
+        let step = self.rules.step_height_cm;
+        let key = (from, to, size_of(view, body));
+        self.routes
+            .entry(key)
+            .or_insert_with(|| {
+                let usable = |p: EntityId| {
+                    is_open(view, p) && fits(view, body, p) && reachable(view, body, p, step)
+                };
+                route_where(view, from, to, usable)
+            })
+            .clone()
     }
 
     /// The solid bodies in `frame` too tall to step onto from the ground beneath them — what a
@@ -745,9 +766,7 @@ impl Travel {
         }
 
         // Another region: the way out, through openings it fits that are open and in reach.
-        let usable =
-            |p: EntityId| is_open(view, p) && fits(view, body, p) && reachable(view, body, p, step);
-        let Some(route) = route_where(view, here, goal_region, usable) else {
+        let Some(route) = plan.route(body, here, goal_region) else {
             return Step::Blocked;
         };
         let portal = route[0];

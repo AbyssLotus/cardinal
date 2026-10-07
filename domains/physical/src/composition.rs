@@ -37,7 +37,7 @@ pub fn compose_additive(
                 base = Some(n);
             }
             Change::Delta(d) => delta_sum = delta_sum.saturating_add(*d),
-            Change::Tombstone => tombstone = true,
+            Change::Tombstone | Change::Retire => tombstone = true,
             Change::Add(_) | Change::Remove(_) => {
                 return Err(ResolveError::new(
                     "this fact is single-valued; use Set/Create/Delta, not Add/Remove",
@@ -110,7 +110,7 @@ pub fn compose_entity_ref(
                     "an entity-reference fact is single-valued; use Set/Create, not Add/Remove",
                 ))
             }
-            Change::Tombstone => tombstone = true,
+            Change::Tombstone | Change::Retire => tombstone = true,
         }
     }
 
@@ -181,7 +181,7 @@ pub fn compose_vec3(
                 set_seen = true;
                 value = Some(Value::Vec3(v3));
             }
-            Change::Tombstone => tombstone = true,
+            Change::Tombstone | Change::Retire => tombstone = true,
             Change::Delta(_) | Change::Add(_) | Change::Remove(_) => {
                 return Err(ResolveError::new(
                     "a three-component fact is replaced whole: use Set, not Delta or Add/Remove",
@@ -229,7 +229,7 @@ pub fn compose_segment_field(
                 }
                 _ => set = Some(*v),
             },
-            Change::Tombstone => tombstone = true,
+            Change::Tombstone | Change::Retire => tombstone = true,
             Change::Delta(_) | Change::Add(_) | Change::Remove(_) => {
                 return Err(ResolveError::new(
                     "a motion segment is set or closed whole, never adjusted",
@@ -263,7 +263,7 @@ pub fn compose_bool(current: Option<Value>, changes: &[Change]) -> Result<Resolv
                 }
                 _ => set = Some(*b),
             },
-            Change::Tombstone => tombstone = true,
+            Change::Tombstone | Change::Retire => tombstone = true,
             _ => {
                 return Err(ResolveError::new(
                     "a flag takes only a true/false set or a clear",

@@ -7,6 +7,10 @@
 //! and one with work keeps their own hours, the same hours the city tier gave them (each
 //! resident's, a fixed offset from the settlement's, Amendment A-23), going to work for them and
 //! home after.
+//!
+//! A person leaving the scene (Amendment A-25) is retired from decision systems' keeping the tick
+//! after: their goal, their plan, their routines, and their pace, whatever they were about to
+//! decide. The record's rhythm takes them up.
 
 use crate::schema::{HOME, RESTING, ROUTINE, WALK_SPEED};
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
@@ -17,6 +21,8 @@ use kernel::value::Value;
 
 /// A resident crossing into the scene — **Society's**.
 pub const CROSSING: FactType = FactType::new("society.resident.crossing");
+/// A resident leaving the scene — **Society's**.
+pub const LEAVING: FactType = FactType::new("society.resident.leaving");
 /// A resident's home — **Society's**.
 pub const RESIDENT_HOME: FactType = FactType::new("society.resident.home");
 /// Where a resident works — **Society's**.
@@ -27,7 +33,13 @@ pub const RESIDENT_DOING: FactType = FactType::new("society.resident.doing");
 pub const SLEEPING: i64 = 1;
 
 /// The record the seam reads: Society's, and nothing else.
-pub const SEAM_READS: &[FactType] = &[CROSSING, RESIDENT_HOME, RESIDENT_WORK, RESIDENT_DOING];
+pub const SEAM_READS: &[FactType] = &[
+    CROSSING,
+    LEAVING,
+    RESIDENT_HOME,
+    RESIDENT_WORK,
+    RESIDENT_DOING,
+];
 const SEAM_WRITES: &[FactType] = &[WALK_SPEED, HOME, RESTING, ROUTINE];
 
 /// How a resident's mind is made, all from the world package (Vol. IV Ch. 2 §2.2).
@@ -79,7 +91,19 @@ impl System for Seam {
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let r = &self.rules;
         let day = self.day_seconds.max(1);
-        let mut out = Vec::new();
+        let mut out: Vec<Proposal> = view
+            .entities_with(LEAVING)
+            .into_iter()
+            .map(|who| {
+                Proposal::new(
+                    self.id(),
+                    FactKey::new(who, WALK_SPEED),
+                    ctx.basis_tick(),
+                    Change::Retire,
+                    Cause::new("left_the_scene"),
+                )
+            })
+            .collect();
         for who in view.entities_with(CROSSING) {
             let mut push = |key: FactKey, value: Value| {
                 out.push(Proposal::new(

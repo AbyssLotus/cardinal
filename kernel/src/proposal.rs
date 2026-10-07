@@ -24,6 +24,12 @@ pub enum Change {
     /// Remove a value from a cardinality-many (set-valued) fact. Removing an absent value is
     /// a no-op.
     Remove(Value),
+    /// Retire the entity from the keeping of the fact type's owner (Amendment A-25): every fact
+    /// the entity holds whose type that owner owns ends this tick, and every other change
+    /// proposed to those facts this tick is moot. How a person leaves the scene: each domain
+    /// lets go of them at once, whatever its other systems were about to write. The kernel
+    /// carries it out; an owner's composition never sees it.
+    Retire,
 }
 
 /// One system's requested change to one fact, with its basis and cause

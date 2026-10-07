@@ -344,10 +344,12 @@ impl Mind<'_> {
         gave_up >= learned as i64
     }
 
-    /// Whether the mind believes someone else owns `thing` (Amendment A-19).
+    /// Whether the mind believes someone else owns `thing` (Amendment A-19): not the mind, and
+    /// not its household — what is owned by its home is its own as much as anyone's there
+    /// (Amendment A-26).
     fn others(&self, thing: EntityId) -> bool {
         self.belief_entity(BELIEF_OWNER, thing)
-            .is_some_and(|owner| owner != self.me)
+            .is_some_and(|owner| owner != self.me && Some(owner) != self.own_entity(HOME))
     }
 
     /// What `thing` is worth to the mind: how much it likes the best of what it believes the thing
@@ -1156,6 +1158,23 @@ impl Think {
             }
         }
         let mut best: Option<(i64, EntityId, EntityId, i64)> = None;
+        // Where the mind believes its openings lead, gathered once: a place it knows as one is
+        // never a thing to fetch ([`Mind::knows_as_place`], without reading every opening anew
+        // for every thing).
+        let led_to: BTreeSet<EntityId> = mind
+            .view
+            .read_about(mind.me, BELIEF_LEADS_TO)
+            .into_iter()
+            .filter_map(|(_, f)| match f.value {
+                Value::Entity(to) => Some(to),
+                _ => None,
+            })
+            .collect();
+        let knows_as_place = |t: EntityId| {
+            mind.here() == Some(t)
+                || led_to.contains(&t)
+                || mind.belief_int(BELIEF_WARMTH_OF, t).is_some()
+        };
         for (thing, place) in mind.view.read_about(mind.me, BELIEF_PLACE_OF) {
             let Value::Entity(place) = place.value else {
                 continue;
@@ -1164,7 +1183,7 @@ impl Think {
             if thing == mind.me
                 || place == mind.me
                 || !wanted
-                || mind.knows_as_place(thing)
+                || knows_as_place(thing)
                 || mind.belief_entity(BELIEF_LEADS_TO, thing).is_some()
                 || mind.gave_up_on(thing)
             {

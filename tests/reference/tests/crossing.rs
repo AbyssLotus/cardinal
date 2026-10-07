@@ -218,3 +218,176 @@ fn a_resident_does_not_begin_in_the_scene() {
     let err = packages::load(&pkg, packages::engine_version()).expect_err("homes in the scene");
     assert!(format!("{err:?}").contains("city tier"), "{err:?}");
 }
+
+#[test]
+fn a_round_trip_through_the_scene_changes_nothing() {
+    // Law 14, scale must not change truth (Amendment A-25): the Lanes brought into the scene at
+    // three in the morning and let go at half past, while everyone sleeps, leave the world exactly
+    // as if no one had looked. Bodies, minds, and beliefs come and go; the record is the same to the
+    // bit, and so is everything after.
+    let mut looked = ashford();
+    let mut not = ashford();
+    looked.run(3 * HOUR);
+    not.run(3 * HOUR);
+    looked.attend(LANES, SCENE);
+    looked.run(HOUR / 2);
+    for who in RESIDENTS {
+        assert!(
+            looked.read(who, living::schema::HUNGER).is_some(),
+            "{who} crossed"
+        );
+    }
+    looked.attend(LANES, CITY);
+    not.run(HOUR / 2);
+    looked.run(3);
+    not.run(3);
+    one_tier_at_a_time(&looked);
+    for who in RESIDENTS {
+        assert!(
+            looked.read(who, RESIDENT_HUNGER).is_some(),
+            "{who} came back"
+        );
+        assert!(looked.read(who, living::schema::HUNGER).is_none(), "{who}");
+        assert!(
+            looked.read(who, minds::schema::WALK_SPEED).is_none(),
+            "{who}"
+        );
+        assert!(
+            looked.read(who, physical::schema::CONTAINED_IN).is_none(),
+            "{who}"
+        );
+        assert_eq!(
+            looked.read(who, RESIDENT_HUNGER),
+            not.read(who, RESIDENT_HUNGER),
+            "{who}'s hunger"
+        );
+        assert_eq!(
+            looked.read(who, RESIDENT_FATIGUE),
+            not.read(who, RESIDENT_FATIGUE),
+            "{who}'s fatigue"
+        );
+    }
+    // By morning both Lanes are going about the same day, fact for fact.
+    looked.run(9 * HOUR);
+    not.run(9 * HOUR);
+    for who in RESIDENTS {
+        for fact in [
+            RESIDENT_DOING,
+            RESIDENT_AT,
+            RESIDENT_UNTIL,
+            RESIDENT_HUNGER,
+            RESIDENT_FATIGUE,
+        ] {
+            assert_eq!(
+                looked.read(who, fact),
+                not.read(who, fact),
+                "{who} {fact:?}"
+            );
+        }
+    }
+    assert_eq!(looked.store().state_hash(), not.store().state_hash());
+}
+
+/// The Lanes' homes and their pantries (Amendment A-26).
+const PANTRIES: [(u64, u64); 6] = [
+    (151, 1511),
+    (152, 1512),
+    (153, 1513),
+    (154, 1514),
+    (155, 1515),
+    (156, 1516),
+];
+
+#[test]
+fn a_larder_in_the_scene_is_a_pantry_its_household_eats_from() {
+    // Amendment A-26: attention on the Lanes sets each household's larder out as its pantry, a
+    // store of meals in the home that its people know of and eat from. Shifts worked in the scene
+    // restock it. When attention leaves, what is left is counted back into the larder.
+    let mut city = ashford();
+    city.run(3 * HOUR);
+    let meals: Vec<i64> = PANTRIES
+        .iter()
+        .map(|&(home, _)| city.int(home, society::schema::LARDER).unwrap())
+        .collect();
+    city.attend(LANES, SCENE);
+    city.run(3);
+    for (&(home, pantry), &n) in PANTRIES.iter().zip(&meals) {
+        assert!(city.read(home, society::schema::LARDER).is_none(), "{home}");
+        assert_eq!(
+            city.read(pantry, physical::schema::CONTAINED_IN),
+            Some(Value::Entity(e(home)))
+        );
+        assert_eq!(city.int(pantry, resources::schema::STOCK), Some(n * 100));
+    }
+    // Its household knows it: where it is, whose, and what it holds.
+    for who in RESIDENTS {
+        let home = match city.read(who, RESIDENT_HOME) {
+            Some(Value::Entity(h)) => h.raw(),
+            _ => unreachable!(),
+        };
+        let pantry = PANTRIES.iter().find(|(h, _)| *h == home).unwrap().1;
+        let belief = |fact| {
+            city.store()
+                .read(kernel::fact::FactKey::pair(e(who), fact, e(pantry)))
+                .map(|f| f.value)
+        };
+        assert_eq!(
+            belief(information::schema::PLACE_OF),
+            Some(Value::Entity(e(home)))
+        );
+        assert_eq!(
+            belief(information::schema::OWNER),
+            Some(Value::Entity(e(home)))
+        );
+    }
+
+    // A day in the scene: people eat from their own pantries, and work keeps them stocked.
+    let (mut eaten, mut restocked, mut hungriest) = (0, 0, 0);
+    let mut seen = city.chronicle.len();
+    for _ in 0..24 * HOUR {
+        city.run(1);
+        for c in &city.chronicle[seen..] {
+            match (c.fact_type(), c.cause().event()) {
+                (f, "picked") if f == physical::schema::PICKED => eaten += 1,
+                (f, "restocked") if f == resources::schema::RESTOCK => restocked += 1,
+                _ => {}
+            }
+        }
+        seen = city.chronicle.len();
+        for who in RESIDENTS {
+            hungriest = hungriest.max(city.int(who, living::schema::HUNGER).unwrap_or(0));
+        }
+    }
+    assert!(eaten >= 6, "{eaten} meals taken from pantries");
+    assert!(restocked >= 1, "no shift restocked a pantry");
+    assert!(hungriest < 9_000, "hungriest {hungriest}");
+
+    // Attention leaves: each pantry counted back into its larder, exactly — its stock and any
+    // delivery not yet taken in, as they stood when it was marked to leave.
+    city.attend(LANES, CITY);
+    city.run(2); // the rung lands; the pantries are marked
+    let held: Vec<i64> = PANTRIES
+        .iter()
+        .map(|&(_, p)| {
+            assert!(
+                city.read(p, society::schema::PANTRY_LEAVING).is_some(),
+                "{p}"
+            );
+            city.int(p, resources::schema::STOCK).unwrap() / 100
+                + city.int(p, resources::schema::RESTOCK).unwrap_or(0)
+        })
+        .collect();
+    city.run(1);
+    for (i, &(home, pantry)) in PANTRIES.iter().enumerate() {
+        assert!(
+            city.read(pantry, resources::schema::STOCK).is_none(),
+            "{pantry}"
+        );
+        assert!(city.read(pantry, physical::schema::CONTAINED_IN).is_none());
+        assert_eq!(
+            city.int(home, society::schema::LARDER),
+            Some(held[i]),
+            "{home}"
+        );
+    }
+}
