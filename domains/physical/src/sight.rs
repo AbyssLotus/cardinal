@@ -19,23 +19,54 @@
 //! Like proximity, sight looks for candidates through the spatial index when there is one and by
 //! scanning otherwise; the tests that decide are exact and shared, so both roads agree.
 
+use crate::climate::ambient;
 use crate::nearby::{contents, within};
-use crate::schema::{CONTAINED_IN, ENCLOSED, LEADS_TO, OPAQUE, PORTAL_OPEN};
+use crate::schema::{
+    BODY_SIZE, CONTAINED_IN, ENCLOSED, HAS_PORTAL, HEADING, ILLUMINATION, IN_VIEW, LEADS_TO,
+    MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PORTAL_OPEN, POSITION, SIGHT_RANGE,
+    TERRAIN_SAMPLE, TERRAIN_SPACING,
+};
 use crate::shape::body_box;
 use crate::space::{lower, portals_in, position_in};
 use crate::terrain::{is_true, spacing, terrain_height};
-use kernel::fact::FactKey;
+use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::fixed::{div_round, isqrt};
 use kernel::hierarchy::{ancestry, lowest_common_ancestor};
 use kernel::identity::EntityId;
+use kernel::proposal::{Change, Proposal};
 use kernel::spatial::Aabb;
-use kernel::system::CommittedView;
+use kernel::system::{Cadence, CommittedView, System, TickContext};
+use kernel::time::Step;
 use kernel::value::Value;
+use std::collections::BTreeSet;
 
 /// Rounding slack, in centimetres, allowed when a line carried into a nested, turned frame is
 /// tested against an opening there — the same few centimetres per level the proximity search
 /// allows, so a line through the middle of a doorway is never refused for a rounding.
 const OPENING_SLACK: i64 = 4;
+
+/// For one evaluation of sight: each frame's places that have no body of their own, worked out
+/// once and shared by every line tested — not kept from one tick to the next, so sight stays a
+/// function of committed reality alone.
+#[derive(Default)]
+pub struct Bare(std::cell::RefCell<std::collections::BTreeMap<EntityId, Vec<EntityId>>>);
+
+impl Bare {
+    fn of(&self, view: &dyn CommittedView, f: EntityId) -> Vec<EntityId> {
+        if let Some(known) = self.0.borrow().get(&f) {
+            return known.clone();
+        }
+        let bare: Vec<EntityId> = view.spatial().map_or_else(Vec::new, |index| {
+            index
+                .subframes(f)
+                .into_iter()
+                .filter(|s| crate::index::size_of(view, *s).is_none())
+                .collect()
+        });
+        self.0.borrow_mut().insert(f, bare.clone());
+        bare
+    }
+}
 
 /// How tall `entity` is (0 for a point).
 fn height(view: &dyn CommittedView, entity: EntityId) -> i64 {
@@ -56,8 +87,27 @@ fn passes_sight(view: &dyn CommittedView, portal: EntityId) -> bool {
 /// the straight line from the observer's eye to the target's middle. `false` if they share no
 /// containment hierarchy. A body can always see itself.
 pub fn line_of_sight(view: &dyn CommittedView, observer: EntityId, target: EntityId) -> bool {
+    line_of_sight_with(view, observer, target, &Bare::default())
+}
+
+/// [`line_of_sight`], sharing `bare` with the other lines of the same evaluation.
+fn line_of_sight_with(
+    view: &dyn CommittedView,
+    observer: EntityId,
+    target: EntityId,
+    bare: &Bare,
+) -> bool {
     if observer == target {
         return true;
+    }
+    // Side by side in one place — the usual case — the place is the common frame, each end is
+    // where it stands in it, and there is no chain of containers to climb.
+    let here = crate::index::container_of(view, observer);
+    if here.is_some() && here == crate::index::container_of(view, target) {
+        let common = here.expect("checked");
+        let o = crate::space::local_position(view, observer);
+        let t = crate::space::local_position(view, target);
+        return clear_between(view, common, (observer, o, &[]), (target, t, &[]), bare);
     }
     let Some(common) = lowest_common_ancestor(view, observer, target, CONTAINED_IN) else {
         return false;
@@ -68,32 +118,58 @@ pub fn line_of_sight(view: &dyn CommittedView, observer: EntityId, target: Entit
     ) else {
         return false;
     };
-    let eye = [o[0], o[1], o[2] + height(view, observer)];
-    // A body is seen if its top or its middle is in view — a head over a sill, a chest behind
-    // a low wall. (For a point, both are the point.)
-    let tall = height(view, target);
-    let marks = [[t[0], t[1], t[2] + tall], [t[0], t[1], t[2] + tall / 2]];
-
-    // The containers each end is inside, below the common one.
+    // The containers each end is inside, below the common one. When one end holds the other — a
+    // thing in the hand, the cart one rides in — the common one is that end itself, and there is
+    // nothing in between.
     let inside = |e: EntityId| -> Vec<EntityId> {
         let chain = ancestry(view, e, CONTAINED_IN);
         let stop = chain
             .iter()
             .position(|c| *c == common)
             .unwrap_or(chain.len());
-        chain[1..stop].to_vec()
+        chain
+            .get(1..stop)
+            .map_or_else(Vec::new, <[EntityId]>::to_vec)
     };
     let (side_o, side_t) = (inside(observer), inside(target));
+    clear_between(
+        view,
+        common,
+        (observer, o, &side_o),
+        (target, t, &side_t),
+        bare,
+    )
+}
+
+/// One end of a line of sight: the body, where it stands in the common frame, and the
+/// containers it is inside below the common one.
+type End<'a> = (EntityId, [i64; 3], &'a [EntityId]);
+
+/// Whether `observer` can see `target`, both placed in `common`'s frame: a line from the
+/// observer's eye to the target's top or middle is clear.
+fn clear_between(
+    view: &dyn CommittedView,
+    common: EntityId,
+    (observer, o, side_o): End,
+    (target, t, side_t): End,
+    bare: &Bare,
+) -> bool {
+    let eye = [o[0], o[1], o[2] + height(view, observer)];
+    // A body is seen if its top or its middle is in view — a head over a sill, a chest behind
+    // a low wall. (For a point, both are the point.)
+    let tall = height(view, target);
+    let marks = [[t[0], t[1], t[2] + tall], [t[0], t[1], t[2] + tall / 2]];
     let mut ignore = vec![observer, target];
-    ignore.extend(&side_o);
-    ignore.extend(&side_t);
+    ignore.extend(side_o);
+    ignore.extend(side_t);
     marks
         .iter()
-        .any(|&mark| line_is_clear(view, common, &side_o, &side_t, &ignore, eye, mark))
+        .any(|&mark| line_is_clear(view, common, side_o, side_t, &ignore, eye, mark, bare))
 }
 
 /// Whether the single line `eye → mark` (in `common`'s frame) is clear: through an opening of
 /// every enclosed container on either side, and past every opaque body and rising ground.
+#[allow(clippy::too_many_arguments)]
 fn line_is_clear(
     view: &dyn CommittedView,
     common: EntityId,
@@ -102,6 +178,7 @@ fn line_is_clear(
     ignore: &[EntityId],
     eye: [i64; 3],
     mark: [i64; 3],
+    bare: &Bare,
 ) -> bool {
     // 1. Walls: every enclosed container on either side must be crossed through an opening.
     for &c in side_o.iter().chain(side_t.iter()) {
@@ -118,7 +195,7 @@ fn line_is_clear(
         let (Some(a), Some(b)) = (lower(view, eye, f, common), lower(view, mark, f, common)) else {
             continue;
         };
-        if blocked_in(view, f, a, b, ignore) {
+        if blocked_in(view, f, a, b, ignore, bare) {
             return false;
         }
     }
@@ -157,18 +234,32 @@ fn blocked_in(
     a: [i64; 3],
     b: [i64; 3],
     ignore: &[EntityId],
+    bare: &Bare,
 ) -> bool {
     if ground_rises(view, f, a, b) {
         return true;
     }
     let span = Aabb::new(a, b).expand(OPENING_SLACK);
+    // Candidates: what the line's span meets, and every place within `f` with no body of its
+    // own whose contents could reach the span. A place with a body that the span misses is passed
+    // over: a line that misses its box can neither be blocked by it nor by what it holds. What a
+    // place holds lies within the index's reach of wherever the place is, so a place farther than
+    // that from the span holds nothing the line can meet.
     let candidates: Vec<EntityId> = match view.spatial() {
-        Some(index) => index
-            .candidates(f, &span)
-            .into_iter()
-            .map(|(e, _)| e)
-            .chain(index.subframes(f))
-            .collect(),
+        Some(index) => {
+            let could_reach = |s: &EntityId| {
+                let reach = index.reach(*s).min(i64::MAX as u64 / 4) as i64;
+                index
+                    .placement(*s)
+                    .map_or(true, |p| span.expand(reach).intersects(&p.bounds))
+            };
+            index
+                .candidates(f, &span)
+                .into_iter()
+                .map(|(e, _)| e)
+                .chain(bare.of(view, f).into_iter().filter(could_reach))
+                .collect()
+        }
         None => contents(view, f),
     };
     let mut seen = std::collections::BTreeSet::new();
@@ -180,17 +271,24 @@ fn blocked_in(
         if view.read(FactKey::new(c, LEADS_TO)).is_some() {
             continue;
         }
+        // What can block at all: an opaque body, a walled place, or an open region holding
+        // something that might. Anything else is passed over without working out its shape.
+        let enclosed = is_true(view, c, ENCLOSED);
+        let opaque = !enclosed && is_true(view, c, OPAQUE);
+        let holds_things = !enclosed && !contents(view, c).is_empty();
+        if !enclosed && !opaque && !holds_things {
+            continue;
+        }
         let body = body_box(view, c);
         let hits = body.is_some_and(|bx| bx.segment_hits(a, b, 0));
-        if hits && (is_true(view, c, OPAQUE) || is_true(view, c, ENCLOSED)) {
+        if hits && (enclosed || opaque) {
             return true;
         }
-        // An open region the line may pass through: what stands inside it can block too.
-        let holds_things = !contents(view, c).is_empty();
-        if holds_things && !is_true(view, c, ENCLOSED) && (body.is_none() || hits) {
+        // An open region the line passes through: what stands inside it can block too.
+        if holds_things && (body.is_none() || hits) {
             let local = |p| crate::space::lower(view, p, c, f);
             if let (Some(la), Some(lb)) = (local(a), local(b)) {
-                if blocked_in(view, c, la, lb, ignore) {
+                if blocked_in(view, c, la, lb, ignore, bare) {
                     return true;
                 }
             }
@@ -220,4 +318,151 @@ pub fn visible(view: &dyn CommittedView, observer: EntityId, radius: i64) -> Vec
         .into_iter()
         .filter(|(e, _)| line_of_sight(view, observer, *e))
         .collect()
+}
+
+/// Whether `entity` stands in light enough to be seen: the illumination of its own place, or of
+/// the nearest enclosing place that has one, is at least `min`. A world that simulates no light
+/// at all is always lit.
+pub fn lit(view: &dyn CommittedView, entity: EntityId, min: i64) -> bool {
+    ambient(view, entity, ILLUMINATION).map_or(true, |(_, light)| light >= min)
+}
+
+/// What `observer` could see within `range`: in sight, and lit — in ascending id order — and the
+/// place it stands in, when that is lit (Amendment A-11): seeing the room is how a mind knows its
+/// view is good enough to tell that someone is not there. And whatever it holds, which it knows
+/// by touch (Amendment A-13).
+pub fn in_view(
+    view: &dyn CommittedView,
+    observer: EntityId,
+    range: i64,
+    min_illumination: i64,
+) -> BTreeSet<EntityId> {
+    in_view_with(view, observer, range, min_illumination, &Bare::default())
+}
+
+/// [`in_view`], sharing `bare` with every other observer of the same evaluation.
+fn in_view_with(
+    view: &dyn CommittedView,
+    observer: EntityId,
+    range: i64,
+    min_illumination: i64,
+    bare: &Bare,
+) -> BTreeSet<EntityId> {
+    if range <= 0 {
+        return BTreeSet::new();
+    }
+    let mut seen: BTreeSet<EntityId> = within(view, observer, range)
+        .into_iter()
+        .map(|(e, _)| e)
+        .filter(|e| lit(view, *e, min_illumination) && line_of_sight_with(view, observer, *e, bare))
+        .collect();
+    if let Some(here) = crate::index::container_of(view, observer) {
+        if lit(view, here, min_illumination) {
+            seen.insert(here);
+        }
+    }
+    // What one holds, one knows by touch, light or dark (Amendment A-13).
+    seen.extend(contents(view, observer));
+    seen
+}
+
+// Sight reads where things are (the placement facts the index mirrors), what blocks a line
+// (walls, openings, opaque bodies, the ground), the light, the observer's range, and what it
+// saw last step — to write only the difference.
+const SIGHT_READS: &[FactType] = &[
+    CONTAINED_IN,
+    POSITION,
+    BODY_SIZE,
+    HEADING,
+    MOTION_TARGET,
+    MOTION_START,
+    MOTION_END,
+    ENCLOSED,
+    LEADS_TO,
+    HAS_PORTAL,
+    OPAQUE,
+    PORTAL_OPEN,
+    TERRAIN_SAMPLE,
+    TERRAIN_SPACING,
+    ILLUMINATION,
+    SIGHT_RANGE,
+    IN_VIEW,
+];
+const SIGHT_WRITES: &[FactType] = &[IN_VIEW];
+
+/// Publishes what each body with sight could see (Amendment A-8; Vol. III Ch. 1, *What is in
+/// view*): everything within its sight range — Living Systems' fact — along a clear line and
+/// lit above the world's threshold. One proposal per thing that came into or went out of view,
+/// so a still scene writes nothing. A body whose sight range is gone sees nothing.
+pub struct Sight {
+    step: Step,
+    min_illumination: i64,
+}
+
+impl Sight {
+    /// Refresh what is in view as `step` says; things in light below `min_illumination` (hundredths
+    /// of a percent) cannot be seen.
+    pub const fn new(step: Step, min_illumination: i64) -> Self {
+        Self {
+            step,
+            min_illumination,
+        }
+    }
+}
+
+impl System for Sight {
+    fn id(&self) -> SystemId {
+        SystemId::new("physical.sight")
+    }
+    fn reads(&self) -> &'static [FactType] {
+        SIGHT_READS
+    }
+    fn writes(&self) -> &'static [FactType] {
+        SIGHT_WRITES
+    }
+    fn cadence(&self) -> Cadence {
+        self.step.cadence()
+    }
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+        let mut observers: BTreeSet<EntityId> =
+            view.entities_with(SIGHT_RANGE).into_iter().collect();
+        observers.extend(view.entities_with(IN_VIEW));
+        let mut out = Vec::new();
+        let bare = Bare::default();
+        for observer in observers {
+            let range = view
+                .read(FactKey::new(observer, SIGHT_RANGE))
+                .and_then(|f| f.value.as_int())
+                .unwrap_or(0);
+            let now = in_view_with(view, observer, range, self.min_illumination, &bare);
+            let before: BTreeSet<EntityId> = view
+                .read_all(FactKey::new(observer, IN_VIEW))
+                .into_iter()
+                .filter_map(|f| match f.value {
+                    Value::Entity(e) => Some(e),
+                    _ => None,
+                })
+                .collect();
+            let key = FactKey::new(observer, IN_VIEW);
+            for seen in now.difference(&before) {
+                out.push(Proposal::new(
+                    self.id(),
+                    key,
+                    ctx.basis_tick(),
+                    Change::Add(Value::Entity(*seen)),
+                    Cause::new("came_into_view"),
+                ));
+            }
+            for gone in before.difference(&now) {
+                out.push(Proposal::new(
+                    self.id(),
+                    key,
+                    ctx.basis_tick(),
+                    Change::Remove(Value::Entity(*gone)),
+                    Cause::new("went_out_of_view"),
+                ));
+            }
+        }
+        out
+    }
 }

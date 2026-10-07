@@ -53,6 +53,11 @@ pub trait CommittedView {
     /// entity created mid-simulation is simulated the tick its facts commit.
     fn entities_with(&self, fact_type: FactType) -> Vec<EntityId>;
 
+    /// Every committed fact of `fact_type` that `holder` holds about a second entity
+    /// (Amendment A-7), as `(about, fact)` in ascending order of what it is about — one entry per
+    /// value. "Everything Erin believes about where things are" is one call.
+    fn read_about(&self, holder: EntityId, fact_type: FactType) -> Vec<(EntityId, Fact)>;
+
     /// The values of a cardinality-many fact that lie between `lo` and `hi` (inclusive, in the
     /// values' total order), sorted — a slice of a large set without reading all of it. A
     /// heightfield stored as a set of `[column, row, height]` samples answers "the sample at
@@ -78,6 +83,41 @@ pub trait CommittedView {
     fn spatial(&self) -> Option<&dyn SpatialQuery> {
         None
     }
+
+    /// The entities that had facts of `fact_type` written in the ticks after `since`, up to this
+    /// view's tick, in ascending order — or `None` if this view cannot say (Amendment A-21): it
+    /// keeps no memory of changes, or its memory does not reach back that far. A system given
+    /// `None` must do all the work it would do without the answer, so that nothing committed can
+    /// depend on how much a store remembers. "Written" includes a value set again unchanged.
+    fn changed_since(&self, fact_type: FactType, since: u64) -> Option<Vec<EntityId>> {
+        let _ = (fact_type, since);
+        None
+    }
+
+    /// The entities due by `fact_type` — an agenda fact (Amendment A-22), whose value is the tick
+    /// an entity is next due — at or before tick `upto`, in ascending order of id. A store with an
+    /// agenda index answers in proportion to the answer; without one, by scanning; the same
+    /// either way.
+    fn due(&self, fact_type: FactType, upto: u64) -> Vec<EntityId> {
+        due_by_scan(self, fact_type, upto)
+    }
+}
+
+/// Who is due by `fact_type` at or before `upto`, found by reading every holder (Amendment A-22):
+/// the answer every agenda index must agree with.
+pub fn due_by_scan<V: CommittedView + ?Sized>(
+    view: &V,
+    fact_type: FactType,
+    upto: u64,
+) -> Vec<EntityId> {
+    view.entities_with(fact_type)
+        .into_iter()
+        .filter(|e| {
+            view.read_all(FactKey::new(*e, fact_type))
+                .iter()
+                .any(|f| matches!(f.value, Value::Int(t) if t <= upto.min(i64::MAX as u64) as i64))
+        })
+        .collect()
 }
 
 /// A committed view scoped to a system's declared read set (Vol. V Ch. 3 §3.1).
@@ -154,6 +194,14 @@ impl CommittedView for ScopedView<'_> {
         }
     }
 
+    fn read_about(&self, holder: EntityId, fact_type: FactType) -> Vec<(EntityId, Fact)> {
+        if self.check(fact_type) {
+            self.inner.read_about(holder, fact_type)
+        } else {
+            Vec::new()
+        }
+    }
+
     fn tick(&self) -> u64 {
         self.inner.tick()
     }
@@ -169,6 +217,22 @@ impl CommittedView for ScopedView<'_> {
         }
         declared.then_some(index)
     }
+
+    fn due(&self, fact_type: FactType, upto: u64) -> Vec<EntityId> {
+        if self.check(fact_type) {
+            self.inner.due(fact_type, upto)
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn changed_since(&self, fact_type: FactType, since: u64) -> Option<Vec<EntityId>> {
+        if self.check(fact_type) {
+            self.inner.changed_since(fact_type, since)
+        } else {
+            None
+        }
+    }
 }
 
 /// The per-evaluation context: the clock and the system's issued RNG substream.
@@ -179,17 +243,57 @@ pub struct TickContext {
     tick: u64,
     seed: u64,
     system_code: u32,
+    // The system's place among all registered systems, sorted by id: its slot for new ids.
+    slot: u64,
+    // How many new ids it has taken this tick.
+    created: Cell<u64>,
+    // Whether it asked for more than one system may take in a tick.
+    exhausted: Cell<bool>,
 }
 
+/// The first id the kernel ever issues at run time (Amendment A-15). Authored worlds number their
+/// entities below it; everything created while the world runs is numbered above it.
+pub const RUNTIME_ID_FLOOR: u64 = 1 << 62;
+
+/// How many new ids one system may take in one tick.
+pub const IDS_PER_SYSTEM_PER_TICK: u64 = 1 << 14;
+
 impl TickContext {
-    /// Create a context for a system (identified by `system_code`) at `tick` under world
-    /// `seed`. Kernel-internal — only the tick loop builds contexts.
-    pub(crate) fn new(tick: u64, seed: u64, system_code: u32) -> Self {
+    /// Create a context for a system (identified by `system_code`, in `slot` among all systems
+    /// sorted by id) at `tick` under world `seed`. Kernel-internal — only the tick loop builds
+    /// contexts.
+    pub(crate) fn new(tick: u64, seed: u64, system_code: u32, slot: u64) -> Self {
         Self {
             tick,
             seed,
             system_code,
+            slot,
+            created: Cell::new(0),
+            exhausted: Cell::new(false),
         }
+    }
+
+    /// A new entity id, never issued before and never to be issued again (Amendment A-15; Vol. V
+    /// Ch. 2 §2.1, clause 4): `floor + tick·2²⁴ + slot·2¹⁴ + n`, the system's `n`th this tick.
+    /// Deterministic — the same system in the same world creates the same ids on every replay —
+    /// and disjoint between systems and ticks, so no two systems can ever collide.
+    ///
+    /// A system that asks for more than [`IDS_PER_SYSTEM_PER_TICK`] in a tick — a runaway, not a
+    /// world — fails the tick (`TickError::IdsExhausted`): nothing it proposed commits, so the
+    /// placeholder it is handed past the limit never names anything.
+    pub fn new_entity(&self) -> EntityId {
+        let n = self.created.get();
+        if n >= IDS_PER_SYSTEM_PER_TICK {
+            self.exhausted.set(true);
+            return EntityId::from_raw(u64::MAX);
+        }
+        self.created.set(n + 1);
+        EntityId::from_raw(RUNTIME_ID_FLOOR + (self.tick << 24) + (self.slot << 14) + n)
+    }
+
+    /// Whether this system asked for more new ids than it may take this tick.
+    pub(crate) fn exhausted(&self) -> bool {
+        self.exhausted.get()
     }
 
     /// The current tick — the one being computed.
@@ -259,6 +363,13 @@ mod tests {
                 .map(|k| k.entity)
                 .collect()
         }
+        fn read_about(&self, holder: EntityId, fact_type: FactType) -> Vec<(EntityId, Fact)> {
+            self.0
+                .iter()
+                .filter(|(k, _)| k.entity == holder && k.fact_type == fact_type)
+                .filter_map(|(k, f)| Some((k.about?, *f)))
+                .collect()
+        }
         fn tick(&self) -> u64 {
             0
         }
@@ -298,6 +409,16 @@ mod tests {
         assert_eq!(scoped.entities_with(A).len(), 1);
         assert!(scoped.violation().is_none());
         assert!(scoped.entities_with(B).is_empty());
+        assert_eq!(scoped.violation(), Some(B));
+    }
+
+    #[test]
+    fn scoped_view_records_undeclared_pair_reads() {
+        let inner = map_view();
+        let scoped = ScopedView::new(&inner, &[A]);
+        assert!(scoped.read_about(EntityId::from_raw(1), A).is_empty());
+        assert!(scoped.violation().is_none());
+        assert!(scoped.read_about(EntityId::from_raw(1), B).is_empty());
         assert_eq!(scoped.violation(), Some(B));
     }
 }

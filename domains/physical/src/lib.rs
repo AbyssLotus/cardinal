@@ -119,6 +119,14 @@ pub struct PhysicalConfig {
     /// seconds, of the exchange through its walls and openings (Amendment A-5). Larger is
     /// better insulated; a room built of heavy material is slower still.
     pub indoor_coupling_seconds: u64,
+    /// How often what each sighted body can see is refreshed, in seconds of simulated time
+    /// (Amendment A-8).
+    pub sight_step_seconds: u64,
+    /// The least illumination, in hundredths of a percent, in which a thing can be seen
+    /// (Amendment A-8): below it, the place it stands in is too dark.
+    pub sight_min_illumination: i64,
+    /// The most a body can carry, in kilograms (Amendment A-12).
+    pub carry_limit_kg: i64,
 }
 
 impl PhysicalConfig {
@@ -151,6 +159,9 @@ pub const RESTRICTED: &[FactType] = &[
     schema::TRAVEL_BLOCKED,
     schema::ACT_REFUSED,
     schema::PORTAL_DANGER,
+    schema::IN_VIEW,
+    schema::CONSUMED,
+    schema::PICKED,
 ];
 
 /// The Physical Reality domain, plugged into the kernel (Appendix A owner of the stage).
@@ -233,6 +244,19 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::MATERIAL_FLAMMABILITY
             || fact_type == schema::MATERIAL_CONDUCTIVITY
             || fact_type == schema::MATERIAL_TOXICITY
+            || fact_type == schema::IN_VIEW
+            || fact_type == schema::MATERIAL_EDIBLE
+            || fact_type == schema::MATERIAL_POTENCY
+            || fact_type == schema::MATERIAL_HABIT
+            || fact_type == schema::MATERIAL_NUTRITION
+            || fact_type == schema::ACT_TAKE
+            || fact_type == schema::ACT_DROP
+            || fact_type == schema::ACT_CONSUME
+            || fact_type == schema::CONSUMED
+            || fact_type == schema::ACT_ARRIVE
+            || fact_type == schema::ACT_LEAVE
+            || fact_type == schema::ACT_PICK
+            || fact_type == schema::PICKED
     }
 
     fn accepts(&self, fact_type: FactType, system: kernel::fact::SystemId) -> bool {
@@ -255,6 +279,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::IN_REGION
             || fact_type == schema::MADE_OF
             || fact_type == schema::TERRAIN_SAMPLE
+            || fact_type == schema::IN_VIEW
         {
             Cardinality::Many
         } else {
@@ -317,12 +342,17 @@ impl Domain for PhysicalDomain {
             Box::new(travel::Gravity::new(c.move_rules())),
             Box::new(travel::Travel::new(c.move_rules())),
             // Opens, shuts, and turns on request, within reach (Amendment A-5).
-            Box::new(act::Act::new(c.reach_cm)),
+            Box::new(act::Act::new(c.reach_cm, c.carry_limit_kg)),
             // Walled rooms' air follows the air outside them (Amendment A-5).
             Box::new(systems::Shelter::new(
                 step,
                 c.indoor_coupling_seconds.saturating_mul(1000),
                 c.thermal_mass_reference,
+            )),
+            // What each body with sight could see (Amendment A-8).
+            Box::new(sight::Sight::new(
+                c.clock.step(c.sight_step_seconds.saturating_mul(1000)),
+                c.sight_min_illumination,
             )),
         ]
     }
@@ -347,6 +377,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::PORTAL_OPEN
             || fact_type == schema::MOBILE
             || fact_type == schema::TRAVEL_BLOCKED
+            || fact_type == schema::ACT_LEAVE
         {
             composition::compose_bool(current, changes)
         } else if fact_type == schema::TERRAIN_SPACING {
@@ -380,6 +411,10 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::MATERIAL_FLAMMABILITY
             || fact_type == schema::MATERIAL_CONDUCTIVITY
             || fact_type == schema::MATERIAL_TOXICITY
+            || fact_type == schema::MATERIAL_EDIBLE
+            || fact_type == schema::MATERIAL_POTENCY
+            || fact_type == schema::MATERIAL_HABIT
+            || fact_type == schema::MATERIAL_NUTRITION
         {
             // Normalized material properties (Vol. III Ch. 1 §1.9), bounded like the other
             // 0..=100% fields. Seeded state today; the rule keeps them coherent should a
@@ -393,12 +428,21 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::WIND_TOWARD
             || fact_type == schema::LEADS_TO
             || fact_type == schema::PORTAL_FAR_SIDE
-            || fact_type == schema::TRAVEL_TO
-            || fact_type == schema::ACT_OPEN
-            || fact_type == schema::ACT_CLOSE
             || fact_type == schema::ACT_REFUSED
+            || fact_type == schema::CONSUMED
+            || fact_type == schema::PICKED
         {
             composition::compose_entity_ref(current, changes)
+        } else if fact_type == schema::TRAVEL_TO
+            || fact_type == schema::ACT_OPEN
+            || fact_type == schema::ACT_CLOSE
+            || fact_type == schema::ACT_TAKE
+            || fact_type == schema::ACT_DROP
+            || fact_type == schema::ACT_CONSUME
+            || fact_type == schema::ACT_ARRIVE
+            || fact_type == schema::ACT_PICK
+        {
+            composition::compose_intent(current, changes)
         } else if fact_type == schema::ACT_FACE {
             composition::compose_heading(current, changes)
         } else {
@@ -468,6 +512,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::HAS_PORTAL
             || fact_type == schema::IN_REGION
             || fact_type == schema::MADE_OF
+            || fact_type == schema::IN_VIEW
         {
             for v in values {
                 if !matches!(v, Value::Entity(_)) {

@@ -1,0 +1,16 @@
+[package]
+name = "minds"
+description = "Decision systems (Appendix A, Ruling 14; Amendment A-9): minds that choose from what they believe and act through intents."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+# LAW (Vol. V Ch. 1 §1.1, rule 2): a domain-layer crate depends on `kernel` ONLY. Minds read the
+# information layer's beliefs and write Physical Reality's intents by their published fact ids.
+[dependencies]
+kernel.workspace = true

@@ -38,7 +38,7 @@ fn set_off(city: &mut City) {
 #[test]
 fn the_same_seed_replays_the_same_city() {
     let run = || {
-        let mut city = City::new();
+        let mut city = City::quiet();
         set_off(&mut city);
         city.run(300);
         (city.store().state_hash(), city.chronicle)
@@ -51,7 +51,7 @@ fn the_same_seed_replays_the_same_city() {
 #[test]
 fn another_seed_brings_other_weather_but_the_same_footsteps() {
     let run = |seed| {
-        let mut city = City::new();
+        let mut city = City::quiet();
         city.seed = seed;
         set_off(&mut city);
         city.run(300);
@@ -83,7 +83,7 @@ fn a_city_run_without_its_index_is_the_same_city() {
     // spatial question then takes the scanning road. Both run the world's own systems for a
     // minute, with people on the move; tick for tick the two realities are identical.
     let pkg = package();
-    let mut indexed = City::new().store().clone();
+    let mut indexed = City::quiet().store().clone();
     for (key, fact) in [
         seeded(TRAVEL_TO, BOB, Value::Entity(e(BEDROOM))),
         seeded(TRAVEL_SPEED, BOB, Value::Int(140)),
@@ -120,7 +120,7 @@ fn a_city_run_without_its_index_is_the_same_city() {
     assert!(ca == cb);
     assert_ne!(
         indexed.read(FactKey::new(e(BOB), POSITION)),
-        City::new().store().read(FactKey::new(e(BOB), POSITION)),
+        City::quiet().store().read(FactKey::new(e(BOB), POSITION)),
         "Bob moved"
     );
 }
@@ -137,6 +137,9 @@ impl CommittedView for Scanning<'_> {
     }
     fn entities_with(&self, fact_type: FactType) -> Vec<EntityId> {
         self.0.entities_with(fact_type)
+    }
+    fn read_about(&self, holder: EntityId, fact_type: FactType) -> Vec<(EntityId, Fact)> {
+        self.0.read_about(holder, fact_type)
     }
     fn tick(&self) -> u64 {
         self.0.tick()
@@ -325,7 +328,7 @@ fn shuffle(store: &mut MemoryStore, tick: u64, g: &mut Gen) {
 #[test]
 fn the_index_answers_exactly_what_a_scan_would_as_ashford_is_turned_over() {
     let mut g = Gen(0xa5f0_7d);
-    let mut store = City::new().store().clone();
+    let mut store = City::quiet().store().clone();
     assert!(store.spatial().is_some(), "Ashford is indexed");
     assert_conforms(&store, &mut g);
     for tick in 1..=8 {
@@ -358,7 +361,7 @@ impl System for HalfDeclared {
 
 #[test]
 fn the_index_is_no_back_door_around_a_systems_reads() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.attach(Box::new(HalfDeclared));
     let err = city
         .try_run()
@@ -373,7 +376,7 @@ fn the_index_is_no_back_door_around_a_systems_reads() {
 fn an_index_built_as_ashford_loads_equals_one_built_afterwards() {
     // The loader installs the index first and seeds into it, placing each thing as it arrives;
     // installing it over the finished city builds it in one pass. Both must index one city.
-    let loaded = City::new().store().clone();
+    let loaded = City::quiet().store().clone();
     let mut after = MemoryStore::new();
     for id in 0..10_000 {
         for (key, fact) in loaded.facts_of(e(id)) {
@@ -413,7 +416,7 @@ impl System for HalfDeclaredRegions {
 
 #[test]
 fn asking_about_regions_means_declaring_both_links() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.attach(Box::new(HalfDeclaredRegions));
     let err = city
         .try_run()
@@ -452,7 +455,7 @@ impl System for ColdSnap {
 
 #[test]
 fn a_tick_that_would_break_physics_commits_nothing() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.go(BOB, BEDROOM, 140);
     city.attach(Box::new(ColdSnap));
     let before = city.store().state_hash();
@@ -618,4 +621,22 @@ fn every_problem_is_named_at_once() {
     );
     let found = problems(&text);
     assert_eq!(found.len(), 3, "{found:#?}");
+}
+
+#[test]
+fn every_fact_a_system_names_has_an_owner() {
+    // A domain names another's facts by id (Vol. V Ch. 1 §1.1). A misspelt id names a fact
+    // nobody owns: a write of it aborts a tick, but a read of it silently finds nothing. So every
+    // fact type any of Ashford's systems declares, read or written, must belong to one of its
+    // domains.
+    let world = load(&package(), engine_version()).expect("Ashford loads");
+    let mut orphans = Vec::new();
+    for system in world.systems() {
+        for fact in system.reads().iter().chain(system.writes()) {
+            if !world.domains().iter().any(|d| d.owns(*fact)) {
+                orphans.push(format!("{} names {}", system.id().name(), fact.name()));
+            }
+        }
+    }
+    assert!(orphans.is_empty(), "{orphans:#?}");
 }

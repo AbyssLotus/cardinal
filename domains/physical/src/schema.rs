@@ -198,6 +198,17 @@ pub const ACT_CLOSE: FactType = FactType::new("physical.act.close");
 /// [`HEADING`]). Carried out for a mobile body; cleared either way.
 pub const ACT_FACE: FactType = FactType::new("physical.act.face");
 
+/// What a body with sight could see at the last sight step (Amendment A-8): a cardinality-many
+/// set of entity references — everything within its sight range, along a clear line, standing
+/// in light enough to see by. Written by Physical Reality, only where it changes; read by the
+/// information layer, which decides what becomes observation and belief (Vol. II Ch. 4).
+pub const IN_VIEW: FactType = FactType::new("physical.sense.in_view");
+
+/// How far a body can see, in centimetres — **Living Systems'** fact (its sensory capability,
+/// Appendix A), consumed here by its stable id to bound what is in view. Naming an id is not
+/// importing code (Vol. III Ch. 12 §12.1).
+pub const SIGHT_RANGE: FactType = FactType::new("living.sense.sight_range");
+
 /// What a body last tried and could not do (Amendment A-5): an entity reference to the door it
 /// could not reach, or to itself if it could not turn. Written by Physical Reality so a decider
 /// can notice and reconsider; cleared by the body's next act that succeeds.
@@ -296,6 +307,54 @@ pub const MATERIAL_CONDUCTIVITY: FactType = FactType::new("physical.material.con
 /// A material's toxicity, 0..=10000 (normalized). Zero is inert; higher is more hazardous to
 /// living systems (Vol. III Ch. 1 §1.9). A composite is as hazardous as its most toxic part.
 pub const MATERIAL_TOXICITY: FactType = FactType::new("physical.material.toxicity");
+
+/// How far a material can be taken into a body, 0..=10000 (Amendment A-12): zero is not food,
+/// drink, or anything else a body can consume. Only a thing made entirely of edible materials can
+/// be consumed.
+pub const MATERIAL_EDIBLE: FactType = FactType::new("physical.material.edible");
+
+/// How much a unit of a material feeds a body, 0..=10000 — how far eating one thing made of it
+/// lowers hunger (Amendment A-16).
+pub const MATERIAL_NUTRITION: FactType = FactType::new("physical.material.nutrition");
+
+/// How strongly a dose of a material acts on a body, 0..=10000 (Amendment A-13).
+pub const MATERIAL_POTENCY: FactType = FactType::new("physical.material.potency");
+
+/// How much dependence each dose of a material builds, 0..=10000 (Amendment A-13).
+pub const MATERIAL_HABIT: FactType = FactType::new("physical.material.habit");
+
+/// A decider's intent that a body take hold of a thing (Appendix A, Ruling 16): an entity
+/// reference. Carried out only within reach and for a thing whose weight is known and bearable;
+/// cleared either way.
+pub const ACT_TAKE: FactType = FactType::new("physical.act.take");
+
+/// A decider's intent that a body put down a thing it holds, where it stands.
+pub const ACT_DROP: FactType = FactType::new("physical.act.drop");
+
+/// A decider's intent that a body consume a thing it holds — eat it, drink it.
+pub const ACT_CONSUME: FactType = FactType::new("physical.act.consume");
+
+/// A request that a thing arrive in the world (Amendment A-15): an entity reference to where — a
+/// place, or a holder, into whose hand it comes. Made by whatever brought the thing into being;
+/// carried out by Physical Reality, which places it at the origin of where, and clears the request.
+pub const ACT_ARRIVE: FactType = FactType::new("physical.act.arrive");
+
+/// A request that a thing leave the world (Amendment A-15): used up. Physical Reality clears its
+/// place; its identity and history remain.
+pub const ACT_LEAVE: FactType = FactType::new("physical.act.leave");
+
+/// A decider's intent that a body pick from a deposit — a fruit tree (Amendment A-15): an entity
+/// reference, carried out within reach and reported in [`PICKED`].
+pub const ACT_PICK: FactType = FactType::new("physical.act.pick");
+
+/// The deposit a body last picked from (Amendment A-15): what the pick yields is Resources' to
+/// judge (Appendix A, Ruling 16).
+pub const PICKED: FactType = FactType::new("physical.body.picked");
+
+/// What a body last consumed (Amendment A-12): an entity reference to the thing, which has left
+/// the world. Written by Physical Reality so Living Systems can judge what it does to the body
+/// (Appendix A, Ruling 9).
+pub const CONSUMED: FactType = FactType::new("physical.body.consumed");
 
 // ---- Physical constants (laws of the mechanism, not tunable world rules) ----------------
 

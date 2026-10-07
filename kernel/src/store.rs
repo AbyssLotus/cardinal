@@ -20,7 +20,7 @@ use crate::identity::EntityId;
 use crate::spatial::{SpatialIndex, SpatialProjector, SpatialQuery};
 use crate::system::CommittedView;
 use crate::value::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
 /// One resolved outcome for a single fact key, ready to commit (Vol. V Ch. 3 §3.1,
@@ -88,9 +88,17 @@ pub trait RealityStore: CommittedView {
     fn state_hash(&self) -> StateHash;
 }
 
+/// How many recent ticks a [`MemoryStore`] remembers what changed in, unless told otherwise
+/// (Amendment A-21): a bound on memory, never on correctness — older questions are answered
+/// "unknown".
+pub const CHANGE_WINDOW: usize = 64;
+
+/// What was written in one tick: per fact type, the entities whose facts of it were written.
+type Written = BTreeMap<FactType, BTreeSet<EntityId>>;
+
 /// The reference store: the fact/triple model as a sorted map of value sets
 /// (Vol. V Ch. 2 §2.2), with a fact-type index and an incrementally-maintained digest.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct MemoryStore {
     // Per fact key, the committed values (each with provenance). A cardinality-one fact holds
     // at most one; a cardinality-many fact holds a set. Sorted throughout for determinism.
@@ -109,24 +117,94 @@ pub struct MemoryStore {
     // The tick the committed state represents: 0 for the initial world, N after tick N's
     // `apply`. Read through `CommittedView::tick` (Vol. V Ch. 2 §2.1, clause 3).
     tick: u64,
+    // What each of the most recent ticks wrote, oldest first (Amendment A-21), at most
+    // `change_window` of them. Never part of the digest: it is memory of commits, not reality.
+    changes: VecDeque<(u64, Written)>,
+    change_window: usize,
+    // For each agenda fact type installed (Amendment A-22), who is due when: `(tick, entity)`,
+    // so who is due by a tick is one range walk. Never part of the digest: it is an index.
+    agenda: BTreeMap<FactType, BTreeSet<(i64, EntityId)>>,
+}
+
+impl Default for MemoryStore {
+    fn default() -> Self {
+        Self {
+            facts: BTreeMap::new(),
+            by_type: BTreeMap::new(),
+            hasher: StateHasher::default(),
+            spatial: None,
+            tick: 0,
+            changes: VecDeque::new(),
+            change_window: CHANGE_WINDOW,
+            agenda: BTreeMap::new(),
+        }
+    }
 }
 
 /// The canonical triple encoding fed to the state hasher: entity id (8 bytes LE), fact-type
 /// name, value (a tag byte and a fixed width per type). The fixed-width head and the tagged
-/// tail make the variable-width name unambiguous (Vol. V Ch. 4 §4.2, canonicalisation).
+/// tail make the variable-width name unambiguous (Vol. V Ch. 4 §4.2, canonicalisation). A fact
+/// about a pair (Amendment A-7) puts a `0xFF` marker and the second entity's id between name and
+/// value: `0xFF` occurs in no UTF-8 name and is no value's tag, so the two shapes never collide,
+/// and a fact of one entity encodes exactly as it always has.
 fn triple_bytes(key: FactKey, value: &Value) -> Vec<u8> {
     let name = key.fact_type.name().as_bytes();
-    let mut buf = Vec::with_capacity(8 + name.len() + 25);
+    let mut buf = Vec::with_capacity(8 + name.len() + 9 + 25);
     buf.extend_from_slice(&key.entity.raw().to_le_bytes());
     buf.extend_from_slice(name);
+    if let Some(about) = key.about {
+        buf.push(PAIR_MARKER);
+        buf.extend_from_slice(&about.raw().to_le_bytes());
+    }
     value.write_canonical(&mut buf);
     buf
+}
+
+/// Marks a fact about a pair in the canonical encoding (see [`triple_bytes`]).
+const PAIR_MARKER: u8 = 0xFF;
+
+/// The first and last keys of `holder`'s facts of `fact_type` about a second entity: a closed
+/// range in key order, which sorts them by what they are about (Amendment A-7).
+fn pair_range(holder: EntityId, fact_type: FactType) -> std::ops::RangeInclusive<FactKey> {
+    FactKey::pair(holder, fact_type, EntityId::from_raw(0))
+        ..=FactKey::pair(holder, fact_type, EntityId::from_raw(u64::MAX))
 }
 
 impl MemoryStore {
     /// An empty world.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Remember what changed in the last `ticks` ticks (Amendment A-21); 0 remembers nothing, so
+    /// every question about changes is answered "unknown". The answer may never change what is
+    /// committed, only what it costs to compute — which is how that is tested.
+    pub fn set_change_window(&mut self, ticks: usize) {
+        self.change_window = ticks;
+        while self.changes.len() > ticks {
+            self.changes.pop_front();
+        }
+    }
+
+    /// Index `fact_types` as agenda facts (Amendment A-22): each one's value is the tick an entity
+    /// is next due. Indexes what is already held and keeps up with every seed and commit after.
+    pub fn install_agenda(&mut self, fact_types: &[FactType]) {
+        for &ft in fact_types {
+            let mut due = BTreeSet::new();
+            for entity in self.by_type.get(&ft).into_iter().flatten() {
+                for value in self
+                    .facts
+                    .get(&FactKey::new(*entity, ft))
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Value::Int(t) = value.0 {
+                        due.insert((*t, *entity));
+                    }
+                }
+            }
+            self.agenda.insert(ft, due);
+        }
     }
 
     /// Seed a value at world construction, before tick 1.
@@ -180,6 +258,11 @@ impl MemoryStore {
     /// Add one value at `key` — the shared insertion path of seeding and commit. Does not touch
     /// the spatial index; callers re-place what they changed.
     fn insert_value(&mut self, key: FactKey, fact: Fact) {
+        if let (Some(due), None, Value::Int(t)) =
+            (self.agenda.get_mut(&key.fact_type), key.about, fact.value)
+        {
+            due.insert((t, key.entity));
+        }
         let values = self.facts.entry(key).or_default();
         if values.insert(fact.value, fact.provenance).is_none() {
             // A genuinely new triple: fold it into the digest and the type index. Re-seeding
@@ -208,14 +291,33 @@ impl MemoryStore {
         if let Some(values) = self.facts.remove(&key) {
             for value in values.keys() {
                 self.hasher.remove_fact(&triple_bytes(key, value));
+                if let (Some(due), None, Value::Int(t)) =
+                    (self.agenda.get_mut(&key.fact_type), key.about, value)
+                {
+                    due.remove(&(*t, key.entity));
+                }
             }
-            if let Some(entities) = self.by_type.get_mut(&key.fact_type) {
-                entities.remove(&key.entity);
-                if entities.is_empty() {
-                    self.by_type.remove(&key.fact_type);
+            if !self.holds_any(key.entity, key.fact_type) {
+                if let Some(entities) = self.by_type.get_mut(&key.fact_type) {
+                    entities.remove(&key.entity);
+                    if entities.is_empty() {
+                        self.by_type.remove(&key.fact_type);
+                    }
                 }
             }
         }
+    }
+
+    /// Whether `entity` still holds any value of `fact_type` — of its own, or about a second
+    /// entity. Clearing Erin's belief about Bob leaves her in the type index while she still
+    /// believes something about the cat.
+    fn holds_any(&self, entity: EntityId, fact_type: FactType) -> bool {
+        self.facts.contains_key(&FactKey::new(entity, fact_type))
+            || self
+                .facts
+                .range(pair_range(entity, fact_type))
+                .next()
+                .is_some()
     }
 }
 
@@ -241,6 +343,18 @@ impl CommittedView for MemoryStore {
             .unwrap_or_default()
     }
 
+    fn read_about(&self, holder: EntityId, fact_type: FactType) -> Vec<(EntityId, Fact)> {
+        // One range walk: a holder's paired facts of one type are contiguous, ordered by what
+        // they are about.
+        let mut out = Vec::new();
+        for (key, values) in self.facts.range(pair_range(holder, fact_type)) {
+            if let Some(about) = key.about {
+                out.extend(values.iter().map(|(v, p)| (about, Fact::new(*v, *p))));
+            }
+        }
+        out
+    }
+
     fn read_range(&self, key: FactKey, lo: &Value, hi: &Value) -> Vec<Fact> {
         if lo > hi {
             return Vec::new();
@@ -258,6 +372,41 @@ impl CommittedView for MemoryStore {
     fn spatial(&self) -> Option<&dyn SpatialQuery> {
         self.spatial.as_ref().map(|ix| ix as &dyn SpatialQuery)
     }
+
+    fn due(&self, fact_type: FactType, upto: u64) -> Vec<EntityId> {
+        let Some(due) = self.agenda.get(&fact_type) else {
+            return crate::system::due_by_scan(self, fact_type, upto);
+        };
+        let upto = upto.min(i64::MAX as u64) as i64;
+        let mut out: Vec<EntityId> = due
+            .range(..=(upto, EntityId::from_raw(u64::MAX)))
+            .map(|(_, e)| *e)
+            .collect();
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
+    fn changed_since(&self, fact_type: FactType, since: u64) -> Option<Vec<EntityId>> {
+        if since >= self.tick {
+            return Some(Vec::new());
+        }
+        // Every tick from `since + 1` to now must still be remembered.
+        let oldest = self.changes.front().map(|(t, _)| *t)?;
+        if oldest > since + 1 {
+            return None;
+        }
+        let mut out: BTreeSet<EntityId> = BTreeSet::new();
+        for (tick, written) in self.changes.iter().rev() {
+            if *tick <= since {
+                break;
+            }
+            if let Some(entities) = written.get(&fact_type) {
+                out.extend(entities.iter().copied());
+            }
+        }
+        Some(out.into_iter().collect())
+    }
 }
 
 impl RealityStore for MemoryStore {
@@ -265,7 +414,7 @@ impl RealityStore for MemoryStore {
         // Keys sort entity-first, so one range walk visits exactly this entity's facts
         // (Vol. V Ch. 2 §2.1, clause 5) — no scan of the rest of reality.
         let mut out = Vec::new();
-        let start = FactKey::new(entity, FactType::new(""));
+        let start = FactKey::new(entity, FactType::MIN);
         for (key, values) in self.facts.range(start..) {
             if key.entity != entity {
                 break;
@@ -282,12 +431,16 @@ impl RealityStore for MemoryStore {
         // lands — so an entity whose three position axes all change is placed once, from its
         // final facts.
         let mut moved: BTreeSet<EntityId> = BTreeSet::new();
+        let mut written: Written = BTreeMap::new();
         for resolution in batch.resolutions {
             let key = match &resolution {
                 Resolution::One { key, .. }
                 | Resolution::Many { key, .. }
                 | Resolution::Clear { key } => *key,
             };
+            if self.change_window > 0 {
+                written.entry(key.fact_type).or_default().insert(key.entity);
+            }
             if self.watched(key.fact_type) {
                 moved.insert(key.entity);
             }
@@ -309,6 +462,12 @@ impl RealityStore for MemoryStore {
         }
         self.tick = batch.tick;
         self.reproject(moved);
+        if self.change_window > 0 {
+            self.changes.push_back((batch.tick, written));
+            while self.changes.len() > self.change_window {
+                self.changes.pop_front();
+            }
+        }
     }
 
     fn state_hash(&self) -> StateHash {
@@ -417,6 +576,82 @@ mod tests {
         assert!(store
             .read_range(FactKey::new(e1, NEIGHBOUR), &Value::Int(8), &Value::Int(2))
             .is_empty());
+    }
+
+    #[test]
+    fn a_fact_about_a_pair_is_its_own_fact() {
+        // Erin's beliefs about where Bob and the cat are: two facts of one type, each about a
+        // different entity, neither the same fact as Erin's own value of that type.
+        let (erin, bob, cat) = (
+            EntityId::from_raw(1),
+            EntityId::from_raw(2),
+            EntityId::from_raw(3),
+        );
+        let mut store = MemoryStore::new();
+        store.seed(FactKey::pair(erin, HEAT, cat), fact(30));
+        store.seed(FactKey::pair(erin, HEAT, bob), fact(20));
+        store.seed(FactKey::new(erin, HEAT), fact(10));
+        assert_eq!(
+            store.read(FactKey::pair(erin, HEAT, bob)).unwrap(),
+            fact(20)
+        );
+        assert_eq!(store.read(FactKey::new(erin, HEAT)).unwrap(), fact(10));
+        assert!(
+            store.read(FactKey::pair(bob, HEAT, erin)).is_none(),
+            "pairs are directed"
+        );
+        // All of Erin's, ordered by what they are about; her own value is not among them.
+        assert_eq!(
+            store.read_about(erin, HEAT),
+            vec![(bob, fact(20)), (cat, fact(30))]
+        );
+        assert!(store.read_about(erin, NEIGHBOUR).is_empty());
+        assert_eq!(store.facts_of(erin).len(), 3);
+        assert_eq!(store.state_hash(), rescan_hash(&store));
+    }
+
+    #[test]
+    fn clearing_one_pair_leaves_the_holder_indexed_while_it_holds_another() {
+        let (erin, bob, cat) = (
+            EntityId::from_raw(1),
+            EntityId::from_raw(2),
+            EntityId::from_raw(3),
+        );
+        let mut store = MemoryStore::new();
+        store.seed(FactKey::pair(erin, HEAT, bob), fact(20));
+        store.seed(FactKey::pair(erin, HEAT, cat), fact(30));
+        assert_eq!(store.entities_with(HEAT), vec![erin]);
+        let mut batch = CommitBatch::new(1);
+        batch.resolutions.push(Resolution::Clear {
+            key: FactKey::pair(erin, HEAT, bob),
+        });
+        store.apply(batch);
+        assert_eq!(
+            store.entities_with(HEAT),
+            vec![erin],
+            "she still believes in the cat"
+        );
+        assert_eq!(store.read_about(erin, HEAT), vec![(cat, fact(30))]);
+        assert_eq!(store.state_hash(), rescan_hash(&store));
+        let mut batch = CommitBatch::new(2);
+        batch.resolutions.push(Resolution::Clear {
+            key: FactKey::pair(erin, HEAT, cat),
+        });
+        store.apply(batch);
+        assert!(store.entities_with(HEAT).is_empty());
+        assert!(store.is_empty());
+    }
+
+    #[test]
+    fn a_pair_never_hashes_like_a_single() {
+        // The same holder, type, and value — once of her own, once about entity 0 — are
+        // different facts, and the digest must tell them apart.
+        let erin = EntityId::from_raw(1);
+        let mut own = MemoryStore::new();
+        own.seed(FactKey::new(erin, HEAT), fact(10));
+        let mut paired = MemoryStore::new();
+        paired.seed(FactKey::pair(erin, HEAT, EntityId::from_raw(0)), fact(10));
+        assert_ne!(own.state_hash(), paired.state_hash());
     }
 
     #[test]

@@ -5,7 +5,7 @@
 //! audit trail the causal debugger and the historian read (Vol. V Ch. 6 §6.1). Entries are
 //! written in the `chronicle` stage, after commit — never before (Vol. V Ch. 3 §3.1).
 
-use crate::fact::{Cause, FactType};
+use crate::fact::{Cause, FactKey, FactType};
 use crate::identity::EntityId;
 
 /// A single append-only chronicle entry: a committed change and the cause that produced it
@@ -18,19 +18,21 @@ pub struct ChronicleEntry {
     tick: u64,
     subject: EntityId,
     fact_type: FactType,
+    about: Option<EntityId>,
     cause: Cause,
 }
 
 impl ChronicleEntry {
-    /// Record that `subject`'s `fact_type` changed at `tick`, for the given `cause`.
+    /// Record that the fact at `key` changed at `tick`, for the given `cause`.
     ///
     /// Constructed only in the `chronicle` stage of a committed tick (Vol. V Ch. 3 §3.1);
     /// entries are never fabricated ahead of commit.
-    pub const fn new(tick: u64, subject: EntityId, fact_type: FactType, cause: Cause) -> Self {
+    pub const fn new(tick: u64, key: FactKey, cause: Cause) -> Self {
         Self {
             tick,
-            subject,
-            fact_type,
+            subject: key.entity,
+            fact_type: key.fact_type,
+            about: key.about,
             cause,
         }
     }
@@ -48,6 +50,11 @@ impl ChronicleEntry {
     /// The fact type that changed.
     pub const fn fact_type(&self) -> FactType {
         self.fact_type
+    }
+
+    /// For a fact about a pair, the second entity it is about (Amendment A-7).
+    pub const fn about(&self) -> Option<EntityId> {
+        self.about
     }
 
     /// The event cause the producing proposal asserted.

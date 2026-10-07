@@ -16,4 +16,5 @@ stored (§4.3).
 to markets; money issuance is an explicit institutional act (Ruling 10); production
 consumes real held inputs; distance imposes real cost on all movement of goods (§4.8).
 
-**Appendix A:** Ruling 10 (Economy circulates, Institutions authorize issuance).
+**Appendix A:** Ruling 10 (Economy circulates, Institutions authorize issuance), Ruling 17
+(making: deciders choose what, Economy decides whether — Amendment A-17).

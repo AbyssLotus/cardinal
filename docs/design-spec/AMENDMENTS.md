@@ -129,3 +129,485 @@ nearly twice what timber does (2133 against 1190 kJ/(m³·K)). Measured per kilo
 reference world's timber kitchen lagged the weather *more* than its granite manor — the
 opposite of A-5's promise that a stone cottage keeps the afternoon's warmth into the night.
 
+---
+
+## A-7 — A fact may be about a pair (2026-10)
+
+**Edits:** Vol. V Ch. 2 §2.1 (*A fact may be about a pair*).
+
+**Change.** A fact is addressed by an entity and a fact type, and — optionally — a second entity
+it is *about*. `(Erin, belief.place_of, about Bob) = the kitchen` is one fact: owned, with
+provenance and cardinality like any other, written only through `apply()`. The store reads one
+such fact by its full address, and all of a holder's facts of one type in order of what they are
+about. Facts without a second entity are unchanged, in meaning and in their committed digest.
+
+**Rationale.** The agents plan (`docs/audits/agents.md`, §4.1) needs a place for beliefs, and a
+belief is about a pair: who holds it and what it is about. The spec needs the same shape next for
+one person's opinion of another (Appendix A, Ruling 2), relationships in several dimensions
+(Vol. I Ch. 4 §12), and debts. The alternatives were a new entity per belief, which needs a
+runtime id allocator and an index of its own, or a record-shaped value, which would teach the
+kernel the shapes of domain data.
+
+---
+
+## A-8 — Perception and belief (2026-10)
+
+**Edits:**
+- Vol. II Ch. 4 (*The Layer as Built*)
+- Vol. III Ch. 1 *Constraints Made Concrete* (*What is in view*)
+- Vol. III Ch. 2 §2.2 (sight range)
+- Appendix A (in view)
+- Vol. V Ch. 1 §1.1 (the information layer in the domain layer)
+
+**Change.**
+- **Sight range.** Living Systems declares how far each organism can see.
+- **In view.** On a cadence the world declares, Physical Reality publishes what each body with sight could see: within range, along a clear line, and lit above a threshold the world declares.
+- **Night is dark.** Daylight follows the sun's height, zero from sunset to sunrise. It was a triangle wave from midnight to noon, which left Ashford above the sight threshold for all but about fourteen minutes of the night.
+- **Perception.** The information layer is a new owner of facts with no imports. It turns what is in view into beliefs, held as facts about a pair (A-7):
+  - where things were seen, and what openings were seen to lead to and whether they were open;
+  - how warm the places one has stood in felt;
+  - what one feels of oneself: one's place, one's body heat, where one is going, whether one's way was blocked, and what one was refused.
+- **Memory.** A belief stays current while its subject is in sight. When the subject leaves sight, the belief is stamped with when it was last seen, and is otherwise left alone.
+- **Starting knowledge.** What each mind knows at the start is package data (`[knows]`).
+
+**Rationale.** The agents plan (`docs/audits/agents.md`, §4.3–4.4). Domains never import each other, and sight is Physical's geometry, so Physical publishes the geometric fact and the information layer makes the observation. Confidence derived from age keeps memory exact under replay and free to store.
+
+---
+
+## A-9 — Minds (2026-10)
+
+**Edits:**
+- Appendix A (goals, commitments, routines, traces; Ruling 14)
+- Vol. V Ch. 9 §9.3 (*The reference mind, as built*)
+- Vol. V Ch. 1 §1.1 (decision systems in the domain layer)
+
+**Change.** Decision systems are a new owner of facts with no imports (`domains/minds`).
+- **Reads.** A mind reads only the information layer's facts and its own commitments.
+- **Choosing.** On a cadence the world declares, it scores each place it knows by:
+  - the warmth it remembers there against the cold it feels (its body heat below the world's
+    comfort line), trusted less the older the memory;
+  - the routine the world gives it for the hour;
+  - the number of openings it believes lie on the way.
+- **Commitment.** It keeps a choice until it arrives, unless another beats it by a margin the
+  world declares.
+- **Acting.** It acts by travel and open intents. When its travel is blocked, it walks to the
+  first opening on the way it believes in and opens it.
+- **Tracing.** It records its goal, its reason, and the decisive score.
+- **Package data.** Which entities have minds, how fast they walk, and their daily routines.
+- **A fresh intent outlives the clearing of the old.** If a decider asks for a new destination,
+  or a door opened or shut, in the tick Physical Reality clears the intent it just fulfilled,
+  the new one stands. This is Physical's composition rule for intents. Two deciders asking for
+  different things at once remains a conflict.
+
+**Rationale.** The agents plan (`docs/audits/agents.md`, §4.5), and the project owner's choice
+of warmth and routines as the first goals.
+
+---
+
+## A-10 — Fatigue, health, and death (2026-10)
+
+**Edits:**
+- Vol. III Ch. 2 §2.4 (*Needs*)
+- Appendix A (Ruling 15)
+- Vol. II Ch. 4 (perceiving one's own needs)
+- Vol. V Ch. 9 §9.3 (minds that rest)
+
+**Change.**
+- **Fatigue.** Living Systems tracks fatigue. It rises while awake and falls while resting, at
+  rates the world declares.
+- **Resting** is an intent any decider may propose. Living carries it out only for a still body.
+- **Health** falls under harm from:
+  - cold, as body heat below the world's line;
+  - falls, beyond a safe drop.
+
+  It recovers slowly when unharmed.
+- **Death** is health reaching zero, chronicled with its cause. Metabolism, fatigue, and healing
+  stop. The senses go and travel is cancelled, so perception and thought stop too.
+- **The information layer** lets a mind feel its fatigue and its health.
+- **Minds rest.** A mind with nowhere it wants to go rests when tired, and wakes when rested.
+  Cold wakes it. So does a routine, once it is no longer tired.
+
+**Rationale.** The sweep's D7 (body heat had no consequences) and the agents plan's phase 4
+(competing needs). Vol. III Ch. 2 asks that organisms die of cold through the same architecture
+as wounds, and that life be maintained state, never a flag. So death is an event on a continuous
+measure, not a stored truth.
+
+---
+
+## A-11 — Needs that arise, and love (2026-10)
+
+**Edits:**
+- Vol. III Ch. 2 §2.4 (*Needs that arise*)
+- Vol. III Ch. 5 §5.4 (*Lovers*)
+- Vol. II Ch. 4 (*Absence can be seen*; *Fondness is an opinion*)
+- Appendix A (temperament, needs that arise, bonds)
+
+**Change.**
+- **Needs that arise** (Living Systems).
+  - A need may come into being from what happens, as a fact about a pair: the holder, and what
+    the need is about.
+  - A world declares kinds of need from a closed set of mechanisms. A kind arises from a bond or
+    a dependence, is met by presence or a dose, and has rates of growth and easing, and a harm.
+  - A need ends when what made it arise is gone.
+- **Temperament** (minds). Three traits, declared per mind. Compatibility between two minds is
+  100% less the mean difference of their traits.
+- **Fondness** (information).
+  - It grows while the other is in sight, at the world's rate times their compatibility, and never
+    past their compatibility. It fades while they are apart.
+  - Absence can be seen: in a lit place, a mind lets go of its belief that a person or movable
+    thing is there when it cannot see it.
+  - To know its place is lit, a mind's view now includes the place it stands in when that place
+    is lit (Physical Reality).
+- **Lovers** (Society). A bond forms when fondness is mutual past the world's line. It ends when
+  both have cooled below a lower one.
+- **Minds** feel their arisen needs and are moved by them on the same scale as warmth and routines.
+  A need met by presence takes a mind to where it *believes* its object is.
+
+**Rationale.** The project owner asked that new needs be able to arise, for instance wanting to be
+with a lover, and that love grow from time together, limited by compatibility so not everyone
+falls for everyone (`docs/audits/needs-that-arise.md`).
+
+---
+
+## A-12 — Items: taking, carrying, dropping, consuming (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 *Constraints Made Concrete* (*Handling things*)
+- Appendix A (Ruling 16)
+- Vol. II Ch. 4 (believing what things are made of)
+
+**Change.**
+- **Intents.** Take, drop, and consume are intents any decider may propose. Physical Reality
+  carries them out within reach, as it does opening a door.
+- **Carrying.** A taken thing is held, contained in its holder.
+- **Weight.** It is size times the densest material the thing is made of, against a carrying
+  limit the world declares. A thing whose weight the world does not know is not taken.
+- **Dropping** puts the thing where the holder stands.
+- **Consuming.** Only something held and made entirely of materials a body can take in (a new
+  material property, *edible*) can be consumed. The thing leaves the world: its placement is
+  cleared, and its identity and composition remain. Physical reports what the body consumed.
+- **Perception** believes what seen things are made of.
+
+**Rationale.** The project owner asked for drugs and addiction, and chose to build items first so
+that what is consumed truly leaves the world (Vol. III Ch. 2: consumption is conservative). These
+are also the sweep's M6 and M7, the core verbs of a text game.
+
+---
+
+## A-13 — Substances and addiction (2026-10)
+
+**Edits:**
+- Vol. III Ch. 2 §2.4 (*Dependence*)
+- Vol. III Ch. 1 (*Potency and habit*)
+- Vol. V Ch. 9 §9.3 (minds that seek a dose)
+
+**Change.**
+- **Material properties.** Two new ones: *potency* and *habit*.
+- **Dependence.** When a body consumes something, Living Systems judges the dose from
+  Physical's report. For each habit-forming material in it, the body's dependence on that
+  material (a fact about a pair) rises by the material's habit. Dependence fades at a daily rate
+  the world declares.
+- **Craving.** A need kind that arises from dependence has a line:
+  - past the line, the need comes into being;
+  - it grows at the kind's rate, scaled by how deep the dependence is;
+  - a dose of the material eases it by the kind's measure;
+  - it harms while unmet, as the kind declares;
+  - it ends when dependence falls below the line.
+- **Starting state.** A world may declare the dependences its people start with.
+- **Minds.** A mind that craves looks for things it believes are made of the substance. It goes to
+  where it believes they are, takes one, and consumes it. A mind feels when what it held is gone.
+
+**Rationale.** The project owner asked that needs be able to arise from taking a drug and becoming
+addicted (`docs/audits/needs-that-arise.md`, step 3), built on real items (A-12) so each dose leaves
+the world.
+
+---
+
+## A-14 — Everyone acts, unless directed (2026-10)
+
+**Edits:** Vol. V Ch. 9 §9.3 (*Direction*); Appendix A (direction, under decision systems).
+
+**Change.**
+- **Every organism may have a mind,** and acts on its own.
+- **Direction.** A controller (a player, a recorded model, a test) may *direct* an entity: a mind
+  fact anyone may set.
+- **A directed mind stands aside.** It proposes nothing, so the controller's intents are the
+  entity's only ones. The entity still perceives, its needs still run, and the world still judges
+  its acts.
+- **Timing.** A controller first directs, then commands on the following tick, so a mind and its
+  controller never propose at once.
+- **Release.** A released mind decides for itself again, from what it now believes.
+
+**Rationale.** The project owner asked that agents act autonomously on their needs, wants, and jobs,
+and that everyone be one (`docs/audits/autonomous-agents.md`, phase 1). Direction is how the
+player character, and tests that need someone to do something, coexist with a city of minds.
+
+---
+
+## A-15 — Things come into being (2026-10)
+
+**Edits:**
+- Vol. V Ch. 2 §2.1 (*New identities*)
+- Appendix A (Ruling 16, arriving, leaving, picking)
+- Vol. III Ch. 3 §3.4 (deposits that regrow; picking)
+- Vol. II Ch. 4 (believing a deposit's stock)
+
+**Change.**
+- **New ids.** The kernel issues them to systems. Each is `floor + tick·2²⁴ + slot·2¹⁴ + n`: the
+  slot is the system's place among all systems sorted by id, and `n` counts its requests this
+  tick. That makes ids deterministic, disjoint, and permanent.
+- **Arriving and leaving.** Physical Reality carries out arrival (in a place, or in a hand) and
+  leaving (out of the world) on request. *(A-18: or at a fixture, set down just in front of it,
+  in its place, where one can walk up to it.)*
+- **Picking.** Physical carries out picking within reach of a deposit, and reports it.
+- **Deposits** (Resources). A deposit's stock regrows at a declared rate up to a cap. A reported
+  pick takes one unit and brings a new item into the picker's hand.
+- **Perception** believes how much a seen deposit holds.
+
+**Rationale.** The project owner chose that production create real things
+(`docs/audits/autonomous-agents.md`, phase 2). This is the sweep's M7, which also opens the way
+to births and building.
+
+---
+
+## A-16 — Hunger (2026-10)
+
+**Edits:**
+- Vol. III Ch. 2 §2.4 (*Hunger*)
+- Vol. III Ch. 1 (nutrition, a material property)
+- Vol. II Ch. 4 (believing what is food, and what a deposit yields)
+- Vol. V Ch. 9 §9.3 (minds that eat)
+- Vol. IV Ch. 4 (tick zero is lit as the sun stands)
+
+**Change.**
+- **Hunger** (Living Systems). It rises hourly at the world's rate. Each judged consumption lowers
+  it by the nutrition of what was eaten. Past the world's starvation line it harms health.
+- **Nutrition** is a material property.
+- **Perception** believes:
+  - one's own hunger;
+  - the nutrition of materials seen in things;
+  - what a seen deposit yields.
+- **Minds.** Hungry past the world's line, a mind weighs eating on the same scale as everything
+  else. It considers food in hand, food it believes lies somewhere it knows a way to, and deposits
+  it believes bear food. It goes, takes or picks, and eats.
+- **Generalised.** The fetch-and-consume plan of A-13 now serves any need met by consuming.
+- **A world begins with its light.** Tick zero is a complete initial reality (Vol. IV Ch. 4), and
+  that includes the light it is seen by. The loader seeds each region's
+  illumination as the sun stands at the first moment, from the same rule the day/night cycle
+  follows. Before this, the first tick had no light committed, and unlit counts as lit, so a world
+  that opened at midnight was seen whole for one tick.
+- **Starting knowledge sees deposits.** Deposits are seeded before minds' starting knowledge, so
+  a mind that knows a tree knows what it bears and how much.
+
+**Rationale.** `docs/audits/autonomous-agents.md`, phase 3: the first need met by things that come
+into being.
+
+
+---
+
+## A-17 — Making things (2026-10)
+
+**Edits:**
+- Vol. III Ch. 4 §4.4 (*Production*: recipes, the make intent, time in the making)
+- Appendix A (Ruling 17, making)
+
+**Change.**
+- **Recipes** (Economy) are package data. A recipe names:
+  - what it needs: so many things of each material;
+  - what it makes: a material, and the size of the thing;
+  - where it is made: a workplace, such as a hearth;
+  - how long the thing is in the making.
+- **Making.** A decider proposes that a maker *make* a recipe. Economy judges it:
+  - The maker must stand in the place where the workplace is.
+  - The maker must carry what the recipe needs, and must have nothing else in the making.
+  - If so, the inputs are used up: Economy asks Physical Reality for them to leave the world.
+  - When the time in the making has passed, the product arrives: in the maker's hand if they
+    stand where the workplace is, and otherwise at the workplace, set down in front of it. The
+    maker need not wait.
+  - Otherwise the request is refused, and the refusal is recorded for the decider to notice.
+- **Conservation.** Nothing is made without its inputs, and the inputs are gone before the product
+  exists (Vol. III Ch. 4, invariant 6).
+
+**Rationale.** `docs/audits/autonomous-agents.md`, phase 4. The cook's job (A-18) needs a way to
+turn the orchard's apples into something more. A pie is worth more to the hungry than the apples
+and flour it took.
+
+---
+
+## A-18 — Jobs (2026-10)
+
+**Edits:**
+- Vol. III Ch. 5 §5.4 (*Role*: job kinds, and who holds them)
+- Vol. II Ch. 4 (knowing one's own work; knowing a recipe)
+- Vol. V Ch. 9 §9.3 (minds that work)
+
+**Change.**
+- **Job kinds** (Society) are package data, built from a closed set of mechanisms:
+  - *carry*: bring things of a material from a source (a deposit, or a place) to a store;
+  - *make*: keep a store supplied with what a recipe makes.
+
+  Each job names its store, how many of its goods to keep there, and its hours.
+- **Roles** (Society). A role says who holds which job. Others can plan around it.
+- **Knowing one's work** (Information). A person knows the job they hold, and what it asks, as
+  they know their own body. A mind told of a recipe knows what it needs, what it makes, and where.
+- **Working** (Minds). In its hours, a mind weighs its work on the same scale as everything else,
+  at a worth the world declares. The work is wanted while the store, as the mind believes it,
+  holds fewer goods than the job keeps there, and the mind knows where to get what the work
+  needs. Its plan is reactive, recomputed from beliefs at every step:
+  - *carry*: gather goods from the source until the store would be stocked, take them to the
+    store, and put them down there, one at a time;
+  - *make*: put down any product it carries in the store; otherwise get what the recipe needs
+    that it is not carrying, nearest first; then make the recipe at its workplace.
+
+  Hunger, cold, longing and tiredness still outrank work when they press hard enough.
+- **Sleep.** In the world's sleeping hours, a mind with nothing better to do lies down once at
+  all tired, and stays down until they end unless something calls it. A day's waking and a
+  night's rest then balance as the world's rates intend, instead of everyone tiring at noon.
+- **Giving up.** A mind that tries to get a thing and cannot (the act refused, or the way to it
+  blocked) gives up on it until it learns something newer of where it is. In the dark, a pie
+  someone else has eaten is not sought all night.
+- **The hungry prefer what fills them.** A food's worth to a hungry mind includes how much it is
+  believed to feed, so a pie a room away beats an apple at hand.
+- **Perception, by touch and by eye.**
+  - One knows where one put something down, even in the dark.
+  - One feels how much is left on what one has just picked from.
+  - Standing in a lit place, one notices that a thing one could carry off is no longer there.
+
+**Rationale.** `docs/audits/autonomous-agents.md`, phase 5. The project owner chose
+farm-and-stock and cook as the first jobs. Roles are Society's (Appendix A). The minds read only
+beliefs (Ruling 14), so a person's job reaches its mind the way its hunger does: through what it
+knows of itself.
+
+---
+
+## A-19 — Wants (2026-10)
+
+**Edits:**
+- Vol. III Ch. 4 §4.4 (*Holding*: owners, and claiming what no one owns)
+- Appendix A (Ruling 18, claiming)
+- Vol. II Ch. 4 (believing who owns a thing)
+- Vol. V Ch. 9 §9.3 (minds that want)
+
+**Change.**
+- **Curiosity** (Minds, a disposition). A curious mind is drawn to places it knows a way to but
+  has never stood in. A place it has stood in, or was told of at the start, it knows the feel of,
+  and is no longer curious about. Each mind's curiosity is declared by the world; most have
+  none.
+- **Owners** (Economy). A thing may have an owner. The world declares who owns what at the start.
+- **Claiming.** A decider proposes that someone *claim* a thing. Economy judges it: the claimant
+  must carry the thing, and no one may own it already. Then the claimant owns it. Otherwise the
+  claim is refused, and the refusal recorded.
+- **Believing who owns a thing** (Information). Seen, a thing's owner is believed, as its material
+  is.
+- **Likes and home** (Minds, dispositions). A mind may like some materials, each with a worth, and
+  may have a home: a place.
+- **Wanting** (Minds). When nothing presses, a mind:
+  - carries home what it owns and puts it down there;
+  - fetches what it owns that lies elsewhere;
+  - picks up a thing no one owns, made of something it likes, and claims it.
+
+  A thing's worth to it is how much it likes what the thing is made of. Wants score low, so
+  they fill idle hours.
+- **What is someone else's** is never taken, by any want, hunger, or work: a mind does not reach
+  for a thing it believes another owns.
+
+**Rationale.** `docs/audits/autonomous-agents.md`, phase 6. The project owner chose curiosity and
+possessions as the first wants. Holdings are Economy's (Appendix A); likes and a home are a mind's
+own, as its temperament is (A-11).
+
+---
+
+## A-20 — Levels: quantities that move at a steady rate (2026-10)
+
+**Edits:**
+- Vol. V Ch. 2 §2.2 (*Levels*, beside motion segments)
+- Vol. III Ch. 2 §2.4 (hunger and fatigue are levels)
+- Vol. II Ch. 4 (feeling one's own levels)
+
+**Change.**
+- **A level** is a quantity that moves at a steady rate between events: hunger between meals,
+  fatigue between lying down and getting up. It is one three-component fact, `[value, rate per
+  hour, since tick]`: where it stood, how fast it moves, and since when. Its value at any later
+  tick is derived exactly from the simulated time elapsed, held within the quantity's bounds. It is
+  never stored per tick.
+- **Writing a level.** A level is written only when its rate or its value jumps:
+  - eating lowers hunger by the food's nutrition, from wherever it had reached;
+  - lying down, getting up, or moving changes the rate of fatigue;
+  - death stops both.
+
+  Between such events nothing is written and nothing is chronicled.
+- **Reading a level.** Any domain reads a level the same way, through the kernel's one
+  definition, so every reader agrees on its value at every tick.
+- **Feeling one's levels** (Information). One knows one's own hunger and fatigue as they are: the
+  felt level is the body's level, copied when it changes.
+- **Exact at any tick length.** The value at a moment of simulated time is the same whether the
+  world ticks by the second or by the hour (A-1), with no rounding carried from tick to tick.
+- **A change of course holds from the committed tick.** A meal, lying down, or getting up
+  changes a level from the tick whose state showed it, as a step's rate always held over the
+  step after the state it read.
+- **Tiredness has a margin** (Minds). A felt level is exact, where it used to be noticed only in
+  steps of the world's resolution, and those steps had given a mind getting up for its routine
+  some slack before it felt tired again. That slack is now a world rule: a mind already up and
+  about its routine or work carries on until it is `tired_margin` past the tired line.
+
+**Rationale.** `docs/audits/world-scale.md`, phase 1. Rewriting hunger and fatigue for every
+organism every tick was about a third of everything the chronicle recorded. A city of a million
+cannot afford a write per person per tick for numbers anyone could compute. Motion already works
+this way (A-3).
+
+---
+
+## A-21 — What changed, and what it cost (2026-10)
+
+**Edits:**
+- Vol. V Ch. 2 §2.1 (the store answers what changed)
+- Vol. V Ch. 3 §3.1 (the tick meters its systems)
+- Vol. V Ch. 8 (per-system meters)
+
+**Change.**
+- **What changed.** The committed view answers one more question: *which entities had facts of
+  this type written in the ticks after `t`?*
+  - The answer is sorted, and costs time in proportion to its size.
+  - A store may remember only a window of recent ticks. Asked about something older, it answers
+    *unknown*, never a guess.
+  - A system given *unknown* does all the work it would do without the answer. A system's first
+    evaluation always does all of it, since nothing it computed before can be standing yet.
+  - So no committed fact may depend on how far back a store remembers. That is tested by running a
+    world with the window and without it, and comparing every tick.
+  - A system reads changes only to fact types it declares it reads.
+- **What it cost.** The tick records, for each system it evaluates, how long it took and how many
+  proposals it made. The figures sit outside the simulation: no system reads them and no fact
+  depends on them, so they cannot touch determinism. They are the first of Vol. V Ch. 8's meters.
+
+**Rationale.** `docs/audits/world-scale.md`, phase 1, and §7: work done only for what changed is
+how a world of a million does a city's work, not a million people's. Finding where a tick's time
+goes took an outside profiler; the engine should say.
+
+---
+
+## A-22 — The agenda (2026-10)
+
+**Edits:**
+- Vol. V Ch. 2 §2.1 (the store answers who is due)
+- Vol. V Ch. 3 §3.2 (scheduling by what is due)
+- Vol. I Ch. 4 §7.2 (advance to the next due boundary: built)
+
+**Change.**
+- **Agenda facts.** A domain may declare fact types whose value is a tick: the tick at which an
+  entity is next due for that domain's attention.
+  - A resident's plan step ends then.
+  - A level reaches its line then.
+  - A making is ready then.
+- **Who is due.** The committed view answers *which entities are due, by this fact type, at or
+  before tick t?*, in ascending order of id.
+  - A store may keep an index of agenda facts, so the answer costs time in proportion to its
+    size, not to how many entities hold the fact.
+  - The answer must be the same with the index or without it; it is tested both ways.
+- **Using it.** A system that finds everything it must do through what is due (and, A-21, what
+  changed) does no work for entities with nothing due. The world goes on for them: their levels
+  move, their plans run (A-20), and what is not computed until it matters is computed exactly
+  then.
+
+**Rationale.** `docs/audits/world-scale.md` §8: the city tier's million residents must cost nothing
+until something is due. The spec has asked for this since Vol. I ("the scheduler should advance
+directly to the next due boundary"); this is its kernel primitive.

@@ -1,0 +1,17 @@
+[package]
+name = "information"
+description = "The information layer (Vol. II Ch. 4; Amendment A-8): perception, belief, and memory per mind."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+# LAW (Vol. V Ch. 1 §1.1, rule 2): a domain-layer crate depends on `kernel` ONLY. The
+# information layer reads Physical Reality and Living Systems by their published fact ids,
+# never by importing them (Vol. III Ch. 12 §12.1).
+[dependencies]
+kernel.workspace = true

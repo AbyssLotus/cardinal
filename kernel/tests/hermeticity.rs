@@ -150,8 +150,8 @@ fn stale_basis_is_rejected_and_reality_untouched() {
     let mut chronicle: Vec<ChronicleEntry> = Vec::new();
 
     let before = store.state_hash();
-    // Compute tick 5: every proposal must declare basis 4, the committed tick it read.
-    let result = run_tick(&mut store, &no_domains, &systems, 5, 7, &mut chronicle);
+    // Compute tick 1: every proposal must declare basis 0, the committed tick it read.
+    let result = run_tick(&mut store, &no_domains, &systems, 1, 7, &mut chronicle);
 
     match result {
         Err(TickError::StaleBasis {
@@ -160,7 +160,7 @@ fn stale_basis_is_rejected_and_reality_untouched() {
             found,
         }) => {
             assert_eq!(system, SystemId::new("test.time_traveller"));
-            assert_eq!(expected, 4);
+            assert_eq!(expected, 0);
             assert_eq!(found, 999);
         }
         other => panic!("expected StaleBasis, got {other:?}"),

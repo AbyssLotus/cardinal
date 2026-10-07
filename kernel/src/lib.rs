@@ -31,6 +31,7 @@ pub mod fixed;
 pub mod hash;
 pub mod hierarchy;
 pub mod identity;
+pub mod level;
 pub mod proposal;
 pub mod rng;
 pub mod spatial;

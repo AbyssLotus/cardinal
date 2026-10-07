@@ -128,6 +128,26 @@ pub fn compose_entity_ref(
     ))
 }
 
+/// Resolve a decider's intent naming an entity — where to travel, what to open or shut
+/// (Ruling 13; Amendment A-9). As [`compose_entity_ref`], except that a fresh intent outlives
+/// the clearing of the old one: when a decider asks for something new in the very tick Physical
+/// Reality clears the intent it has just fulfilled (or considered), the new wish stands. Two
+/// deciders asking for different things at once is still a conflict.
+pub fn compose_intent(
+    current: Option<Value>,
+    changes: &[Change],
+) -> Result<Resolved, ResolveError> {
+    let wishes: Vec<Change> = changes
+        .iter()
+        .copied()
+        .filter(|c| !matches!(c, Change::Tombstone))
+        .collect();
+    if wishes.is_empty() || wishes.len() == changes.len() {
+        return compose_entity_ref(current, changes);
+    }
+    compose_entity_ref(current, &wishes)
+}
+
 /// Resolve a three-component fact — a position, a size, a motion target (Amendment A-3): at
 /// most one `Set`/`Create` replaces the whole value (two competing ones fail, as for any
 /// single-valued fact), a `Tombstone` clears it, and nothing else applies — a position is moved

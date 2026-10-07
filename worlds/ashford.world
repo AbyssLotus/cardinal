@@ -27,7 +27,7 @@
 id = world.ashford
 version = 0.1.0
 engine = >=0.0, <1.0
-domains = physical, living
+domains = physical, living, information, minds, society, resources, economy
 
 [clock]
 # A text world: one tick is one simulated second.
@@ -54,12 +54,58 @@ max_slope_percent = 100
 nav_cell_cm = 50
 reach_cm = 75
 indoor_coupling_seconds = 14400
+sight_step_seconds = 1              # what each body can see, refreshed every second
+sight_min_illumination = 50         # below 0.5% of full daylight, nothing can be made out
+carry_limit_kg = 25                 # the most anyone can carry
 
 [rules.living]
 metabolism_step_seconds = 60
 set_point_centi_c = 3700
 warm_response_seconds = 21600
 cold_response_seconds = 10800
+tire_per_hour = 450                 # 4.5% more tired for each waking hour: tired by bedtime
+rest_per_hour = 1250                # 12.5% less for each hour of rest
+hypothermia_below_centi_c = 1200    # body heat below which the cold does harm
+cold_harm_per_degree_hour = 500     # 5% of health per degree below it, per hour
+safe_fall_cm = 200                  # a drop of 2 m does no harm
+fall_harm_per_metre = 2000          # 20% of health for each metre beyond it
+heal_per_hour = 100                 # 1% of health back each hour nothing harms
+dependence_fade_per_day = 1500      # 15% less dependent for each day without
+hunger_per_hour = 200               # 2% hungrier for each hour
+starving_above = 9000               # past 90% hungry: starving
+starving_harm_per_hour = 100        # 1% of health lost each hour starving
+
+[rules.information]
+perception_step_seconds = 1
+warmth_resolution_centi_c = 50      # half a degree: the least change of warmth anyone notices
+need_resolution = 200               # 2%: the least change of tiredness or health anyone notices
+affection_step_seconds = 600        # fondness grows or fades every ten minutes
+affection_per_hour = 400            # 4% fonder for each hour in sight, at perfect compatibility
+affection_fade_per_day = 500        # 5% cooler for each day apart
+
+[rules.minds]
+think_step_seconds = 5              # each mind weighs its choices every five seconds
+cold_below_centi_c = 2300           # body heat below which a mind feels cold
+trust_half_age_seconds = 172800     # a two-day-old memory is trusted half as much as a fresh one
+hop_cost = 20                       # what each opening on the way costs a choice
+routine_value = 300                 # what keeping a routine is worth
+switch_margin = 100                 # how much better a new choice must be to change one's mind
+tired_above = 7000                  # tired: rests when it has nowhere to be; routines can wait
+rested_below = 1500                 # rested: gets up
+tired_margin = 500                  # up and about, carries on 5% past the tired line: about an hour
+need_above = 3000                   # a longing or craving felt past 30% moves a mind
+need_weight = 20                    # what each hundredth of a percent past that is worth
+hungry_above = 4000                 # past 40% hungry, a mind goes looking for food
+work_value = 250                    # what working one's job is worth, in its hours
+sleep_hours = 22-6                  # the hours a mind with nothing to do sleeps, once at all tired
+
+[rules.resources]
+regrow_step_seconds = 600           # fruit ripens in ten-minute steps
+
+[rules.society]
+courtship_step_seconds = 600
+bond_above = 7000                   # both this fond of each other: lovers
+part_below = 3000                   # both this cool: they part
 
 # ---- The nesting -------------------------------------------------------------------------
 
@@ -72,6 +118,7 @@ cold_response_seconds = 10800
 400 = 1300, 5300        # the mine mouth (on the Hill)
 401 = 1100, 5300        # the deep gallery
 402 = 1500, 5300        # the miners' cabin
+103 = 2000              # Alice's kitchen, still warm from last night's stove
 
 # Places that only hold other places: no climate of their own.
 [places]
@@ -101,6 +148,32 @@ cold_response_seconds = 10800
 111 = 100               # a stone by the shed
 120 = 103               # the kitchen table
 121 = 103               # the lamp
+3000 = 103              # an apple, on the floor by Bob
+3100 = 100              # the apple tree, at the far end of the yard
+122 = 103               # the hearth
+3005 = 100              # a green glass bottle, lying in the yard
+# Food for those the orchard is beyond (Amendment A-19, a week in Ashford)
+3101 = 301                 # the manor pantry, in the hall
+3102 = 102                 # a crate of windfall apples in the cellar
+3103 = 140                 # the rider's provisions, in the cart
+3104 = 2                   # a bilberry patch on Highmoor
+3105 = 3                   # a cranberry bog on Southfen
+3106 = 500                 # the Heron's stores
+3107 = 13                  # a barrel of smoked fish by the harbour gate
+3108 = 601                 # the farmhouse larder
+3109 = 604                 # the miller's loaves
+3110 = 603                 # brambles in the wood
+3111 = 12                  # a bush at the foot of the Hill
+3112 = 12                  # a bush in the west valley
+3113 = 12                  # a bush in the east valley
+3114 = 12                  # a bush on the ridgeline
+3115 = 12                  # a bush below the cliff
+3116 = 12                  # a bush by the boulder
+123 = 103               # the flour bin, by the hearth
+3001 = 302              # four vials of poppy tincture, on a shelf in the manor undercroft
+3002 = 302
+3003 = 302
+3004 = 302
 130 = 100               # the hay wagon
 140 = 100               # the cart
 2020 = 100              # the wardrobe, waiting to be carried in
@@ -144,6 +217,31 @@ cold_response_seconds = 10800
 111 = 300, -400, 0
 120 = 0, 0, 0
 121 = 300, 0, 0
+3000 = 0, 380, 0
+3001 = 300, 300, 0
+3100 = -1200, 600, 0
+122 = -400, 300, 0
+3005 = -300, -300, 0
+3101 = 100, 150, 0
+3102 = 100, 0, 0
+3103 = 0, 60, 0
+3104 = 60, 0, 0
+3105 = 60, 0, 0
+3106 = 100, 250, 0
+3107 = 1100, 100, 0
+3108 = 150, 0, 0
+3109 = 150, 0, 0
+3110 = 60, 0, 0
+3111 = 560, 1000, 50
+3112 = 2560, 2000, 300
+3113 = 5560, 2000, 300
+3114 = 4060, 2000, 1500
+3115 = 2860, 1000, 300
+3116 = 1560, 3000, 500
+123 = -400, 100, 0
+3002 = 320, 300, 0
+3003 = 340, 300, 0
+3004 = 360, 300, 0
 130 = 500, 400, 0
 140 = -500, 0, 0
 2020 = 1100, 900, 0
@@ -187,6 +285,7 @@ cold_response_seconds = 10800
 2013 = 1000, 500, 0         # Finn, on the doorstep
 2014 = 1000, 500, 0         # Gwen, on the doorstep beside him
 2015 = 0, 0, 0              # the steward, in the manor hall
+2016 = 200, 0, 0            # Ned, the manor's lodger
 2030 = 0, 0, 0              # a rider, in the cart
 2040 = 0, 0, 0              # Hal, a shepherd on Highmoor
 2041 = 0, 0, 0              # Ida, out on Southfen
@@ -304,6 +403,8 @@ cold_response_seconds = 10800
 130 = 100, 150, 300     # the hay wagon, piled high
 140 = 80, 120, 100      # the cart
 2020 = 60, 30, 200      # the wardrobe: 1.2 m wide
+121 = 6, 6, 30          # the lamp: a glass lamp, 12 cm across and 30 cm tall (11 kg)
+3000 = 4, 4, 8          # the apple (400 g)
 210 = 100, 100, 300     # the boulder
 500 = 300, 1500, 800    # the Heron: 6 m beam, 30 m long
 2001 = 25, 15, 165      # people
@@ -315,6 +416,31 @@ cold_response_seconds = 10800
 2013 = 25, 15, 175
 2014 = 25, 15, 170
 2015 = 25, 15, 175
+2016 = 25, 15, 172
+3100 = 50, 50, 400      # the apple tree: a metre across, four metres tall
+122 = 60, 40, 100       # the hearth: 1.2 m wide, a metre high
+3005 = 3, 3, 20          # the bottle: 6 cm across, 20 cm tall (1.8 kg)
+3101 = 30, 30, 60
+3102 = 30, 30, 60
+3103 = 20, 20, 30
+3104 = 40, 40, 100
+3105 = 40, 40, 100
+3106 = 30, 30, 60
+3107 = 30, 30, 60
+3108 = 30, 30, 60
+3109 = 30, 30, 60
+3110 = 40, 40, 100
+3111 = 40, 40, 100
+3112 = 40, 40, 100
+3113 = 40, 40, 100
+3114 = 40, 40, 100
+3115 = 40, 40, 100
+3116 = 40, 40, 100
+123 = 30, 30, 90        # the flour bin
+3001 = 3, 3, 12         # a vial of tincture (300 g)
+3002 = 3, 3, 12
+3003 = 3, 3, 12
+3004 = 3, 3, 12
 2030 = 25, 15, 170
 2040 = 25, 15, 180
 2041 = 25, 15, 165
@@ -366,6 +492,9 @@ cold_response_seconds = 10800
 1012 = closed
 110 = solid, opaque     # the shed
 120 = solid             # tables
+3100 = solid            # the apple tree
+122 = solid             # the hearth
+123 = solid             # the flour bin
 203 = solid
 130 = solid, opaque     # the hay wagon
 210 = solid, opaque     # the boulder
@@ -383,6 +512,7 @@ cold_response_seconds = 10800
 2013 = mobile
 2014 = mobile
 2015 = mobile
+2016 = mobile
 2030 = mobile
 2040 = mobile
 2041 = mobile
@@ -422,6 +552,7 @@ cold_response_seconds = 10800
 2013 = 100, 3700
 2014 = 100, 3700
 2015 = 301, 3700
+2016 = 301, 3700
 2030 = 140, 3700
 2040 = 2, 3700
 2041 = 3, 3700
@@ -438,14 +569,145 @@ cold_response_seconds = 10800
 2083 = 12, 3700
 2084 = 12, 3700
 
+# ---- Senses and starting knowledge -------------------------------------------------------
+[senses]
+# organism = how far it can see, cm
+2001 = 3000             # people: 30 m
+2002 = 3000
+2003 = 3000
+2004 = 3000
+2005 = 3000
+2010 = 2000             # the cat
+2011 = 3000
+2012 = 1500             # the raccoon
+2013 = 3000
+2014 = 3000
+2015 = 3000
+2016 = 3000
+2030 = 3000
+2040 = 3000
+2041 = 3000
+2050 = 3000
+2051 = 3000
+2052 = 3000
+2060 = 3000
+2061 = 3000             # the fox
+2062 = 3000
+2070 = 3000
+2080 = 3000
+2081 = 3000
+2082 = 3000
+2083 = 3000
+2084 = 3000
+
+[knows]
+# mind = what it knows at the start: where each thing is; where an opening leads and whether
+# it is open; how warm a place's air is
+2001 = 100, 101, 102, 103, 104, 1001, 1002, 1007, 1008, 2002, 2004, 3100    # Alice: her house, Bob, Dave
+2002 = 100, 102, 103, 104, 1001, 1002, 1007, 1008, 1009, 1010, 3100, 122, 123, 950   # Bob: the house, the hearth, and the pie
+2004 = 103, 104, 1007, 1008, 2002, 3100                                      # Dave: upstairs, and Bob below
+2005 = 100, 103, 104, 1001, 1002, 1007, 1008, 1009, 1010, 3100                 # Erin: the yard, the kitchen door, the stairs up to her bedroom
+2003 = 100, 3100, 103, 1001, 1002                                     # Carol: the yard, its tree, the kitchen door
+2011 = 100                                                             # the courier: only the yard
+2015 = 300, 301, 302, 303, 1101, 1102, 1103, 1104, 1105, 1106, 3101   # the steward: the manor
+2016 = 300, 301, 302, 303, 1103, 1104, 3001, 3002, 3003, 3004, 3101   # Ned: the manor, and the vials
+2070 = 12, 200, 201, 202, 1201, 1202, 1203, 1204, 3111   # the villager: home
+2052 = 13, 510, 511, 512, 3107   # the guard: the harbour
+2013 = 100, 103, 1001, 1002, 3100                                            # Finn: the yard and the kitchen door
+2014 = 100, 102, 103, 1001, 1002, 1009, 1010, 3100                           # Gwen: and the cellar stairs
+2012 = 102, 3102                                                       # the raccoon: the cellar and its crate
+2030 = 140, 3103                                                       # the rider: the cart and his provisions
+2040 = 2, 3104                                                         # Hal: the moor and its bilberries
+2041 = 3, 3105                                                         # Ida: the fen and its cranberries
+2050 = 500, 3106                                                       # the captain: her ship and its stores
+2051 = 500, 3106                                                       # the bosun likewise
+2060 = 601, 3108                                                       # the farmer: the farmhouse and its larder
+2061 = 603, 3110                                                       # the fox: the wood and its brambles
+2062 = 604, 3109                                                       # the miller: the mill and his loaves
+2080 = 12, 3112                                                        # Jory: the west valley's bush
+2081 = 12, 3113                                                        # Kit: the east valley's bush
+2082 = 12, 3114                                                        # Lena: the ridgeline's bush
+2083 = 12, 3115                                                        # the hiker: the bush below the cliff
+2084 = 12, 3116                                                        # Nell: the bush by the boulder
+
+# ---- Minds -------------------------------------------------------------------------------
+[minds]
+# Everyone acts on their own (Amendment A-14).
+# mind = how fast it walks when it chooses to go somewhere, cm/s
+2001 = 140              # Alice
+2002 = 140              # Bob
+2003 = 140              # Carol
+2004 = 140              # Dave
+2005 = 140              # Erin
+2010 = 300              # the cat
+2011 = 140              # the courier
+2012 = 100              # the raccoon
+2013 = 140              # Finn
+2014 = 140              # Gwen
+2015 = 140              # the steward
+2016 = 140              # Ned
+2030 = 140              # the rider
+2040 = 140              # Hal
+2041 = 140              # Ida
+2050 = 140              # the captain
+2051 = 140              # the bosun
+2052 = 140              # the harbour guard
+2060 = 140              # the farmer
+2061 = 250              # the fox
+2062 = 140              # the miller
+2070 = 140              # the villager
+2080 = 140              # Jory
+2081 = 140              # Kit
+2082 = 140              # Lena
+2083 = 140              # the hiker
+2084 = 140              # Nell
+
+[temperament]
+# mind = three traits; how alike they are bounds how fond two minds can grow
+2013 = 7000, 4000, 6000 # Finn
+2014 = 6500, 4500, 6000 # Gwen: very like Finn (97% compatible)
+2011 = 1000, 9000, 1500 # the courier: unlike them both (under 50%)
+2005 = 1500, 1500, 9000 # Erin: not unlike them (63%), but not alike enough for love
+
+[need_kinds]
+# kind = what makes it arise, what meets it, and its rates (per hour) and harm (per hour, in full)
+800 = arises:bond, met_by:presence, rise:1500, ease:3000, harm:0     # longing
+801 = arises:dependence, above:3000, met_by:dose, rise:800, ease:7000, harm:50   # craving
+
+[dependence]
+# organism = substance, how dependent at the start
+2016 = 705, 4000        # Ned has taken poppy before
+
+[routines]
+# mind = from hour, to hour, where the world says it belongs
+2052 = 6, 18, 510       # the guard keeps the gate by day
+2052 = 18, 22, 511      # and the well in the evening
+
 # ---- Materials ---------------------------------------------------------------------------
 [materials]
 700 = density:700, hardness:3000, flammability:7000, thermal_capacity:1700    # timber
 701 = density:2500, hardness:5500, flammability:0, thermal_capacity:840        # glass
 702 = density:7870, hardness:9000, flammability:0, conductivity:8000           # iron
 703 = density:2700, hardness:7000, flammability:0, thermal_capacity:790        # granite
+704 = density:800, hardness:500, flammability:2000, edible:10000, nutrition:3000   # apple
+705 = density:1000, hardness:0, flammability:3000, edible:10000, potency:8000, habit:2500   # poppy tincture
+706 = density:600, hardness:0, flammability:3000                              # flour
+707 = density:600, hardness:500, flammability:2000, edible:10000, nutrition:9000   # pie
+708 = density:600, hardness:0, flammability:1000, edible:10000, nutrition:1500    # berries
+709 = density:300, hardness:300, flammability:3000, edible:10000, nutrition:5000  # bread
+710 = density:900, hardness:500, flammability:1000, edible:10000, nutrition:4000  # smoked fish
 
 [made_of]
+121 = 701               # the lamp: glass
+122 = 703               # the hearth: granite
+3005 = 701              # the bottle: glass
+123 = 700               # the flour bin: timber
+3000 = 704              # the apple
+3001 = 705              # the vials: poppy tincture
+3002 = 705
+3003 = 705
+3004 = 705
+2020 = 700              # the wardrobe: timber (a tonne of it)
 103 = 700               # Alice's kitchen and bedroom: timber
 104 = 700
 102 = 703               # her cellar: granite
@@ -468,3 +730,55 @@ cold_response_seconds = 10800
 604 = 901, 903          # so does the mill, which also sits in the frost hollow
 603 = 902               # the wood is the fox's run...
 602 = 902, 903          # ...and so is the far field, which is frost-hollow ground too
+
+# ---- Deposits (Amendment A-15) -----------------------------------------------------------
+[deposits]
+# deposit = what each unit is made of and its size, how many ripen a day, the most it holds,
+# and how many it holds now
+3100 = made_of:704, size:4x4x8, per_day:20, cap:30, stock:6     # the apple tree
+3101 = made_of:709, size:8x8x6, per_day:3, cap:6, stock:4     # the manor pantry, in the hall
+3102 = made_of:704, size:4x4x8, per_day:2, cap:6, stock:4     # a crate of windfall apples in the cellar
+3103 = made_of:709, size:8x8x6, per_day:0, cap:8, stock:8     # the rider's provisions, in the cart
+3104 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bilberry patch on Highmoor
+3105 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a cranberry bog on Southfen
+3106 = made_of:709, size:8x8x6, per_day:3, cap:6, stock:4     # the Heron's stores
+3107 = made_of:710, size:10x4x4, per_day:2, cap:6, stock:4     # a barrel of smoked fish at the harbour gate
+3108 = made_of:709, size:8x8x6, per_day:2, cap:6, stock:4     # the farmhouse larder
+3109 = made_of:709, size:8x8x6, per_day:2, cap:6, stock:4     # the miller's loaves
+3110 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # brambles in the wood
+3111 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush at the foot of the Hill
+3112 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush in the west valley
+3113 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush in the east valley
+3114 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush on the ridgeline
+3115 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush below the cliff
+3116 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush by the boulder
+123 = made_of:706, size:5x5x5, per_day:3, cap:20, stock:20     # the flour bin: the mill sends three scoops a day
+
+# ---- Making (Amendment A-17) ---------------------------------------------------------------
+[recipes]
+# recipe = what it needs (material x how many), what it makes and how big, where, and how long
+950 = needs:704x2 706x1, makes:707, size:10x10x5, at:122, takes:3600    # an apple pie, at the hearth
+
+# ---- Work (Amendment A-18) ------------------------------------------------------------------
+[jobs]
+# job = carry a material from a source, or make a recipe; the store it keeps, how many, and when
+960 = carry:704, from:3100, to:103, keep:6, hours:6-18     # the orchard round: apples to the kitchen
+961 = make:950, to:103, keep:2, hours:8-20                  # the baking: pies for the kitchen
+
+[roles]
+2003 = 960              # Carol works the orchard
+2002 = 961              # Bob bakes
+
+# ---- Wants (Amendment A-19) -----------------------------------------------------------------
+[owners]
+121 = 2002              # the lamp is Bob's
+
+[curiosity]
+2011 = 100              # the courier wonders what lies past the doors he sees
+
+[likes]
+2005 = 701:150          # Erin likes glass
+
+[home]
+2005 = 104              # Erin keeps her things in the bedroom
+

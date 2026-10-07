@@ -47,6 +47,10 @@ Six clauses give it teeth:
 - **Conformance.** Every spatial query answered through the index returns exactly what the same query answers by scanning committed facts, in the same order. The index changes cost, never answers; a conformance suite holds every query to it.
 - **No opinions.** The index is a mirror of committed facts, rebuilt from them at will. Nothing writes it but `apply()`; no system may treat it as a second source of truth, and a system that reads through it must declare every fact type the placement rule watches in its read set (Chapter 3 §3.5).
 
+**New identities** *(Amendment A-15)*. A system that brings something into being asks the kernel for a new id. It gets one never issued before and never to be issued again, numbered above every id an authored world uses. Ids are deterministic: the same system, in the same tick of the same world, receives the same ids on every replay, and two systems never receive the same one. Clause 4 holds as before: ids are permanent, and an entity that leaves the world is tombstoned, never renumbered.
+
+**A fact may be about a pair** *(Amendment A-7)*. Most facts belong to one entity: the kitchen's temperature, Bob's position. Some belong to two at once, and to neither alone: what Erin believes about where Bob is, how far Erin trusts Bob, what Erin owes Bob. Such a fact is addressed by its **holder**, its fact type, and the entity it is **about** — `(Erin, belief.place_of, about Bob)` — and is otherwise an ordinary fact: one owner, provenance, cardinality, composition, the one mutation path. `read(holder, fact_type, about)` reads one; `read_about(holder, fact_type)` reads all of a holder's facts of a type, ordered by what they are about. A pair is not a relationship *entity*: it needs no identity of its own, and it ends when it is cleared. The kernel learns nothing about beliefs or trust — only that an address may carry a second entity.
+
 ---
 
 # 2.2 The Design Space
@@ -95,6 +99,15 @@ COLD  — chronicle + snapshots: persistence formats (Ch. 7)
 ```
 
 Systems iterate the hot tier at array speed; `apply()` writes hot and appends warm; snapshots and history serve from warm/cold. The fact model remains the *logical truth*; the tiers are how it goes fast. All clause obligations (provenance, consistency, single path) are enforced at the contract, so tiers can be rebalanced — or a tier's technology replaced — invisibly.
+
+## What Is Never Stored Per Tick
+
+Some truths change continuously, but predictably. Storing them every tick would make the store and the chronicle grow with *time × things*, though nothing anyone could not compute has happened.
+
+- **Motion** *(Amendment A-3)*: a body in motion is one segment, a target with departure and arrival ticks. Its position at any tick is derived.
+- **Levels** *(Amendment A-20)*: a quantity moving at a steady rate is `[value, rate per hour, since tick]`. Its value at any tick is derived, exactly, from simulated time; one kernel definition serves every reader.
+
+Either is written only when it changes course. A still world, and a world going steadily about its business, writes almost nothing.
 
 ---
 

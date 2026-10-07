@@ -39,6 +39,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "information"
+version = "0.0.0"
+dependencies = [
+ "kernel",
+]
+
+[[package]]
 name = "institutions"
 version = "0.0.0"
 dependencies = [
@@ -64,6 +71,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "minds"
+version = "0.0.0"
+dependencies = [
+ "kernel",
+]
+
+[[package]]
 name = "narrator"
 version = "0.0.0"
 dependencies = [
@@ -81,9 +95,14 @@ dependencies = [
 name = "packages"
 version = "0.0.0"
 dependencies = [
+ "economy",
+ "information",
  "kernel",
  "living",
+ "minds",
  "physical",
+ "resources",
+ "society",
 ]
 
 [[package]]
@@ -104,10 +123,15 @@ dependencies = [
 name = "reference"
 version = "0.0.0"
 dependencies = [
+ "economy",
+ "information",
  "kernel",
  "living",
+ "minds",
  "packages",
  "physical",
+ "resources",
+ "society",
 ]
 
 [[package]]

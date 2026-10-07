@@ -17,6 +17,15 @@ pub struct WorldPackage {
     pub physical_rules: PhysicalRules,
     /// Tunable rules for the living domain, present only if the domain is selected.
     pub living_rules: Option<LivingRules>,
+    /// Tunable rules for the information layer, present only if it is selected (Amendment
+    /// A-8).
+    pub information_rules: Option<InformationRules>,
+    /// Tunable rules for decision systems, present only if minds are selected (Amendment A-9).
+    pub minds_rules: Option<MindsRules>,
+    /// Tunable rules for Society's bonds, present only if Society is selected (Amendment A-11).
+    pub society_rules: Option<SocietyRules>,
+    /// Tunable rules for deposits, present only if Resources is selected (Amendment A-15).
+    pub resources_rules: Option<ResourcesRules>,
     /// The regions the world begins with.
     pub regions: Vec<RegionSpec>,
     /// The organisms the world begins with (living domain), each placed in a region.
@@ -66,6 +75,49 @@ pub struct WorldPackage {
     /// of its own; it, and everything in it without one, inherits the nearest enclosing climate
     /// (Amendment A-5).
     pub places: Vec<(u64, Option<u64>)>,
+    /// How far each organism can see, in centimetres (Living Systems' sensory capability,
+    /// Amendment A-8): `(organism, sight range)`. An organism absent here perceives nothing.
+    pub senses: Vec<(u64, i64)>,
+    /// What each mind knows at the start (Amendment A-8; Vol. IV Ch. 5): `(mind, things)`.
+    /// For each thing, where it is; for an opening, also where it leads and whether it is open;
+    /// for a place, also how warm its air is.
+    pub knows: Vec<(u64, Vec<u64>)>,
+    /// Which entities have minds, and how fast each walks when it chooses to go somewhere
+    /// (cm/s): `(mind, walk speed)` (Amendment A-9).
+    pub minds: Vec<(u64, i64)>,
+    /// Each mind's temperament: `(mind, [three traits])`, each in hundredths of a percent
+    /// (Amendment A-11).
+    pub temperament: Vec<(u64, [i64; 3])>,
+    /// The kinds of need that can arise (Amendment A-11), each an entity with its rules.
+    pub need_kinds: Vec<NeedKindSpec>,
+    /// Deposits that regrow and yield items when picked (Amendment A-15).
+    pub deposits: Vec<DepositSpec>,
+    /// Recipes: what makers make, from what, where, and how long it takes (Amendment A-17).
+    pub recipes: Vec<RecipeSpec>,
+    /// Job kinds: the work the world declares (Amendment A-18).
+    pub jobs: Vec<JobSpec>,
+    /// Roles: who holds which job, `(person, job)` (Amendment A-18).
+    pub roles: Vec<(u64, u64)>,
+    /// Who owns what at the start: `(thing, owner)` (Amendment A-19).
+    pub owners: Vec<(u64, u64)>,
+    /// How curious each mind is: `(mind, worth of seeing a place it has never stood in)`
+    /// (Amendment A-19). Absent: incurious.
+    pub curiosity: Vec<(u64, i64)>,
+    /// What each mind likes: `(mind, material, worth)` (Amendment A-19).
+    pub likes: Vec<(u64, u64, i64)>,
+    /// Where each mind keeps what it owns: `(mind, place)` (Amendment A-19).
+    pub home: Vec<(u64, u64)>,
+    /// How hungry each organism is at the start (Amendment A-16): `(organism, hunger)`. Absent:
+    /// fed.
+    pub hunger: Vec<(u64, i64)>,
+    /// The dependences organisms start with (Amendment A-13): `(organism, material, level)`.
+    pub dependence: Vec<(u64, u64, i64)>,
+    /// How tired each organism is at the start, in hundredths of a percent (Amendment A-10):
+    /// `(organism, fatigue)`. An organism absent here starts rested.
+    pub fatigue: Vec<(u64, i64)>,
+    /// Daily routines: `(mind, from hour, to hour, where)` — where the world says a mind belongs
+    /// between those hours (a window that wraps past midnight when `from > to`).
+    pub routines: Vec<(u64, i64, i64, u64)>,
 }
 
 /// A constraint flag a world may set on an entity (Amendment A-4).
@@ -183,6 +235,14 @@ pub enum MaterialProperty {
     Conductivity,
     /// Toxicity, 0..=10000.
     Toxicity,
+    /// How far it can be taken into a body, 0..=10000 (Amendment A-12).
+    Edible,
+    /// How strongly a dose acts on a body, 0..=10000 (Amendment A-13).
+    Potency,
+    /// How much dependence a dose builds, 0..=10000 (Amendment A-13).
+    Habit,
+    /// How much a unit feeds a body, 0..=10000 (Amendment A-16).
+    Nutrition,
 }
 
 /// One material the world defines (Vol. III Ch. 1 §1.9): a material entity and the properties
@@ -276,6 +336,172 @@ pub struct PhysicalRules {
     pub reach_cm: i64,
     /// Time constant of a sheltered room's air following the air outside it, in seconds.
     pub indoor_coupling_seconds: u64,
+    /// How often what each sighted body can see is refreshed, in seconds (Amendment A-8).
+    pub sight_step_seconds: u64,
+    /// The least illumination, in hundredths of a percent, in which a thing can be seen.
+    pub sight_min_illumination: i64,
+    /// The most a body can carry, in kilograms (Amendment A-12).
+    pub carry_limit_kg: i64,
+}
+
+/// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MindsRules {
+    /// How often a mind thinks, in seconds of simulated time.
+    pub think_step_seconds: u64,
+    /// Body heat, in centidegrees, below which a mind feels cold.
+    pub cold_below_centi_c: i64,
+    /// The age, in seconds, at which a belief is trusted half as much as a fresh one.
+    pub trust_half_age_seconds: u64,
+    /// What each opening on the way costs a choice.
+    pub hop_cost: i64,
+    /// What keeping a routine is worth.
+    pub routine_value: i64,
+    /// How much better a new choice must be before a mind abandons the one it has made.
+    pub switch_margin: i64,
+    /// Fatigue above which a mind is tired (Amendment A-10).
+    pub tired_above: i64,
+    /// Fatigue below which a resting mind is rested.
+    pub rested_below: i64,
+    /// How strongly a need that arose must be felt before it moves a mind (Amendment A-11).
+    pub need_above: i64,
+    /// What each hundredth of a percent of need beyond that line is worth, in percent.
+    pub need_weight: i64,
+    /// Hunger past which a mind goes looking for food (Amendment A-16).
+    pub hungry_above: i64,
+    /// What working one's job is worth, in its hours (Amendment A-18).
+    pub work_value: i64,
+    /// How far past the tired line a mind up and about its routine or work carries on
+    /// (Amendment A-20).
+    pub tired_margin: i64,
+    /// The world's sleeping hours, `(from, to)` in whole hours; wrapping past midnight when
+    /// `from > to` (Amendment A-18).
+    pub sleep_hours: (i64, i64),
+}
+
+/// Tunable rules deposits follow (Amendment A-15).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ResourcesRules {
+    /// How often deposits regrow, in seconds.
+    pub regrow_step_seconds: u64,
+}
+
+/// A deposit: a thing in the world holding a stock that regrows, and yields an item per pick
+/// (Amendment A-15).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct DepositSpec {
+    /// The deposit's entity id.
+    pub id: u64,
+    /// What each unit is made of (a material id).
+    pub made_of: u64,
+    /// Each unit's size, `[half-width, half-depth, height]`, cm.
+    pub size: [i64; 3],
+    /// Units regrown per day.
+    pub per_day: i64,
+    /// The most units it holds.
+    pub cap: i64,
+    /// Units it holds at the start.
+    pub stock: i64,
+}
+
+/// A recipe: what it needs, what it makes, where, and how long the making takes
+/// (Amendment A-17).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct RecipeSpec {
+    /// The recipe's entity id.
+    pub id: u64,
+    /// What it needs: `(material, how many things made of it)`.
+    pub needs: Vec<(u64, i64)>,
+    /// What the product is made of (a material id).
+    pub makes: u64,
+    /// The product's size, `[half-width, half-depth, height]`, cm.
+    pub size: [i64; 3],
+    /// The workplace it is made at.
+    pub at: u64,
+    /// How long the product is in the making, in seconds.
+    pub takes_seconds: i64,
+}
+
+/// What a job does (Amendment A-18): one of the engine's closed set of mechanisms.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum JobWork {
+    /// Bring things of a material from a source (a deposit, or a place) to the store.
+    Carry {
+        /// The material carried.
+        material: u64,
+        /// Where it is got from.
+        from: u64,
+    },
+    /// Keep the store supplied with what a recipe makes.
+    Make {
+        /// The recipe.
+        recipe: u64,
+    },
+}
+
+/// A kind of job (Amendment A-18).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct JobSpec {
+    /// The job's entity id.
+    pub id: u64,
+    /// What it does.
+    pub work: JobWork,
+    /// Its store: the place its goods go to.
+    pub to: u64,
+    /// How many goods it keeps in the store.
+    pub keep: i64,
+    /// Its hours, `(from, to)` in whole hours of the day; wrapping past midnight when
+    /// `from > to`.
+    pub hours: (i64, i64),
+}
+
+/// Tunable rules Society's bonds follow (Amendment A-11).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SocietyRules {
+    /// How often bonds are made and broken, in seconds.
+    pub courtship_step_seconds: u64,
+    /// Fondness, both ways, past which two persons become lovers.
+    pub bond_above: i64,
+    /// Fondness, both ways, below which lovers part.
+    pub part_below: i64,
+}
+
+/// A kind of need that can arise (Amendment A-11): what makes it arise, what meets it, and its
+/// rates, from the engine's closed set of mechanisms.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct NeedKindSpec {
+    /// The kind's entity id.
+    pub id: u64,
+    /// 1, from a bond; 2, from a dependence.
+    pub arises: i64,
+    /// 1, by presence; 2, by a dose.
+    pub met_by: i64,
+    /// Growth per hour unmet, hundredths of a percent.
+    pub rise: i64,
+    /// Easing per hour met.
+    pub ease: i64,
+    /// Health lost per hour, felt in full.
+    pub harm: i64,
+    /// For a kind that arises from dependence, the dependence past which it arises (0 for
+    /// others; Amendment A-13).
+    pub above: i64,
+}
+
+/// Tunable rules the information layer consumes (Vol. IV Ch. 2 §2.2; Amendment A-8).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct InformationRules {
+    /// How often minds perceive, in seconds of simulated time.
+    pub perception_step_seconds: u64,
+    /// The least change of warmth, in centidegrees, a mind notices.
+    pub warmth_resolution_centi_c: i64,
+    /// The least change of fatigue or health, in hundredths of a percent, a mind notices.
+    pub need_resolution: i64,
+    /// How often fondness grows or fades, in seconds (Amendment A-11).
+    pub affection_step_seconds: u64,
+    /// Fondness gained per hour in another's sight, at full compatibility.
+    pub affection_per_hour: i64,
+    /// Fondness lost per day out of another's sight.
+    pub affection_fade_per_day: i64,
 }
 
 /// Tunable metabolic rules the living domain consumes (Vol. IV Ch. 2 §2.2), as time constants
@@ -290,6 +516,28 @@ pub struct LivingRules {
     pub warm_response_seconds: u64,
     /// Time constant of the pull toward ambient temperature, in seconds (larger = slower).
     pub cold_response_seconds: u64,
+    /// Fatigue gathered per waking hour, in hundredths of a percent (Amendment A-10).
+    pub tire_per_hour: i64,
+    /// Fatigue shed per hour of rest.
+    pub rest_per_hour: i64,
+    /// Body heat, in centidegrees, below which the cold harms.
+    pub hypothermia_below_centi_c: i64,
+    /// Health lost per degree below that line, per hour.
+    pub cold_harm_per_degree_hour: i64,
+    /// The highest fall, in centimetres, that does no harm.
+    pub safe_fall_cm: i64,
+    /// Health lost per metre fallen beyond the safe drop.
+    pub fall_harm_per_metre: i64,
+    /// Health recovered per hour while nothing harms.
+    pub heal_per_hour: i64,
+    /// Dependence lost per day without the substance (Amendment A-13).
+    pub dependence_fade_per_day: i64,
+    /// Hunger gathered per hour (Amendment A-16).
+    pub hunger_per_hour: i64,
+    /// Hunger past which a body is starving.
+    pub starving_above: i64,
+    /// Health lost per hour while starving.
+    pub starving_harm_per_hour: i64,
 }
 
 /// One region the world begins with (Vol. IV Ch. 4, generation): an id, a starting

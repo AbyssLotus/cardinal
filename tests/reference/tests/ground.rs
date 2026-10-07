@@ -10,7 +10,7 @@ use reference::{e, City};
 
 #[test]
 fn the_hill_blends_between_its_samples() {
-    let city = City::new();
+    let city = City::quiet();
     let s = city.store();
     assert_eq!(ground(s, e(HILL), 0, 0), 0);
     assert_eq!(
@@ -41,7 +41,7 @@ fn the_hill_blends_between_its_samples() {
 
 #[test]
 fn heights_are_measured_from_the_ground_beneath() {
-    let city = City::new();
+    let city = City::quiet();
     let s = city.store();
     // The villager at the foot of the Hill stands on it, half a metre above the datum.
     assert_eq!(height_above_ground(s, e(VILLAGER)), 0);
@@ -58,7 +58,7 @@ fn heights_are_measured_from_the_ground_beneath() {
 
 #[test]
 fn each_opening_is_as_dangerous_as_its_drop() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.run(1);
     let danger = |portal| city.int(portal, PORTAL_DANGER).unwrap();
     // 15 danger points per centimetre of drop (1500 per metre), measured where one lands.

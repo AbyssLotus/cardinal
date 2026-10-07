@@ -30,11 +30,13 @@ Generation is a pure function:
 (sealed package, scenario selection, seed) → initial committed reality
 ```
 
-Three clauses give the contract its teeth:
+Four clauses give the contract its teeth:
 
 **Determinism.** Same package, same scenario, same seed: byte-identical world. Generation draws from the seeded stream architecture of Volume II — substreams per layer, so terrain generation and family generation cannot perturb each other.
 
 **Validity.** The output is a committed reality satisfying every invariant of Volumes II and III: one owner per fact, referential integrity, populations with causes (their cause is the generation event), conservation from tick zero forward. Chapter 7's validators run against generated output exactly as against authored content.
+
+**Completeness.** Tick zero holds every fact the first tick reads, derived ones included. A world that opens at midnight opens dark: its light is seeded as the sun stands, by the same rule that moves it afterwards. What its people know at the start is read from the world as seeded, so a person who knows a tree knows what it bears. *(Amendment A-16.)*
 
 **Termination of privilege.** Generation may place a mountain without erosion, a family without a wedding, a grudge without a crime. It is the only writer with that power, and the power expires at commit. Post-generation, every change flows through systems, proposals, and the scheduler — no tool, no scenario, no later content update may write reality directly again.
 

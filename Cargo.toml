@@ -28,6 +28,11 @@ members = [
     "domains/institutions",
     "domains/ecology",
 
+    # The information layer (Vol. II Ch. 4) and decision systems, in the domain layer
+    # (Amendments A-8, A-9).
+    "domains/information",
+    "domains/minds",
+
     # services/ — operate AROUND the world (read-only / persistence).
     "services/persistence",
     "services/packages",
@@ -65,6 +70,8 @@ knowledge    = { path = "domains/knowledge" }
 conflict     = { path = "domains/conflict" }
 institutions = { path = "domains/institutions" }
 ecology      = { path = "domains/ecology" }
+information  = { path = "domains/information" }
+minds        = { path = "domains/minds" }
 persistence  = { path = "services/persistence" }
 packages     = { path = "services/packages" }
 observe      = { path = "services/observe" }

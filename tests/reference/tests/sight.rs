@@ -17,7 +17,7 @@ fn sees(city: &City, who: u64, what: u64) -> bool {
 
 #[test]
 fn dave_at_the_window_sees_the_yard_but_not_through_the_floor() {
-    let city = City::new();
+    let city = City::quiet();
     // Through the bedroom window — shut, but glass — down to Erin in the yard, and back.
     assert!(sees(&city, DAVE, ERIN));
     assert!(sees(&city, ERIN, DAVE));
@@ -35,7 +35,7 @@ fn dave_at_the_window_sees_the_yard_but_not_through_the_floor() {
 
 #[test]
 fn an_open_door_shows_the_kitchen_and_a_shut_one_hides_it() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     // Finn, on the doorstep, sees Bob just inside the open front door.
     assert!(sees(&city, FINN, BOB));
     // Bob shuts the door — an opaque door — and Finn can no longer see him.
@@ -75,7 +75,7 @@ impl System for Curtains {
 
 #[test]
 fn drawn_curtains_hide_the_yard() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     city.attach(Box::new(Curtains));
     city.run(1);
     assert!(!sees(&city, DAVE, ERIN));
@@ -83,7 +83,7 @@ fn drawn_curtains_hide_the_yard() {
 
 #[test]
 fn the_hay_wagon_hides_the_courier_from_erin() {
-    let city = City::new();
+    let city = City::quiet();
     // The wagon stands between Erin and the courier; the cat is off to one side of it.
     assert!(!sees(&city, ERIN, COURIER));
     assert!(sees(&city, ERIN, CAT));
@@ -91,7 +91,7 @@ fn the_hay_wagon_hides_the_courier_from_erin() {
 
 #[test]
 fn the_ridge_hides_one_valley_from_the_next() {
-    let city = City::new();
+    let city = City::quiet();
     assert!(!sees(&city, JORY, KIT), "the ridge is in the way");
     assert!(
         sees(&city, LENA, JORY),
@@ -102,6 +102,16 @@ fn the_ridge_hides_one_valley_from_the_next() {
 
 #[test]
 fn the_cottage_walls_hide_its_kitchen() {
-    let city = City::new();
+    let city = City::quiet();
     assert!(!sees(&city, VILLAGER, COTTAGE_TABLE));
+}
+
+#[test]
+fn one_sees_what_one_holds_and_what_one_rides_in() {
+    // When one end of a line holds the other, there are no walls between them.
+    let mut city = City::quiet();
+    city.take(BOB, APPLE);
+    city.run(2);
+    assert!(sees(&city, BOB, APPLE), "the apple in his hand");
+    assert!(sees(&city, RIDER, CART), "the cart under the rider");
 }

@@ -80,6 +80,22 @@ May a model decide what an NPC does? The architecture's answer: yes, in exactly 
 
 **The condition.** Determinism (Ch. 4) does not bend. A sampled model is a nondeterminism door, so an LLM-in-the-loop mind must either (a) be *recorded*: its outputs captured as inputs in the chronicle, making replay exact (the model is then formally an input source, like a player — which is the honest description); or (b) run in study/companion contexts explicitly outside the deterministic guarantee, never in reference worlds or tested saves. There is no third mode; "mostly deterministic" is Chapter 4's tolerated flake wearing a mind.
 
+**The reference mind, as built** *(Amendment A-9)*.
+- **What it sees.** A mind reads its beliefs and its own commitments, never reality (Appendix A,
+  Ruling 14).
+- **When it thinks.** On a cadence the world declares, staggered by mind.
+- **How it chooses.** It weighs each place it knows: the warmth it remembers there against the
+  cold it feels, trusted less the older the memory; the routine the world gives it for the hour;
+  and the cost of the way it believes leads there. It keeps its choice unless something clearly
+  better appears.
+- **How it acts.** By the intents a player would use. When the way it believed open proves shut,
+  it walks to the opening and opens it.
+- **What it leaves behind.** A trace of what it chose, why, and how strongly.
+
+**Direction** *(Amendment A-14)*. Every organism may have a mind, and every mind acts on its own unless it is *directed*: bound to an outside controller — a player, a recorded model, a test — whose commands arrive as intents through the input door. While directed, the entity's own mind stands aside. It still perceives, its body still needs and tires, and the world still judges every act. A direction is taken up the tick after it is given, so a controller and a mind never ask for two things at once. Released, the mind decides for itself again.
+
+**What it lives by** *(Amendments A-16, A-18)*. A mind weighs every pressure on one scale: the cold it feels, the routine of the hour, a longing or craving, hunger, and its work. Hunger sends it to food it believes in; it takes or picks it, and eats. Its work, in the hours its job keeps, sends it to gather what the job needs and bring it to the job's store, or to make what the store lacks at the workplace. Each plan is recomputed from beliefs at every step, so an emptied shelf or a shut door is met by the next thought. *(Amendment A-19.)* When nothing presses, its wants fill the hours: a curious mind goes to see places it knows a way to but has never stood in, and a mind that likes a material picks up what no one owns that is made of it, claims it, and keeps it at home. It never reaches for what it believes is someone else's.
+
 **The default.** Utility-based deterministic decision systems (the current engine's agents) remain the reference for the population at large — cheap, testable, tunable by rules. Model-backed minds are a *garnish for depth* (a named character's dialogue-driven choices, recorded as inputs), not the crowd's machinery. A thousand LLM wolves is a cost model and a replay problem; one LLM chancellor, recorded, is a feature.
 
 ---

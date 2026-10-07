@@ -87,3 +87,27 @@ mod tests {
         assert!(err.is_err());
     }
 }
+
+/// Compose proposals for a single-valued piece of state — a capability such as sight range
+/// (Amendment A-8), fatigue, health, or the rest intent (Amendment A-10): one `Set` or `Create`
+/// replaces it, a `Tombstone` removes it, and two competing sets are a conflict. Each of these
+/// has exactly one writer per organism per step — the system that owns its rule, or the decider
+/// whose intent it is.
+pub fn compose_capability(
+    current: Option<Value>,
+    changes: &[Change],
+) -> Result<Resolved, ResolveError> {
+    match changes {
+        [] => current
+            .map(Resolved::Write)
+            .ok_or(ResolveError::new("no capability to keep")),
+        [Change::Set(v) | Change::Create(v)] => Ok(Resolved::Write(*v)),
+        [Change::Tombstone] => Ok(Resolved::Tombstone),
+        [_] => Err(ResolveError::new(
+            "this state is set or removed, never adjusted",
+        )),
+        _ => Err(ResolveError::new(
+            "competing capability proposals with no declared tie-break",
+        )),
+    }
+}

@@ -764,6 +764,20 @@ Physical Reality's own constraints are facts about bodies and places, and every 
 
 **Thermal mass** *(Amendment A-6)* is the heat a region's material stores per unit volume — its density times its specific heat. The more it stores, the less the day and the weather move the region's temperature, and the longer an indoor room takes to follow the air outside: a granite hall answers the afternoon later than a timber kitchen, though timber holds more heat per kilogram.
 
+**What is in view** *(Amendment A-8)*. For every body with sight (a sensory capability Living Systems declares), Physical Reality publishes what it could see: everything within its sight range along a clear line (see *What can be seen?*) that stands in light enough to see by. The light is the ambient illumination of the place where the seen thing stands, against a threshold the world declares. The report is refreshed on a cadence the world declares, and written only where it changes. It is a fact about space and light, owned here. What a mind *makes* of it is the information layer's (Vol. II Ch. 4). For light to bound sight, **night is dark**: the sun's light follows its height in the sky, full at noon and nothing from sunset to sunrise.
+
+**Handling things** *(Amendment A-12; Appendix A, Ruling 16)*.
+- **Taking.** A body takes a thing within its reach by holding it: the thing is then contained in
+  the body, and goes where the body goes.
+- **Weight.** A thing can be taken only if its weight is known and within what the world says a
+  body can carry. Its weight is its size times the density of what it is made of.
+- **Dropping** puts a held thing down where the holder stands.
+- **Consuming** a held thing made of something a body can take in removes it from the world. It
+  is nowhere afterwards, though its identity and history remain. The consumer is told what it
+  consumed, so Living Systems can judge what that does to it.
+
+**Potency and habit** *(Amendment A-13)* are material properties. Potency is how strongly a dose of the material acts on a body; habit is how much dependence each dose builds. Like every material property they are characteristics, not names. What they do to a body is Living Systems' to judge.
+
 **Height above the ground** *(Amendment A-5)* is measured from the ground directly beneath — the terrain of the nearest enclosing place that has terrain, or the outermost frame's floor where none does. A door at the foot of a hillside cottage is at ground level, however high the hill; the loft is a storey above the hillside, not a storey above sea level.
 
 **Travel** obeys all of these. A body given somewhere to go — a place to enter or a thing to reach — is moved by Physical Reality: from region to region through openings it fits and that are open, and within a region around whatever is solid, at the speed it was asked to travel, one straight segment at a time. Two bodies cannot squeeze through one opening on the same tick; the one with the lower id goes first. When no way exists, the travel is reported blocked — a fact a decider can read and reconsider — rather than silently abandoned or impossibly completed.

@@ -9,13 +9,13 @@ use physical::materials::{
 };
 use physical::nearby::{contents, in_box, nearest, within};
 use physical::regions::{is_within, members_of, overlaps, regions_of, shared_regions};
-use physical::schema::{MOTION_END, MOTION_START, MOTION_TARGET, POSITION};
+use physical::schema::{CONTAINED_IN, MOTION_END, MOTION_START, MOTION_TARGET, POSITION};
 use physical::space::{
     distance, heading_in, height_above_ground, local_position, position_in, relative_bearing,
     relative_position,
 };
 use reference::id::*;
-use reference::{e, City};
+use reference::{e, without_minds, City};
 use std::collections::BTreeSet;
 
 fn ids<I: IntoIterator<Item = kernel::identity::EntityId>>(set: I) -> Vec<u64> {
@@ -24,7 +24,7 @@ fn ids<I: IntoIterator<Item = kernel::identity::EntityId>>(set: I) -> Vec<u64> {
 
 #[test]
 fn everyone_has_a_place_relative_to_everyone_else() {
-    let city = City::new();
+    let city = City::quiet();
     let s = city.store();
     // Alice stands 1 m in and 1 m north in her bedroom, which is a storey up her house, which
     // is 10 m east in Old Town: in the city's terms she is at (11 m, 1 m, 3 m).
@@ -55,7 +55,7 @@ fn everyone_has_a_place_relative_to_everyone_else() {
 
 #[test]
 fn facing_says_what_is_ahead_and_what_is_behind() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     // Dave faces west, out of the bedroom window: it is dead ahead, and Alice is behind him.
     let s = city.store();
     assert_eq!(relative_bearing(s, e(DAVE), e(BEDROOM_WINDOW)), Some(0));
@@ -75,7 +75,7 @@ fn facing_says_what_is_ahead_and_what_is_behind() {
 
 #[test]
 fn when_the_heron_comes_about_her_deck_turns_with_her() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     let s = city.store();
     // Bow north: the captain, 5 m forward, is 5 m north of the mast in harbour terms.
     assert_eq!(
@@ -106,7 +106,7 @@ fn when_the_heron_comes_about_her_deck_turns_with_her() {
 
 #[test]
 fn bodies_fill_their_size() {
-    let city = City::new();
+    let city = City::quiet();
     let s = city.store();
     // A box over the kitchen table's north end finds the table, though its base is elsewhere.
     let north_end = Aabb::new([-10, 120, 0], [10, 140, 10]);
@@ -118,13 +118,13 @@ fn bodies_fill_their_size() {
 
 #[test]
 fn who_is_near_alice() {
-    let city = City::new();
+    let city = City::quiet();
     let s = city.store();
     // Within 6 m, nearest first — measured straight through floors and walls, because
     // nearness is geometry (whether she can *see* or *reach* them are other questions): the
-    // kitchen below and its table, the lamp, Bob, the cat out in the yard, both faces of the
-    // front door and the cellar bulkhead's outer face, Finn and Gwen on the doorstep, Dave, and
-    // the stairs down. Not her own bedroom or house — she is in those, not near them.
+    // kitchen below and its table, the lamp, the apple on the floor, Bob, the cat out in the
+    // yard, both faces of the front door and the cellar bulkhead's outer face, Finn and Gwen on
+    // the doorstep, Dave, the flour bin by the hearth, and the stairs down. Not her own bedroom or house — she is in those, not near them.
     let near: Vec<(u64, i64)> = within(s, e(ALICE), 600)
         .into_iter()
         .map(|(x, d)| (x.raw(), d))
@@ -135,6 +135,7 @@ fn who_is_near_alice() {
             (KITCHEN, 331),
             (TABLE, 331),
             (LAMP, 374),
+            (APPLE, 422),
             (BOB, 449),
             (CAT, 500),
             (DOOR_OUT, 509),
@@ -143,6 +144,7 @@ fn who_is_near_alice() {
             (FINN, 509),
             (GWEN, 509),
             (DAVE, 539),
+            (FLOUR_BIN, 583),
             (STAIRS_DOWN, 583),
         ]
     );
@@ -159,7 +161,7 @@ fn who_is_near_alice() {
 
 #[test]
 fn the_nesting_answers_where_and_within_what() {
-    let city = City::new();
+    let city = City::quiet();
     let s = city.store();
     let alice: BTreeSet<u64> = ids(regions_of(s, e(ALICE))).into_iter().collect();
     for place in [BEDROOM, HOUSE, OLD_TOWN, ASHFORD, VALE, REACH, TEMPERATE] {
@@ -172,17 +174,17 @@ fn the_nesting_answers_where_and_within_what() {
 
 #[test]
 fn millside_lies_in_regions_that_overlap_without_nesting() {
-    let city = City::new();
+    let city = City::quiet();
     let s = city.store();
     // The fox runs the wood and the farm's far field: the run and the farm overlap at the
     // field, though neither lies within the other.
     assert!(overlaps(s, e(FOX_RUN), e(FARM)));
     assert!(!is_within(s, e(FARM), e(FOX_RUN)));
     assert!(!overlaps(s, e(FOX_RUN), e(FARMHOUSE)));
-    // The frost hollow is the field and the mill, which do not touch.
+    // The frost hollow is the field and the mill, which do not touch — and what is in the mill.
     assert_eq!(
         ids(members_of(s, e(FROST_HOLLOW))),
-        vec![FAR_FIELD, MILL, MILLER]
+        vec![FAR_FIELD, MILL, MILLER, MILLERS_LOAVES]
     );
     // The farmer and the miller live on different holdings but drink from one river.
     let shared: Vec<u64> = ids(shared_regions(s, e(FARMER), e(MILLER)));
@@ -192,9 +194,9 @@ fn millside_lies_in_regions_that_overlap_without_nesting() {
 
 #[test]
 fn the_rolling_cart_carries_its_rider_without_writing_them() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     // The cart was already rolling west at the start: 30 m in 30 s. Ten seconds on, it and
-    // its rider are 10 m along, and nothing was written for the rider.
+    // its rider are 10 m along, and nothing was written to move the rider.
     city.run(10);
     let s = city.store();
     assert_eq!(position_in(s, e(RIDER), e(OLD_TOWN)), Some([-1_500, 0, 0]));
@@ -203,15 +205,23 @@ fn the_rolling_cart_carries_its_rider_without_writing_them() {
         [0, 0, 0],
         "still on the cart's bed"
     );
+    // Nothing about where the rider is was written; they did watch the town go by.
+    let placed = [
+        POSITION,
+        CONTAINED_IN,
+        MOTION_START,
+        MOTION_END,
+        MOTION_TARGET,
+    ];
     assert!(city
         .chronicle
         .iter()
-        .all(|c| c.subject() != e(RIDER) || c.fact_type() == living::schema::BODY_HEAT));
+        .all(|c| c.subject() != e(RIDER) || !placed.contains(&c.fact_type())));
 }
 
 #[test]
 fn where_one_is_from_the_other_is_where_the_other_is_from_the_one_reversed() {
-    let city = City::new();
+    let city = City::quiet();
     let s = city.store();
     for (a, b) in [(ALICE, HAL), (BOB, CAPTAIN), (RACCOON, NELL), (FOX, LENA)] {
         let there = relative_position(s, e(a), e(b)).unwrap();
@@ -224,7 +234,7 @@ fn where_one_is_from_the_other_is_where_the_other_is_from_the_one_reversed() {
 
 #[test]
 fn what_things_are_made_of() {
-    let city = City::new();
+    let city = City::quiet();
     let s = city.store();
     // The front door is timber banded with iron: as strong as its timber, as flammable as its
     // timber.
@@ -249,7 +259,7 @@ fn regions_that_lie_in_each_other_do_not_trap_the_question() {
     // Ashford, with the fox's run declared to lie in the frost hollow and the hollow in the run.
     let text =
         reference::ASHFORD.replacen("[in_region]\n", "[in_region]\n902 = 903\n903 = 902\n", 1);
-    let city = City::from(packages::parse_world(&text).unwrap());
+    let city = City::from(without_minds(packages::parse_world(&text).unwrap()));
     let s = city.store();
     let fox = ids(regions_of(s, e(FOX)));
     assert!(fox.contains(&FOX_RUN) && fox.contains(&FROST_HOLLOW));
@@ -259,7 +269,7 @@ fn regions_that_lie_in_each_other_do_not_trap_the_question() {
 
 #[test]
 fn the_cart_writes_its_motion_when_it_sets_off_and_when_it_stops_and_never_between() {
-    let mut city = City::new();
+    let mut city = City::quiet();
     let cart_writes = |city: &City| {
         city.chronicle
             .iter()

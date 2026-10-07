@@ -85,6 +85,9 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     declared.extend(package.exposure.iter().map(|x| x.region_id));
     declared.extend(package.in_region.iter().map(|m| m.location_id));
     declared.extend(package.places.iter().map(|(p, _)| *p));
+    // Recipes and jobs are entities too, which a mind can be told of (Amendments A-17, A-18).
+    declared.extend(package.recipes.iter().map(|r| r.id));
+    declared.extend(package.jobs.iter().map(|j| j.id));
     // Classification regions are made by being named (§1.7).
     declared.extend(package.in_region.iter().map(|m| m.region_id));
     let portals: BTreeSet<u64> = package.portals.iter().map(|p| p.portal_id).collect();
@@ -122,12 +125,131 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     for t in &package.travel {
         must_exist(t.entity_id, t.target, "its travel destination");
     }
+    for &(organism, _) in &package.senses {
+        must_exist(organism, organism, "the organism given sight");
+    }
+    for &(organism, _) in &package.fatigue {
+        must_exist(organism, organism, "the organism given fatigue");
+    }
+    for &(who, _, _) in &package.dependence {
+        must_exist(who, who, "the organism given a dependence");
+    }
+    for &(who, _) in &package.temperament {
+        must_exist(who, who, "the mind given a temperament");
+    }
+    for &(who, _) in &package.minds {
+        must_exist(who, who, "the entity given a mind");
+    }
+    for &(who, _, _, target) in &package.routines {
+        must_exist(who, who, "the mind given a routine");
+        must_exist(who, target, "the place its routine takes it to");
+    }
+    for r in &package.recipes {
+        must_exist(r.id, r.at, "the workplace it is made at");
+    }
+    for j in &package.jobs {
+        must_exist(j.id, j.to, "the store it keeps");
+        if let crate::model::JobWork::Carry { from, .. } = j.work {
+            must_exist(j.id, from, "where it gets its goods");
+        }
+    }
+    for &(who, _) in &package.roles {
+        must_exist(who, who, "the person given a role");
+    }
+    for &(thing, owner) in &package.owners {
+        must_exist(thing, thing, "the thing given an owner");
+        must_exist(thing, owner, "its owner");
+    }
+    for &(who, _) in &package.curiosity {
+        must_exist(who, who, "the mind given curiosity");
+    }
+    for &(who, _, _) in &package.likes {
+        must_exist(who, who, "the mind given likes");
+    }
+    for &(who, place) in &package.home {
+        must_exist(who, who, "the mind given a home");
+        must_exist(who, place, "its home");
+    }
+    for (mind, things) in &package.knows {
+        must_exist(*mind, *mind, "the mind given knowledge");
+        for &thing in things {
+            must_exist(*mind, thing, "the thing it knows of");
+        }
+    }
     for m in &package.made_of {
         if !materials.contains(&m.material_id) {
             problem(
                 Layer::Reference,
                 m.object_id,
                 format!("material {} is not declared in [materials]", m.material_id),
+            );
+        }
+    }
+    for &(who, material, _) in &package.dependence {
+        if !materials.contains(&material) {
+            problem(
+                Layer::Reference,
+                who,
+                format!("material {material} is not declared in [materials]"),
+            );
+        }
+    }
+    for j in &package.jobs {
+        match j.work {
+            crate::model::JobWork::Carry { material, .. } if !materials.contains(&material) => {
+                problem(
+                    Layer::Reference,
+                    j.id,
+                    format!("material {material} is not declared in [materials]"),
+                );
+            }
+            crate::model::JobWork::Make { recipe }
+                if !package.recipes.iter().any(|r| r.id == recipe) =>
+            {
+                problem(
+                    Layer::Reference,
+                    j.id,
+                    format!("recipe {recipe} is not declared in [recipes]"),
+                );
+            }
+            _ => {}
+        }
+    }
+    for &(who, material, _) in &package.likes {
+        if !materials.contains(&material) {
+            problem(
+                Layer::Reference,
+                who,
+                format!("material {material} is not declared in [materials]"),
+            );
+        }
+    }
+    for &(who, job) in &package.roles {
+        if !package.jobs.iter().any(|j| j.id == job) {
+            problem(
+                Layer::Reference,
+                who,
+                format!("job {job} is not declared in [jobs]"),
+            );
+        }
+    }
+    for r in &package.recipes {
+        for material in r.needs.iter().map(|(m, _)| *m).chain([r.makes]) {
+            if !materials.contains(&material) {
+                problem(
+                    Layer::Reference,
+                    r.id,
+                    format!("material {material} is not declared in [materials]"),
+                );
+            }
+        }
+    }
+    for d in &package.deposits {
+        if !materials.contains(&d.made_of) {
+            problem(
+                Layer::Reference,
+                d.id,
+                format!("material {} is not declared in [materials]", d.made_of),
             );
         }
     }
@@ -230,6 +352,32 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
             "[portal_danger]",
             package.portal_danger.iter().map(|d| d.portal_id).collect(),
         ),
+    );
+    once(
+        "starting fatigue",
+        single("[fatigue]", package.fatigue.iter().map(|f| f.0).collect()),
+    );
+    once(
+        "temperament",
+        single(
+            "[temperament]",
+            package.temperament.iter().map(|t| t.0).collect(),
+        ),
+    );
+    once(
+        "need kind",
+        single(
+            "[need_kinds]",
+            package.need_kinds.iter().map(|k| k.id).collect(),
+        ),
+    );
+    once(
+        "mind",
+        single("[minds]", package.minds.iter().map(|m| m.0).collect()),
+    );
+    once(
+        "sight range",
+        single("[senses]", package.senses.iter().map(|s| s.0).collect()),
     );
     once(
         "material properties",

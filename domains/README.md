@@ -21,6 +21,13 @@ Ch. 3 (systems as hermetic transformations).
 | `institutions/` | Ch. 9 | offices, laws, jurisdiction, legitimacy, treaties, succession |
 | `ecology/` | Ch. 10 | populations, food webs, carrying capacity, migration, individuation |
 
+Beside them, under the same law (Amendments A-8, A-9):
+
+| Directory | Spec | Owns |
+|---|---|---|
+| `information/` | Vol. II Ch. 4 | what each mind observes, believes, and remembers (beliefs are facts about a pair, A-7) |
+| `minds/` | Appendix A, Ruling 14 | what each mind is committed to — goal, plan step, routines — and the trace of why; reads beliefs only |
+
 Each domain directory follows the same internal shape (Vol. V Ch. 1 §1.3):
 
 ```text

@@ -18,8 +18,10 @@
 
 use crate::index::{container_of, size_of};
 use crate::schema::{
-    ACT_CLOSE, ACT_FACE, ACT_OPEN, ACT_REFUSED, BODY_SIZE, CONTAINED_IN, HEADING, LEADS_TO, MOBILE,
-    MOTION_END, MOTION_START, MOTION_TARGET, PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION,
+    ACT_ARRIVE, ACT_CLOSE, ACT_CONSUME, ACT_DROP, ACT_FACE, ACT_LEAVE, ACT_OPEN, ACT_PICK,
+    ACT_REFUSED, ACT_TAKE, BODY_SIZE, CONSUMED, CONTAINED_IN, ENCLOSED, HEADING, LEADS_TO, MADE_OF,
+    MATERIAL_DENSITY, MATERIAL_EDIBLE, MOBILE, MOTION_END, MOTION_START, MOTION_TARGET, PICKED,
+    PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION, SOLID,
 };
 use crate::space::{far_side, local_position, portal_destination};
 use crate::terrain::is_true;
@@ -31,7 +33,11 @@ use kernel::system::{Cadence, CommittedView, System, TickContext};
 use kernel::value::Value;
 use std::collections::BTreeMap;
 
+/// How far in front of a fixture a thing arriving at it is set down, beyond both their edges, cm.
+const ARRIVAL_GAP_CM: i64 = 5;
+
 const ACT_READS: &[FactType] = &[
+    SOLID,
     ACT_OPEN,
     ACT_CLOSE,
     ACT_FACE,
@@ -47,6 +53,16 @@ const ACT_READS: &[FactType] = &[
     LEADS_TO,
     PORTAL_FAR_SIDE,
     PORTAL_OPEN,
+    ACT_TAKE,
+    ACT_DROP,
+    ACT_CONSUME,
+    ACT_ARRIVE,
+    ACT_LEAVE,
+    ACT_PICK,
+    ENCLOSED,
+    MADE_OF,
+    MATERIAL_DENSITY,
+    MATERIAL_EDIBLE,
 ];
 const ACT_WRITES: &[FactType] = &[
     ACT_OPEN,
@@ -55,17 +71,54 @@ const ACT_WRITES: &[FactType] = &[
     ACT_REFUSED,
     PORTAL_OPEN,
     HEADING,
+    ACT_TAKE,
+    ACT_DROP,
+    ACT_CONSUME,
+    CONTAINED_IN,
+    POSITION,
+    CONSUMED,
+    ACT_ARRIVE,
+    ACT_LEAVE,
+    ACT_PICK,
+    PICKED,
 ];
 
-/// Carries out open, shut, and face intents (Amendment A-5).
+/// Carries out open, shut, and face intents (Amendment A-5), and take, drop, and consume
+/// (Amendment A-12; Appendix A, Ruling 16):
+///
+/// - **take** — a thing in the body's place, within its reach, not moving, not an opening or a
+///   walled place, whose weight is known and no more than the world's carrying limit, and not
+///   taken by anyone else this tick (the lower id first). It is then held: contained in the
+///   body, at its centre;
+/// - **drop** — a thing the body holds, put down where the body stands;
+/// - **consume** — a thing the body holds, made entirely of edible materials. It leaves the
+///   world (its place is cleared; its identity and composition remain), and the body's
+///   [`CONSUMED`] report names it.
 pub struct Act {
     reach_cm: i64,
+    carry_limit_g: i64,
 }
 
 impl Act {
-    /// Acts within `reach_cm` beyond a body's own extent (a world rule).
-    pub const fn new(reach_cm: i64) -> Self {
-        Self { reach_cm }
+    /// Acts within `reach_cm` beyond a body's own extent, and carries no more than
+    /// `carry_limit_kg` (world rules).
+    pub const fn new(reach_cm: i64, carry_limit_kg: i64) -> Self {
+        Self {
+            reach_cm,
+            carry_limit_g: carry_limit_kg.saturating_mul(1000),
+        }
+    }
+
+    /// Why `body` cannot take `thing` now, or `None` if it can.
+    fn cannot_take(&self, view: &dyn CommittedView, body: EntityId, thing: EntityId) -> Option<()> {
+        let unfit = thing == body
+            || view.read(FactKey::new(thing, LEADS_TO)).is_some()
+            || is_true(view, thing, ENCLOSED)
+            || view.read(FactKey::new(thing, MOTION_TARGET)).is_some()
+            || !self.within_reach(view, body, thing);
+        let bearable =
+            crate::materials::weight_g(view, thing).is_some_and(|g| g <= self.carry_limit_g);
+        (unfit || !bearable).then_some(())
     }
 
     /// Whether `body` can reach door face `portal`: same region, and close enough.
@@ -130,13 +183,61 @@ impl System for Act {
         };
         // Every body with any intent, in ascending id: the lower id acts first on a shared door.
         let mut actors: Vec<EntityId> = Vec::new();
-        for fact in [ACT_OPEN, ACT_CLOSE, ACT_FACE] {
+        for fact in [
+            ACT_OPEN,
+            ACT_CLOSE,
+            ACT_FACE,
+            ACT_TAKE,
+            ACT_DROP,
+            ACT_CONSUME,
+            ACT_PICK,
+        ] {
             actors.extend(view.entities_with(fact));
         }
         actors.sort_unstable();
         actors.dedup();
-        // Door faces already set this tick, and to what.
+        // Door faces already set this tick, and to what; things already handled this tick.
         let mut doors: BTreeMap<EntityId, bool> = BTreeMap::new();
+        let mut handled: std::collections::BTreeSet<EntityId> = Default::default();
+        // Things coming into the world, and leaving it (Amendment A-15): into a place, or a hand;
+        // or, asked to arrive at a fixture — a hearth — set down just in front of it, in its
+        // place, where one can walk up to it (Amendment A-18).
+        for thing in view.entities_with(ACT_ARRIVE) {
+            let Some(at) = entity_at(view, thing, ACT_ARRIVE) else {
+                continue;
+            };
+            push(thing, ACT_ARRIVE, Change::Tombstone, "considered");
+            let (into, position) = match container_of(view, at) {
+                Some(place) if is_true(view, at, SOLID) => {
+                    let [x, y, z] = local_position(view, at);
+                    let depth = size_of(view, at).map_or(0, |s| s[1]);
+                    let own = size_of(view, thing).map_or(0, |s| s[1]);
+                    (place, [x, y - depth - own - ARRIVAL_GAP_CM, z])
+                }
+                _ => (at, [0, 0, 0]),
+            };
+            if handled.insert(thing) {
+                push(
+                    thing,
+                    CONTAINED_IN,
+                    Change::Set(Value::Entity(into)),
+                    "arrived",
+                );
+                push(
+                    thing,
+                    POSITION,
+                    Change::Set(Value::Vec3(position)),
+                    "arrived",
+                );
+            }
+        }
+        for thing in view.entities_with(ACT_LEAVE) {
+            push(thing, ACT_LEAVE, Change::Tombstone, "considered");
+            if handled.insert(thing) && container_of(view, thing).is_some() {
+                push(thing, CONTAINED_IN, Change::Tombstone, "used_up");
+                push(thing, POSITION, Change::Tombstone, "used_up");
+            }
+        }
         for body in actors {
             let mut refused: Option<EntityId> = None;
             let mut succeeded = false;
@@ -191,6 +292,71 @@ impl System for Act {
                     succeeded = true;
                 } else {
                     refused = Some(body);
+                }
+            }
+            // Handling things (Amendment A-12).
+            if let Some(thing) = entity_at(view, body, ACT_TAKE) {
+                push(body, ACT_TAKE, Change::Tombstone, "considered");
+                if self.cannot_take(view, body, thing).is_some() || !handled.insert(thing) {
+                    refused = Some(thing);
+                } else {
+                    push(
+                        thing,
+                        CONTAINED_IN,
+                        Change::Set(Value::Entity(body)),
+                        "taken",
+                    );
+                    push(
+                        thing,
+                        POSITION,
+                        Change::Set(Value::Vec3([0, 0, 0])),
+                        "taken",
+                    );
+                    succeeded = true;
+                }
+            }
+            if let Some(thing) = entity_at(view, body, ACT_DROP) {
+                push(body, ACT_DROP, Change::Tombstone, "considered");
+                let held = container_of(view, thing) == Some(body);
+                match container_of(view, body).filter(|_| held && handled.insert(thing)) {
+                    Some(place) => {
+                        let at = local_position(view, body);
+                        push(
+                            thing,
+                            CONTAINED_IN,
+                            Change::Set(Value::Entity(place)),
+                            "dropped",
+                        );
+                        push(thing, POSITION, Change::Set(Value::Vec3(at)), "dropped");
+                        succeeded = true;
+                    }
+                    None => refused = Some(thing),
+                }
+            }
+            if let Some(thing) = entity_at(view, body, ACT_CONSUME) {
+                push(body, ACT_CONSUME, Change::Tombstone, "considered");
+                let held = container_of(view, thing) == Some(body);
+                if held && crate::materials::is_edible(view, thing) && handled.insert(thing) {
+                    push(thing, CONTAINED_IN, Change::Tombstone, "consumed");
+                    push(thing, POSITION, Change::Tombstone, "consumed");
+                    push(
+                        body,
+                        CONSUMED,
+                        Change::Set(Value::Entity(thing)),
+                        "consumed",
+                    );
+                    succeeded = true;
+                } else {
+                    refused = Some(thing);
+                }
+            }
+            if let Some(deposit) = entity_at(view, body, ACT_PICK) {
+                push(body, ACT_PICK, Change::Tombstone, "considered");
+                if self.within_reach(view, body, deposit) {
+                    push(body, PICKED, Change::Set(Value::Entity(deposit)), "picked");
+                    succeeded = true;
+                } else {
+                    refused = Some(deposit);
                 }
             }
             match refused {

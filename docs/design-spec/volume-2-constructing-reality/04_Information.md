@@ -291,6 +291,18 @@ No arrow skips a stage.
 
 ---
 
+## The Layer as Built *(Amendment A-8)*
+
+The pipeline above is realised as its own owner of facts, beside the domains and importing none of them:
+
+- **Observation starts from what Physical Reality says is in view.** Physical Reality publishes, for every body with sight, what it could see: what stands within its sight range, along a clear line, in light enough to see by. Perception turns that into observation. Seeing is never computed twice, and the information layer never reimplements walls.
+- **A belief is a fact about a pair** (Amendment A-7). Its holder is the believer and its subject is what it is about: `(Erin, belief.place_of, about Bob) = the kitchen`. Its provenance is its pedigree: the tick it was formed, the system that formed it, and how (*seen*, *felt*, *known from the start*, later *told*).
+- **Memory is a belief that has stopped being refreshed.** While something is in sight its beliefs are current. When it leaves sight, its beliefs are stamped with the moment it was last seen and then left alone. They are not updated when the world changes behind the observer's back. Confidence is a deterministic function of a belief's age, so it is exact under replay and costs nothing to store.
+- **Oneself is perceived too.** Where one stands, how warm it is there, how cold one's body is, whether one's way was blocked: these reach a mind as beliefs written by perception, never as reads of reality.
+- **Starting knowledge is package data.** What each mind knows at the first tick is declared, not inferred.
+- **Absence can be seen** *(Amendment A-11)*. Standing in a place lit well enough to see by, a mind that believes some person or movable thing is there, and cannot see it, concludes it is not, and lets the belief go.
+- **Fondness is an opinion** *(Amendment A-11; Appendix A, Ruling 2)*. How fond one mind is of another is information, its own and one-way. It grows while the other is in sight, faster the more compatible their temperaments are, and never past how compatible they are. It fades while they are apart.
+
 ## Engineering Invariants
 
 Every implementation SHALL preserve these rules.

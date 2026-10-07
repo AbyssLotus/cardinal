@@ -105,6 +105,39 @@ pub enum TickError {
     Resolve(ResolveError),
     /// The resolved batch failed a domain coherence check (Validate stage — §3.1).
     Validate(ValidationError),
+    /// The tick asked for is not the one after the committed tick (Vol. V Ch. 3: tick N reads
+    /// N − 1). Reality advances one tick at a time; it is never skipped, repeated, or rewound.
+    NotNext {
+        /// The tick reality has committed.
+        committed: u64,
+        /// The tick that was asked for.
+        requested: u64,
+    },
+    /// A system asked for more new ids in one tick than one system may take (Amendment A-15):
+    /// a runaway, refused before anything it proposed could commit.
+    IdsExhausted(SystemId),
+    /// More systems, or a later tick, than runtime ids can number (Amendment A-15): ids are
+    /// `floor + tick·2²⁴ + slot·2¹⁴ + n`, so at most 1,024 systems and ticks below 2³⁸.
+    BeyondIds,
+}
+
+/// The most systems runtime ids can tell apart (Amendment A-15): 2¹⁰ slots.
+const MAX_SYSTEMS: usize = 1 << 10;
+/// The first tick runtime ids cannot number (Amendment A-15): 2³⁸ — at one-second ticks, more
+/// than eight thousand years.
+const MAX_TICK: u64 = 1 << 38;
+
+/// What one system cost in one tick (Amendment A-21; Vol. V Ch. 8): the time its evaluation took
+/// and how many proposals it made. Kept outside the simulation — no system reads it and no fact
+/// depends on it, so wall-clock time cannot reach reality.
+#[derive(Clone, Copy, Debug)]
+pub struct SystemMeter {
+    /// The system, or `kernel.commit` for resolving, validating, and committing the tick.
+    pub system: SystemId,
+    /// Wall-clock time taken, in nanoseconds.
+    pub nanos: u128,
+    /// Proposals made (for `kernel.commit`, proposals resolved).
+    pub proposals: usize,
 }
 
 /// Advance committed reality by one tick through the seven ordered stages
@@ -124,6 +157,40 @@ pub fn run_tick<S: RealityStore>(
     seed: u64,
     chronicle: &mut Vec<ChronicleEntry>,
 ) -> Result<(), TickError> {
+    run_tick_metered(
+        store,
+        domains,
+        systems,
+        tick,
+        seed,
+        chronicle,
+        &mut Vec::new(),
+    )
+}
+
+/// [`run_tick`], recording what each system cost into `meters` (Amendment A-21): one entry per
+/// system evaluated, in the order evaluated, and one for the kernel's own commit.
+pub fn run_tick_metered<S: RealityStore>(
+    store: &mut S,
+    domains: &[&dyn Domain],
+    systems: &[Box<dyn System>],
+    tick: u64,
+    seed: u64,
+    chronicle: &mut Vec<ChronicleEntry>,
+    meters: &mut Vec<SystemMeter>,
+) -> Result<(), TickError> {
+    // 0. CONTINUITY — reality advances exactly one tick at a time (Vol. V Ch. 3: tick N reads
+    //    N − 1), and within what runtime ids can number (Amendment A-15).
+    if tick != store.tick() + 1 {
+        return Err(TickError::NotNext {
+            committed: store.tick(),
+            requested: tick,
+        });
+    }
+    if systems.len() > MAX_SYSTEMS || tick >= MAX_TICK {
+        return Err(TickError::BeyondIds);
+    }
+
     // 1. SCHEDULE — due systems in a deterministic order (sorted by id). Under hermetic
     //    evaluation execution order does not change committed reality, so a stable id sort is
     //    a valid order; the DAG scheduler is deferred until parallelism (Vol. V Ch. 3 §3.2).
@@ -150,8 +217,18 @@ pub fn run_tick<S: RealityStore>(
         let view: &dyn CommittedView = &*store;
         for sys in &due {
             let scoped = ScopedView::new(view, sys.reads());
-            let ctx = TickContext::new(tick, seed, sys.id().code());
+            let slot = ids.iter().position(|id| *id == sys.id()).unwrap_or(0) as u64;
+            let ctx = TickContext::new(tick, seed, sys.id().code(), slot);
+            let began = std::time::Instant::now();
             let emitted = sys.evaluate(&scoped, &ctx);
+            meters.push(SystemMeter {
+                system: sys.id(),
+                nanos: began.elapsed().as_nanos(),
+                proposals: emitted.len(),
+            });
+            if ctx.exhausted() {
+                return Err(TickError::IdsExhausted(sys.id()));
+            }
             // An undeclared read taints the whole evaluation: the system may have acted on a
             // silently-empty view, so its proposals cannot be trusted (Vol. V Ch. 3 §3.5).
             if let Some(fact_type) = scoped.violation() {
@@ -178,6 +255,8 @@ pub fn run_tick<S: RealityStore>(
             proposals.extend(emitted);
         }
     }
+    let committing = std::time::Instant::now();
+    let resolved = proposals.len();
 
     // 3-4. RESOLVE + VALIDATE — group proposals per fact (deterministic key order), then
     //      resolve each by its owner's cardinality and rules (Vol. V Ch. 3 §3.1).
@@ -275,17 +354,17 @@ pub fn run_tick<S: RealityStore>(
     //    Remove change is chronicled exactly like a write (Vol. I, Law 17, traces on death).
     for group in grouped.values() {
         for p in group {
-            chronicle.push(ChronicleEntry::new(
-                tick,
-                p.target.entity,
-                p.target.fact_type,
-                p.cause,
-            ));
+            chronicle.push(ChronicleEntry::new(tick, p.target, p.cause));
         }
     }
 
     // 7. OBSERVE — read-only notification hook; nothing on the critical path here yet
-    //    (Vol. V Ch. 3 §3.1; Vol. V Ch. 9 §9.5.2).
+    //    (Vol. V Ch. 3 §3.1; Vol. V Ch. 9 §9.5.2). The meters are its first reading.
+    meters.push(SystemMeter {
+        system: SystemId::new("kernel.commit"),
+        nanos: committing.elapsed().as_nanos(),
+        proposals: resolved,
+    });
     Ok(())
 }
 
