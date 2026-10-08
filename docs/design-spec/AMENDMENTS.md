@@ -1759,3 +1759,37 @@ What the tests show:
 still filling themselves (A-45).
 
 **Rationale.** `docs/audits/resources.md`, slice R3.
+
+---
+
+## A-44 — Mending takes material (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (mending, A-31: what it uses up)
+- Vol. I (conservation: nothing is mended out of nothing)
+
+**Change.**
+- **Each go at mending uses up the thing's stuff**: its weakest material, the one that gave way,
+  in proportion to what the go restores. A go that restores a share of a thing takes that share of
+  its weight. The stuff comes from:
+  - what is laid by for it ([`MEND_MATERIAL`], grams, on the thing): stuff brought to it on
+    earlier goes and not yet worked in;
+  - then loose pieces made of that material alone, held by the mender first, then lying within
+    reach. Not the thing itself, nor a fixture, nor anything that moves by itself. Lowest ids
+    first, whole pieces, until the go has enough. What is over is laid by.
+- With less than a go needs, it restores what that much allows. With none, the go is refused,
+  as it is without a tool.
+- **A ruin counts as the shell it was** (structure, A-28/A-29/A-31): its walls, floor, and roof,
+  not a solid block of its size. Before this, a fallen house's mass was counted as a solid block
+  of timber its size, 196 tonnes for Alice's kitchen. That made each go at rebuilding it restore
+  a sliver, and it would have made rebuilding take four times the timber the house was built
+  from.
+
+**In Ashford** (`tests/reference/tests/mending.rs`):
+- Carol mends the smashed crate with the hammer from a stack of seven-kilo boards beside it. Six
+  or seven go into it, the 45 kilos its wreckage weighs, with the remainder laid by.
+- Bob rebuilds the kitchen's ruin from eighty half-tonne beams piled by him. About 78 of them go
+  into the 44 tonnes of its walls, floor, and roof. With a hammer and no timber, he is refused.
+
+**Rationale.** `docs/audits/resources.md`, slice R4: "repairing a house should take the
+materials it needs."

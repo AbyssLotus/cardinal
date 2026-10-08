@@ -63,6 +63,7 @@ const WIND_LOAD_READS: &[FactType] = &[
     MOTION_TARGET,
     MOTION_START,
     MOTION_END,
+    crate::schema::WHOLE_SHAPE,
 ];
 const WIND_LOAD_WRITES: &[FactType] = &[INTEGRITY, ACT_PUSH];
 

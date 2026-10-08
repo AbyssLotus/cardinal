@@ -188,6 +188,8 @@ Going, on the user's word, with every recommendation in §6 taken. Built in the 
 - **Built:** R3, the chains (A-43): `tests/reference/tests/chains.rs`. The flour bin's and the
   loaves' self-filling are retired with the jobs that replace them (R5), not here: without the
   farmer, the miller, and a baker at work, nothing would make flour.
+- **Built:** R4, mending takes material (A-44): `tests/reference/tests/mending.rs`. Found: a ruin's
+  mass was counted as a solid block, four times its shell.
 
 Retired as planned: the flour bin's and the miller's loaves' regrowth, once the chains that feed
 them stand (R3). The manor pantry, the Heron's stores, and the fish barrel stay as stand-ins for

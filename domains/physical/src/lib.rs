@@ -223,6 +223,7 @@ pub const RESTRICTED: &[FactType] = &[
     schema::PICKED,
     schema::PICK_EFFORT,
     schema::PIT,
+    schema::MEND_MATERIAL,
     schema::BROKEN,
     schema::BURNING,
     schema::KEPT_FIRE,
@@ -347,6 +348,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_PICK
             || fact_type == schema::PICKED
             || fact_type == schema::PICK_EFFORT
+            || fact_type == schema::MEND_MATERIAL
             || fact_type == schema::GROUND
             || fact_type == schema::PAVED
             || fact_type == schema::PIT
@@ -562,7 +564,7 @@ impl Domain for PhysicalDomain {
             composition::compose_bool(current, changes)
         } else if fact_type == schema::GROUND {
             composition::compose_entity_ref(current, changes)
-        } else if fact_type == schema::PICK_EFFORT {
+        } else if fact_type == schema::PICK_EFFORT || fact_type == schema::MEND_MATERIAL {
             composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
         } else if fact_type == schema::IMPACT {
             composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)

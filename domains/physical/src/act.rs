@@ -40,6 +40,7 @@ use std::collections::BTreeMap;
 const ARRIVAL_GAP_CM: i64 = 5;
 
 const ACT_READS: &[FactType] = &[
+    crate::schema::MEND_MATERIAL,
     crate::schema::ACT_DIG,
     crate::schema::PIT,
     crate::schema::GROUND,
@@ -94,6 +95,7 @@ const ACT_READS: &[FactType] = &[
     WHOLE_SHAPE,
 ];
 const ACT_WRITES: &[FactType] = &[
+    crate::schema::MEND_MATERIAL,
     crate::schema::ACT_DIG,
     crate::schema::PIT,
     MADE_OF,
@@ -310,6 +312,47 @@ impl Act {
             })
         });
         damaged && near && tool
+    }
+
+    /// The pieces of `target`'s weakest material — what gave way, and what mends it — that `body`
+    /// holds or has within reach, held first, then the lowest ids (Amendment A-44): loose things
+    /// made of nothing else, not the thing itself, not a fixture, nothing used up already.
+    fn mending_stuff(
+        &self,
+        view: &dyn CommittedView,
+        body: EntityId,
+        target: EntityId,
+        handled: &std::collections::BTreeSet<EntityId>,
+    ) -> Vec<EntityId> {
+        let Some(stuff) = crate::materials::materials_of(view, target)
+            .into_iter()
+            .min_by_key(|m| (crate::materials::hardness(view, *m).unwrap_or(0), *m))
+        else {
+            return Vec::new();
+        };
+        let of_it = |t: &EntityId| {
+            *t != target
+                && *t != body
+                && !handled.contains(t)
+                && !is_true(view, *t, SOLID)
+                && !is_true(view, *t, MOBILE)
+                && view.read(FactKey::new(*t, LEADS_TO)).is_none()
+                && crate::materials::materials_of(view, *t) == [stuff]
+        };
+        let mut held: Vec<EntityId> = crate::nearby::contents(view, body)
+            .into_iter()
+            .filter(|t| of_it(t))
+            .collect();
+        held.sort_unstable();
+        let mut near: Vec<EntityId> = container_of(view, body)
+            .map(|place| crate::nearby::contents(view, place))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|t| of_it(t) && self.within_reach(view, body, *t))
+            .collect();
+        near.sort_unstable();
+        held.extend(near);
+        held
     }
 
     /// Whether `body` has a flame to hand (Amendment A-28): something burning that it holds, or
@@ -916,20 +959,66 @@ impl System for Act {
                     refused = Some(thing);
                 }
             }
-            // Mending (Amendment A-31): with a tool no softer than what is mended, a little at a
-            // time — less, the more there is of it.
+            // Mending (Amendments A-31, A-44): with a tool no softer than what is mended, a little
+            // at a time — less, the more there is of it — and with the stuff it is made of, used
+            // up in proportion to what the go restores: from what is laid by for it, then from
+            // what the mender holds or has within reach. With less than a go needs, it restores
+            // what that much allows; with none, it is refused.
             if let Some(target) = entity_at(view, body, ACT_MEND) {
                 push(body, ACT_MEND, Change::Tombstone, "considered");
+                let mut mended = false;
                 if self.can_mend(view, body, target) {
                     let kg = crate::fire::structure_kg(view, target, self.wall_thickness_cm).max(1);
-                    let restored = kernel::fixed::div_dither(
+                    let mut rng = ctx.rng(target.raw());
+                    let full = kernel::fixed::div_dither(
                         self.mend_scale as i128 * 1000,
                         kg as i128,
-                        &mut ctx.rng(target.raw()),
+                        &mut rng,
                     ) as i64;
+                    let whole = view
+                        .read(FactKey::new(target, INTEGRITY))
+                        .and_then(|f| f.value.as_int())
+                        .unwrap_or(PERCENT_FULL);
+                    let wanted = full.min(PERCENT_FULL - whole).max(0);
+                    // Grams of its stuff a go of `r` takes.
+                    let grams_for = |r: i64| r as i128 * kg as i128 * 1000 / PERCENT_FULL as i128;
+                    let laid = view
+                        .read(FactKey::new(target, crate::schema::MEND_MATERIAL))
+                        .and_then(|f| f.value.as_int())
+                        .unwrap_or(0)
+                        .max(0) as i128;
+                    let mut stuff = laid;
+                    if stuff < grams_for(wanted) {
+                        for piece in self.mending_stuff(view, body, target, &handled) {
+                            if stuff >= grams_for(wanted) {
+                                break;
+                            }
+                            stuff += crate::materials::weight_g(view, piece).unwrap_or(0) as i128;
+                            handled.insert(piece);
+                            push(piece, CONTAINED_IN, Change::Tombstone, "used_in_mending");
+                            push(piece, POSITION, Change::Tombstone, "used_in_mending");
+                        }
+                    }
+                    let restored = if stuff >= grams_for(wanted) {
+                        wanted
+                    } else {
+                        (stuff * PERCENT_FULL as i128 / (kg as i128 * 1000)) as i64
+                    };
                     if restored > 0 {
                         push(target, INTEGRITY, Change::Delta(restored), "mended");
+                        let left = (stuff - grams_for(restored)).max(0) as i64;
+                        let change = if left > 0 {
+                            Change::Set(Value::Int(left))
+                        } else {
+                            Change::Tombstone
+                        };
+                        if left as i128 != laid {
+                            push(target, crate::schema::MEND_MATERIAL, change, "laid_by");
+                        }
+                        mended = true;
                     }
+                }
+                if mended {
                     succeeded = true;
                 } else {
                     refused = Some(target);

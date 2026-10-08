@@ -110,6 +110,7 @@ const FIRE_READS: &[FactType] = &[
     WIND_SPEED,
     crate::schema::PLACE,
     WETNESS,
+    crate::schema::WHOLE_SHAPE,
 ];
 const FIRE_WRITES: &[FactType] = &[
     BURNING,
@@ -155,9 +156,14 @@ impl Fire {
 
 /// How much of `thing` there is as a structure, in kilograms (Amendments A-28, A-29): a walled
 /// place's walls, floor, and roof, `wall_thickness_cm` thick, of its densest material; anything
-/// else, its weight. What a fire has to eat, and what a wind has to tear down.
+/// else, its weight. What a fire has to eat, and what a wind has to tear down. A ruin counts as
+/// the shell it was, not as a solid block of its size (Amendment A-44): what mending it takes.
 pub fn structure_kg(view: &dyn CommittedView, thing: EntityId, wall_thickness_cm: i64) -> i64 {
-    if is_true(view, thing, ENCLOSED) {
+    let was_walled = view
+        .read(FactKey::new(thing, crate::schema::WHOLE_SHAPE))
+        .and_then(|f| f.value.as_vec3())
+        .is_some_and(|[_, flags, _]| flags & 4 != 0);
+    if is_true(view, thing, ENCLOSED) || was_walled {
         let density = crate::materials::materials_of(view, thing)
             .into_iter()
             .filter_map(|m| crate::materials::density(view, m))

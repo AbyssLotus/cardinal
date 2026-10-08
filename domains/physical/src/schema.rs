@@ -432,6 +432,10 @@ pub const BROKEN: FactType = FactType::new("physical.body.broken");
 /// its height in centimetres and, in `flags`, whether it was solid (1), opaque (2), and walled (4).
 pub const WHOLE_SHAPE: FactType = FactType::new("physical.body.whole_shape");
 
+/// Grams of a thing's stuff laid by for mending it (Amendment A-44): what was brought to it and
+/// not yet worked in. Absent, none.
+pub const MEND_MATERIAL: FactType = FactType::new("physical.body.mend_material");
+
 /// A decider's intent that a body mend a thing (Amendment A-31): an entity reference. Carried out
 /// only with a tool in hand no softer than the thing's weakest material, on a thing within reach
 /// — or the place one stands in. Cleared either way.
