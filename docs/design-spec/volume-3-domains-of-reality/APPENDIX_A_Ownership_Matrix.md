@@ -298,6 +298,11 @@ organism rests?
 - **Harm follows the same pattern.** A fall is reported by Physical Reality. The cold is the
   body's own heat. Both become harm to health only under Living Systems' rules (Ruling 9).
 
+*Amendment A-40 (2026-10):* the rest intent is read by Physical Reality too, by its id. A body
+asked to rest that is still has its eyes shut, and sees nothing but what it holds. Stillness is
+Physical's own fact (no motion, no travel), so both owners judge the same rest from the same
+intent, and neither reads the other's judgment.
+
 **Reason:** Ruling 4 keeps biology from deciding; Ruling 13 keeps deciders from writing what
 others own. A mind may want to sleep while walking; its body does not sleep until it stops.
 

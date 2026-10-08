@@ -216,6 +216,7 @@ pub const RESTRICTED: &[FactType] = &[
     schema::ACT_REFUSED,
     schema::PORTAL_DANGER,
     schema::IN_VIEW,
+    schema::SEEN_WHOLE,
     schema::CONSUMED,
     schema::PICKED,
     schema::BROKEN,
@@ -328,6 +329,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::MATERIAL_CONDUCTIVITY
             || fact_type == schema::MATERIAL_TOXICITY
             || fact_type == schema::IN_VIEW
+            || fact_type == schema::SEEN_WHOLE
             || fact_type == schema::MATERIAL_EDIBLE
             || fact_type == schema::MATERIAL_POTENCY
             || fact_type == schema::MATERIAL_HABIT
@@ -611,6 +613,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_REFUSED
             || fact_type == schema::CONSUMED
             || fact_type == schema::PICKED
+            || fact_type == schema::SEEN_WHOLE
         {
             composition::compose_entity_ref(current, changes)
         } else if fact_type == schema::TRAVEL_TO
@@ -673,6 +676,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_OPEN
             || fact_type == schema::ACT_CLOSE
             || fact_type == schema::ACT_REFUSED
+            || fact_type == schema::SEEN_WHOLE
         {
             if let Resolved::Write(v) = value {
                 if !matches!(v, Value::Entity(_)) {

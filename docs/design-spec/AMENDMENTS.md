@@ -1249,7 +1249,7 @@ moon; `tests/reference/tests/climate.rs`):
 
 **Found:** a body lying down still sees. Before, dawn and the end of the sleeping hours fell
 together; now a late-April dawn shows a resting mind what it wants, and it gets up. That belongs
-with perception and is left to it.
+with perception and is left to it. *(Settled by A-40: a body at rest has its eyes shut.)*
 
 **Rationale.** `docs/audits/environment.md` §4, slice 1.
 
@@ -1525,3 +1525,87 @@ mean tide; `tests/reference/tests/water.rs`):
 - walking slowed by deep snow and shallow water.
 
 **Rationale.** `docs/audits/environment.md` §4, slice 6.
+
+---
+
+## A-40 — Shut eyes: what gets a sleeper up (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 (*What is in view*: a body at rest has its eyes shut; a place seen whole)
+- Appendix A (Ruling 15: Physical Reality reads the rest intent too)
+- Vol. II Ch. 4 (*The Layer as Built*: a sleeper knows only what it feels and holds; *Absence can
+  be seen* only in a place seen whole)
+- Vol. V Ch. 9 §9.3 (minds that sleep: what gets a sleeper up)
+
+**Change.**
+- **A body at rest has its eyes shut** (Physical). Sight reads Living Systems' rest intent,
+  `living.act.rest`, by its id, as it already reads the sight range. A body asked to rest that is
+  still sees nothing. *Still* is the test Living uses to judge a rest (Ruling 15): not moving,
+  and not setting off. Only what the body holds stays in its view, known by touch (A-13). When it
+  gets up, or is moved, its eyes open and it sees again at the next sight step. In this engine,
+  resting and sleeping are one state.
+- **What it saw becomes memory** (Information). Nothing new is needed here. As a sleeper's view
+  empties, each belief about what it saw is stamped with the moment it was last seen, as for
+  anything lost from sight. It grows no fonder of those it cannot see, though a longing is still
+  eased by lying in the same place as its object. It still feels itself: the cold, hunger,
+  fatigue, its needs, and what it holds.
+- **Light alone wakes no one.** No felt fact of light is added, and first light gets no one up.
+  The world's sleeping hours (A-18) say when its people rise. A sleeper woken by the light would
+  be up before four at Ashford's midsummer, two hours before the town's hours end. A winter
+  morning is no different: a sleeper gets up at the end of the hours, in the dark. Out of the
+  sleeping hours, a sleeper gets up once rested, as before.
+- **In the sleeping hours, only what presses gets a sleeper up** (Minds). That is the cold,
+  hunger, a longing or a craving, a routine, or work, each scored as always against staying put.
+  A want or curiosity does not: they fill the hours when nothing presses (A-19). This holds even
+  for a want the sleeper already knows of. Out of the sleeping hours, anything worth more than
+  staying put gets a sleeper up, as before. Lying down is unchanged: a want may still keep a mind
+  up past its bedtime.
+- **A place seen whole** (Physical). With what is in view, Sight now publishes the place a body
+  took in whole, if any: `physical.sense.seen_whole`, written only when it changes. A body takes
+  in the place it stands in when:
+  - the place is lit;
+  - every corner of its floor is within the body's sight, as far as the air there lets one see;
+  - nothing in it could hide anything: no wall, nothing opaque, no rising ground.
+
+  A place with no size has no corners to reach, and is never seen whole. Eyes shut, a body takes
+  in nothing. The place stays in the body's view when lit (A-11), as before.
+- **Absence needs a place seen whole** (Information). A mind concludes that a thing it believed
+  here is not here (A-11) only when the place Physical says it took in whole is the place it
+  stands in. The marker names the place the view was taken in, so the first view after a mind
+  walks somewhere new, still taken from where it came from, decides nothing.
+
+**In Ashford** (`tests/reference/tests/needs.rs`, `perception.rs`):
+- Erin lies down in the yard in the small hours of a late-April night, sleeps through a sunrise
+  just before five, and gets up at six, rested. The test runs on Ashford's own calendar again,
+  not at the equinox.
+- The green bottle lies five metres from her in the dawn light. It is glass, which she likes.
+  Asleep, she has nothing in view, and she sleeps on. Up at six, she goes in from the cold, then
+  comes back out for the bottle. (Before, it got her up at twenty to six.)
+- Put into her hand as she sleeps, the bottle is known by touch: glass, and no one's. Still she
+  sleeps till six, and then claims it.
+- At noon Erin sees the bottle, goes into the kitchen, and comes back out to the doorstep, where
+  the house hides it. She still believes it lies in the yard. In the kitchen, which she takes in
+  whole, Dave still sees that Bob is gone.
+
+**Found:**
+- **Absence ignored what stands in a place, and when the view was taken.** A-11 let a mind
+  conclude a thing was gone whenever its place was lit and in view. The yard has had the house
+  standing in it since A-37. Erin, back on the doorstep for the bottle she saw at dawn, could not
+  see it round the house, and let it go. She never went for it again. Worse, the first view after
+  any step through a door was the one taken from the far side: from the kitchen she had seen the
+  yard through the doorway, so the yard counted as in view. Before this amendment, Erin claimed
+  the bottle at dawn from where she lay, and neither fault showed. The wants test caught it.
+- **Love takes a day longer.** Finn and Gwen used to watch each other for an hour from where
+  they lay, from first light until the sleeping hours ended. That no longer counts as time
+  together, and they become lovers on the third day, not the second (`love.rs`).
+
+**Not yet:**
+- noise, pain, smoke or fire waking a sleeper; nothing yet sends a mind away from a fire;
+- waking with the sun, for a world whose people do;
+- lying awake: resting with open eyes;
+- absence on open ground or in a big hall: a mind there never concludes a thing is gone, even when
+  the spot where it lay is in plain view. Beliefs hold places, not spots.
+
+**Rationale.** A-34 found that a body lying down still saw. When the calendar moved Ashford's
+dawn before the end of its sleeping hours, the first light showed a resting mind something it
+wanted, and it got up for a bottle.

@@ -8,7 +8,7 @@ use kernel::fact::{Cause, Fact, FactKey, FactType, SystemId};
 use kernel::proposal::{Change, Proposal};
 use kernel::system::{Cadence, CommittedView, System, TickContext};
 use kernel::value::Value;
-use physical::schema::{OPAQUE, TEMPERATURE};
+use physical::schema::{IN_VIEW, OPAQUE, SEEN_WHOLE, TEMPERATURE};
 use reference::id::*;
 use reference::{e, package, with_tick_seconds, without_minds, City};
 
@@ -280,4 +280,33 @@ fn dave_sees_that_bob_is_not_in_the_kitchen() {
         why == Some(Cause::new("not_there")) || why == Some(Cause::new("seen")),
         "{why:?}"
     );
+}
+
+#[test]
+fn the_house_hides_the_bottle_from_the_doorstep_and_erin_still_believes_it_there() {
+    // At noon Erin sees the bottle lying in the yard. She goes into the kitchen, which she takes
+    // in whole, and back out to the doorstep, where the house stands between her and the bottle.
+    // Not seeing it there says nothing of whether it is there: a yard with a house in it is not
+    // seen whole, and the first view she has on stepping out was taken in the kitchen (Amendment
+    // A-40). She remembers it where it lies.
+    let mut city = at_noon();
+    assert_eq!(thinks_is_in(&city, ERIN, BOTTLE), Some(YARD));
+    assert_eq!(city.read(ERIN, SEEN_WHOLE), None, "not the yard");
+    city.go(ERIN, KITCHEN, 140);
+    city.run_until(12, |c| c.room_of(ERIN) == KITCHEN);
+    city.run(2);
+    assert_eq!(city.read(ERIN, SEEN_WHOLE), Some(Value::Entity(e(KITCHEN))));
+    city.go(ERIN, YARD, 140);
+    city.run_until(12, |c| c.room_of(ERIN) == YARD);
+    for _ in 0..6 {
+        city.run(1);
+        let sees_it = city
+            .store()
+            .read_all(FactKey::new(e(ERIN), IN_VIEW))
+            .iter()
+            .any(|f| f.value == Value::Entity(e(BOTTLE)));
+        assert!(!sees_it, "the house is in the way");
+        assert_ne!(city.read(ERIN, SEEN_WHOLE), Some(Value::Entity(e(YARD))));
+        assert_eq!(thinks_is_in(&city, ERIN, BOTTLE), Some(YARD));
+    }
 }

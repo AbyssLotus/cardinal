@@ -159,8 +159,9 @@ const THINK_WRITES: &[FactType] = &[
 ///    opening it believes is on the way and opens it;
 /// 6. **Trace** — the goal, its reason, and its winning score, as facts;
 /// 7. **Rest** — tired, with nowhere it wants to go, it lies down; it gets up when rested, when
-///    the cold calls, or when a routine calls and it is no longer tired. The dead do not think
-///    (Amendment A-10).
+///    the cold calls, or when a routine calls and it is no longer tired — in the sleeping hours,
+///    only for what presses, never a want (Amendment A-40). The dead do not think (Amendment
+///    A-10).
 pub struct Think {
     clock: SimClock,
     think_ticks: u64,
@@ -383,6 +384,13 @@ fn in_window(t: i64, from: i64, to: i64) -> bool {
     } else {
         t >= from || t < to
     }
+}
+
+/// Whether a reason presses: anything but a want or curiosity, which fill the hours when nothing
+/// presses (Amendment A-19). In the sleeping hours only what presses gets a sleeper up
+/// (Amendment A-40).
+const fn presses(reason: i64) -> bool {
+    !matches!(reason, REASON_WANT | REASON_CURIOSITY)
 }
 
 /// A list of proposals from one mind, all from this system.
@@ -732,10 +740,21 @@ impl Think {
         let best = options.first().copied().filter(|o| o.score > stay);
 
         if mind.own(RESTING).map(|f| f.value) == Some(Value::Bool(true)) {
-            // Resting: get up for something worth getting up for, or once rested.
-            if let Some(best) = best {
+            // Resting: get up for something worth getting up for, or once rested. In the
+            // sleeping hours, only for what presses: not for a want, nor curiosity (Amendment
+            // A-40).
+            let call = if night {
+                options
+                    .iter()
+                    .copied()
+                    .find(|o| presses(o.reason))
+                    .filter(|o| o.score > stay)
+            } else {
+                best
+            };
+            if let Some(call) = call {
                 Self::get_up(&mut acts, "called_away");
-                self.adopt(&mut acts, best, speed);
+                self.adopt(&mut acts, call, speed);
             } else if fatigue < self.rules.rested_below && !night {
                 Self::get_up(&mut acts, "rested");
             }

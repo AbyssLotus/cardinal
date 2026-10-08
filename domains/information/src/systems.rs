@@ -8,10 +8,11 @@ use crate::schema::{
     LIVING_HEALTH, LIVING_HUNGER, LIVING_KIND_MET_BY, LIVING_NEED, LIVING_NEED_KIND,
     LIVING_SIGHT_RANGE, MADE_OF, MIND_TEMPERAMENT, NUTRITION, OPEN, OWNER, PHYS_ACT_REFUSED,
     PHYS_CONTAINED_IN, PHYS_IN_VIEW, PHYS_LEADS_TO, PHYS_MADE_OF, PHYS_MOBILE, PHYS_NUTRITION,
-    PHYS_PICKED, PHYS_PORTAL_OPEN, PHYS_SOLID, PHYS_TEMPERATURE, PHYS_TRAVEL_BLOCKED,
-    PHYS_TRAVEL_TO, PLACE_OF, REFUSED, RES_STOCK, RES_YIELD, SOC_JOB_CARRIES, SOC_JOB_FROM,
-    SOC_JOB_HOURS, SOC_JOB_KEEP, SOC_JOB_MAKES, SOC_JOB_TO, SOC_ROLE, STOCK, WARMTH_OF,
-    WORK_CARRIES, WORK_FROM, WORK_HOURS, WORK_KEEP, WORK_MAKES, WORK_ROLE, WORK_TO, YIELDS,
+    PHYS_PICKED, PHYS_PORTAL_OPEN, PHYS_SEEN_WHOLE, PHYS_SOLID, PHYS_TEMPERATURE,
+    PHYS_TRAVEL_BLOCKED, PHYS_TRAVEL_TO, PLACE_OF, REFUSED, RES_STOCK, RES_YIELD, SOC_JOB_CARRIES,
+    SOC_JOB_FROM, SOC_JOB_HOURS, SOC_JOB_KEEP, SOC_JOB_MAKES, SOC_JOB_TO, SOC_ROLE, STOCK,
+    WARMTH_OF, WORK_CARRIES, WORK_FROM, WORK_HOURS, WORK_KEEP, WORK_MAKES, WORK_ROLE, WORK_TO,
+    YIELDS,
 };
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::hierarchy::ancestry;
@@ -62,6 +63,7 @@ const PERCEPTION_READS: &[FactType] = &[
     FELT_NEED_MET_BY,
     LIVING_SIGHT_RANGE,
     PHYS_IN_VIEW,
+    PHYS_SEEN_WHOLE,
     PHYS_CONTAINED_IN,
     PHYS_LEADS_TO,
     PHYS_PORTAL_OPEN,
@@ -461,11 +463,12 @@ impl Perception {
                 None => {}
             }
         }
-        // Absence (Amendment A-11): standing somewhere lit enough to see — the place itself is
-        // in view — a person, a movable thing, or a thing one could carry off (made of something,
-        // and no fixture: Amendment A-18) believed here and not seen is not here.
+        // Absence (Amendment A-11): standing somewhere one takes in whole — lit, all of it in
+        // sight, nothing in it to hide behind, and the view taken here, not on the way in
+        // (Amendment A-40) — a person, a movable thing, or a thing one could carry off (made of
+        // something, and no fixture: Amendment A-18) believed here and not seen is not here.
         if let Some(Value::Entity(here)) = value(view, FactKey::new(mind, PHYS_CONTAINED_IN)) {
-            if now.contains(&here) {
+            if value(view, FactKey::new(mind, PHYS_SEEN_WHOLE)) == Some(Value::Entity(here)) {
                 for (thing, place) in view.read_about(mind, PLACE_OF) {
                     let portable = view.read(FactKey::new(thing, PHYS_MADE_OF)).is_some()
                         && value(view, FactKey::new(thing, PHYS_SOLID)) != Some(Value::Bool(true));

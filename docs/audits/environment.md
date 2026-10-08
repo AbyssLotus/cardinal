@@ -115,4 +115,5 @@ Still open, each noted in its amendment:
 - smoke made by how much burns, not only how fiercely; plumes downwind;
 - people and things carried off by floods; boats on the water's level; walking slowed by snow
   and shallows;
-- a body lying down still sees (found in A-34; it belongs with perception).
+- ~~a body lying down still sees~~ (found in A-34; settled by A-40: a body at rest has its eyes
+  shut).

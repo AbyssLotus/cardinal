@@ -209,10 +209,23 @@ pub const ACT_FACE: FactType = FactType::new("physical.act.face");
 /// information layer, which decides what becomes observation and belief (Vol. II Ch. 4).
 pub const IN_VIEW: FactType = FactType::new("physical.sense.in_view");
 
+/// The place a body with sight took in whole at the last sight step (Amendment A-40): the place
+/// it stood in, lit, every corner of its floor within its sight, and nothing in it that could
+/// hide anything. Absent when it could not — in the dark, in a yard with a house standing in it,
+/// with its eyes shut. Written by Physical Reality only where it changes, with [`IN_VIEW`]. It
+/// names the place the view was taken in, so a mind just arrived somewhere does not judge its new
+/// place by the view from its old one.
+pub const SEEN_WHOLE: FactType = FactType::new("physical.sense.seen_whole");
+
 /// How far a body can see, in centimetres — **Living Systems'** fact (its sensory capability,
 /// Appendix A), consumed here by its stable id to bound what is in view. Naming an id is not
 /// importing code (Vol. III Ch. 12 §12.1).
 pub const SIGHT_RANGE: FactType = FactType::new("living.sense.sight_range");
+
+/// A decider's intent that a body rest — **Living Systems'** fact (Appendix A, Ruling 15),
+/// consumed here by its stable id: a body asked to rest that is still has its eyes shut
+/// (Amendment A-40).
+pub const REST: FactType = FactType::new("living.act.rest");
 
 /// What a body last tried and could not do (Amendment A-5): an entity reference to the door it
 /// could not reach, or to itself if it could not turn. Written by Physical Reality so a decider

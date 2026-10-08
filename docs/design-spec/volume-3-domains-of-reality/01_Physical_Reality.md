@@ -780,6 +780,10 @@ Physical Reality's own constraints are facts about bodies and places, and every 
 
 **What is in view** *(Amendment A-8)*. For every body with sight (a sensory capability Living Systems declares), Physical Reality publishes what it could see: everything within its sight range along a clear line (see *What can be seen?*) that stands in light enough to see by. The light is the ambient illumination of the place where the seen thing stands, against a threshold the world declares. The report is refreshed on a cadence the world declares, and written only where it changes. It is a fact about space and light, owned here. What a mind *makes* of it is the information layer's (Vol. II Ch. 4). For light to bound sight, **night is dark**: the sun's light follows its height in the sky, full at noon and nothing from sunset to sunrise.
 
+**Shut eyes** *(Amendment A-40)*. A body at rest has its eyes shut. Physical Reality reads Living Systems' rest intent by its id (Appendix A, Ruling 15). A body asked to rest that is still, neither moving nor setting off, sees nothing: its view holds only what it carries, known by touch. Light reaches no one through shut eyes. When the body gets up or is moved, it sees again.
+
+**A place seen whole** *(Amendment A-40)*. With what is in view, Physical Reality publishes the place a body took in whole at the last sight step, if any. That is the place it stands in, when the place is lit, every corner of its floor is within the body's sight as far as the air allows, and nothing in it (no wall, nothing opaque, no rising ground) could hide anything. A place with no size is never seen whole. The report names the place the view was taken in, so the information layer can tell a view taken here from one taken on the way in.
+
 **Handling things** *(Amendment A-12; Appendix A, Ruling 16)*.
 - **Taking.** A body takes a thing within its reach by holding it: the thing is then contained in
   the body, and goes where the body goes.

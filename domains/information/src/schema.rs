@@ -144,6 +144,9 @@ pub const OWNED: &[FactType] = &[
 
 /// What a body could see — **Physical Reality's**.
 pub const PHYS_IN_VIEW: FactType = FactType::new("physical.sense.in_view");
+/// The place a body took in whole when its view was taken — **Physical Reality's** (Amendment
+/// A-40).
+pub const PHYS_SEEN_WHOLE: FactType = FactType::new("physical.sense.seen_whole");
 /// An entity's immediate container — **Physical Reality's**.
 pub const PHYS_CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
 /// Where an opening leads — **Physical Reality's**.

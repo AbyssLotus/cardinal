@@ -153,8 +153,9 @@ reference engine is being built here, from the specification, in roadmap order
       open openings, between rooms and to and from the yard (A-37); wet ground, lying snow, wet
       things, and wind and wet that chill (A-38); ponds, rivers, the sea's tide, floods, and ice
       (A-39)
-- [ ] Minds that flee fire and break a way through; resting bodies that do not see; fire and
-      storm at the city tier
+- [x] Shut eyes (A-40): a body at rest sees nothing but what it holds; in the sleeping hours only
+      what presses gets a sleeper up; absence judged only in a place taken in whole
+- [ ] Minds that flee fire and break a way through; fire and storm at the city tier
 - [ ] Carrying things across the seam; city generation at scale; the hot store; parallel shards
 - [ ] Hardening, from the hostile audit: a sealed mutation path, multi-cause provenance,
       benchmark gates in CI

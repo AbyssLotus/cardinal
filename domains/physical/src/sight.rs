@@ -23,8 +23,8 @@ use crate::climate::ambient;
 use crate::nearby::{contents, within};
 use crate::schema::{
     BODY_SIZE, CONTAINED_IN, ENCLOSED, HAS_PORTAL, HEADING, ILLUMINATION, IN_VIEW, LEADS_TO,
-    MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PORTAL_OPEN, POSITION, SIGHT_RANGE,
-    TERRAIN_SAMPLE, TERRAIN_SPACING,
+    MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PORTAL_OPEN, POSITION, REST, SEEN_WHOLE,
+    SIGHT_RANGE, TERRAIN_SAMPLE, TERRAIN_SPACING, TRAVEL_TO,
 };
 use crate::shape::body_box;
 use crate::space::{lower, portals_in, position_in};
@@ -215,7 +215,8 @@ impl Bare {
     /// Whether nothing in `f`, however deep, could block a line: no ground of its own or below
     /// it, and nothing walled or opaque. A line through such a frame is never blocked in it —
     /// the answer [`blocked_in`] would reach the long way. Openings never block. `false` when
-    /// there is more in `f` than [`CLEAR_WALK`] things, or no index to look by.
+    /// there is more in `f` than [`CLEAR_WALK`] things. Without an index it scans, and gives the
+    /// same answer (Amendment A-40: whether a place is seen whole rests on it).
     fn clear(&self, view: &dyn CommittedView, f: EntityId) -> bool {
         if let Some(known) = self.clear.borrow().get(&f) {
             return *known;
@@ -229,13 +230,11 @@ impl Bare {
     /// [`Bare::clear`] for `f`, within what is left of the walk: `None` if it ran out first.
     /// Every frame within `f` finished on the way is remembered.
     fn clear_within(&self, view: &dyn CommittedView, f: EntityId) -> Option<bool> {
-        let Some(index) = view.spatial() else {
-            return Some(false);
-        };
         if spacing(view, f).is_some() {
             return Some(false);
         }
-        for c in index.children(f) {
+        let index = view.spatial();
+        for c in contents(view, f) {
             let left = self.walk.get();
             if left == 0 {
                 return None;
@@ -247,7 +246,11 @@ impl Bare {
             if is_true(view, c, ENCLOSED) || is_true(view, c, OPAQUE) {
                 return Some(false);
             }
-            if index.reach(c) == 0 {
+            let empty = match index {
+                Some(index) => index.reach(c) == 0,
+                None => contents(view, c).is_empty(),
+            };
+            if empty {
                 continue; // holds nothing
             }
             let known = self.clear.borrow().get(&c).copied();
@@ -541,9 +544,8 @@ pub fn lit(view: &dyn CommittedView, entity: EntityId, min: i64) -> bool {
 }
 
 /// What `observer` could see within `range`: in sight, and lit — in ascending id order — and the
-/// place it stands in, when that is lit (Amendment A-11): seeing the room is how a mind knows its
-/// view is good enough to tell that someone is not there. And whatever it holds, which it knows
-/// by touch (Amendment A-13).
+/// place it stands in, when that is lit (Amendment A-11). And whatever it holds, which it knows by
+/// touch (Amendment A-13). Whether it took in the whole of its place is [`place_seen_whole`]'s.
 pub fn in_view(
     view: &dyn CommittedView,
     observer: EntityId,
@@ -598,9 +600,52 @@ fn in_view_with(
     seen
 }
 
+/// The place `observer` stands in, if it takes in the whole of it at a glance (Amendment A-40):
+/// the place is lit; every corner of its floor lies within `range`, as far as the air there lets
+/// one see; and nothing in it could hide anything — no wall, nothing opaque, no rising ground.
+/// A place with no size has no corners to reach. Only then does not seeing a
+/// thing there say that it is not there (Amendment A-11): a yard with a house standing in it is
+/// not seen whole from its doorstep.
+pub fn place_seen_whole(
+    view: &dyn CommittedView,
+    observer: EntityId,
+    range: i64,
+    min_illumination: i64,
+) -> Option<EntityId> {
+    place_seen_whole_with(view, observer, range, min_illumination, &Bare::default())
+}
+
+/// [`place_seen_whole`], sharing `bare` with every other observer of the same evaluation.
+fn place_seen_whole_with(
+    view: &dyn CommittedView,
+    observer: EntityId,
+    range: i64,
+    min_illumination: i64,
+    bare: &Bare,
+) -> Option<EntityId> {
+    let place = crate::index::container_of(view, observer)?;
+    let [half_width, half_depth, _] = crate::index::size_of(view, place)?;
+    let range = range * crate::climate::air_clearness(view, place) / crate::schema::PERCENT_FULL;
+    // The observer stands in the place's own frame, whose floor spans its half sizes either side.
+    let at = crate::space::local_position(view, observer);
+    let far_x = (half_width + at[0].abs()) as i128;
+    let far_y = (half_depth + at[1].abs()) as i128;
+    let within = range > 0 && far_x * far_x + far_y * far_y <= (range as i128).pow(2);
+    (within && bare.lit(view, place, min_illumination) && bare.clear(view, place)).then_some(place)
+}
+
+/// Whether `body` has its eyes shut (Amendment A-40): it has been asked to rest — Living Systems'
+/// intent, read by its id — and it is still, neither moving nor setting off, as Living judges a
+/// rest (Appendix A, Ruling 15).
+pub fn eyes_shut(view: &dyn CommittedView, body: EntityId) -> bool {
+    view.read(FactKey::new(body, REST)).map(|f| f.value) == Some(Value::Bool(true))
+        && view.read(FactKey::new(body, MOTION_TARGET)).is_none()
+        && view.read(FactKey::new(body, TRAVEL_TO)).is_none()
+}
+
 // Sight reads where things are (the placement facts the index mirrors), what blocks a line
-// (walls, openings, opaque bodies, the ground), the light, the observer's range, and what it
-// saw last step — to write only the difference.
+// (walls, openings, opaque bodies, the ground), the light, the observer's range, whether it lies
+// at rest with its eyes shut, and what it saw last step — to write only the difference.
 const SIGHT_READS: &[FactType] = &[
     CONTAINED_IN,
     POSITION,
@@ -618,18 +663,23 @@ const SIGHT_READS: &[FactType] = &[
     TERRAIN_SPACING,
     ILLUMINATION,
     SIGHT_RANGE,
+    REST,
+    TRAVEL_TO,
     IN_VIEW,
+    SEEN_WHOLE,
     crate::schema::BURNING,
     crate::schema::SMOKE,
     crate::schema::FOG,
     crate::schema::EXPOSURE,
 ];
-const SIGHT_WRITES: &[FactType] = &[IN_VIEW];
+const SIGHT_WRITES: &[FactType] = &[IN_VIEW, SEEN_WHOLE];
 
 /// Publishes what each body with sight could see (Amendment A-8; Vol. III Ch. 1, *What is in
 /// view*): everything within its sight range — Living Systems' fact — along a clear line and
 /// lit above the world's threshold. One proposal per thing that came into or went out of view,
-/// so a still scene writes nothing. A body whose sight range is gone sees nothing.
+/// so a still scene writes nothing. With it, the place each took in whole, if any (Amendment
+/// A-40). A body whose sight range is gone sees nothing; a body at rest has its eyes shut, and
+/// knows only what it holds (Amendment A-40).
 pub struct Sight {
     step: Step,
     min_illumination: i64,
@@ -663,6 +713,7 @@ impl System for Sight {
         let mut observers: BTreeSet<EntityId> =
             view.entities_with(SIGHT_RANGE).into_iter().collect();
         observers.extend(view.entities_with(IN_VIEW));
+        observers.extend(view.entities_with(SEEN_WHOLE));
         let mut out = Vec::new();
         let bare = Bare::default();
         for observer in observers {
@@ -670,7 +721,39 @@ impl System for Sight {
                 .read(FactKey::new(observer, SIGHT_RANGE))
                 .and_then(|f| f.value.as_int())
                 .unwrap_or(0);
-            let now = in_view_with(view, observer, range, self.min_illumination, &bare);
+            // Eyes shut, only what it holds, by touch — and nothing at all once the senses are
+            // gone, as for any body (Amendment A-40).
+            let shut = range > 0 && eyes_shut(view, observer);
+            let now = if shut {
+                contents(view, observer).into_iter().collect()
+            } else {
+                in_view_with(view, observer, range, self.min_illumination, &bare)
+            };
+            let whole = if shut {
+                None
+            } else {
+                place_seen_whole_with(view, observer, range, self.min_illumination, &bare)
+            };
+            let held = match view
+                .read(FactKey::new(observer, SEEN_WHOLE))
+                .map(|f| f.value)
+            {
+                Some(Value::Entity(place)) => Some(place),
+                _ => None,
+            };
+            if whole != held {
+                let (change, why) = match whole {
+                    Some(place) => (Change::Set(Value::Entity(place)), "took_it_all_in"),
+                    None => (Change::Tombstone, "could_not_see_it_all"),
+                };
+                out.push(Proposal::new(
+                    self.id(),
+                    FactKey::new(observer, SEEN_WHOLE),
+                    ctx.basis_tick(),
+                    change,
+                    Cause::new(why),
+                ));
+            }
             let before: BTreeSet<EntityId> = view
                 .read_all(FactKey::new(observer, IN_VIEW))
                 .into_iter()

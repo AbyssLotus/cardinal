@@ -37,12 +37,14 @@ fn fond(city: &City, holder: u64, about: u64) -> i64 {
 fn finn_and_gwen_fall_in_love_and_the_courier_does_not() {
     let mut city = still(|_| {});
     city.run(3 * DAY);
-    // Side by side, well matched: lovers on the second day, each way.
+    // Side by side, well matched: lovers on the third day, each way. Not the second: lying down,
+    // their eyes are shut, and the dawn hour they once watched each other by from where they lay
+    // no longer counts as time together (Amendment A-40).
     let bond = pair(&city, FINN, BOND, GWEN).expect("lovers");
     assert_eq!(bond.value, Value::Int(LOVERS));
     assert_eq!(bond.provenance.cause, Cause::new("fell_in_love"));
     assert!(
-        (DAY..2 * DAY).contains(&bond.provenance.tick),
+        (2 * DAY..3 * DAY).contains(&bond.provenance.tick),
         "on day {}",
         bond.provenance.tick / DAY
     );
