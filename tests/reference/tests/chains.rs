@@ -148,8 +148,8 @@ fn refused(city: &City, who: u64) -> bool {
 
 #[test]
 fn bread_is_baked_only_while_the_oven_burns() {
-    // The miller, with the flour bin beside him, takes two scoops and bakes a loaf in half an
-    // hour. With the oven cold, he cannot.
+    // The miller, with the flour bin beside him, takes a scoop and bakes a loaf in half an hour.
+    // With the oven cold, he cannot.
     let bake = |lit: bool| {
         let mut pkg = ashford();
         move_to(&mut pkg, FLOUR_BIN, MILL, [0, 80]);
@@ -157,7 +157,7 @@ fn bread_is_baked_only_while_the_oven_burns() {
             pkg.fires.retain(|f| f.0 != OVEN);
         }
         let mut city = City::from(pkg);
-        gather(&mut city, MILLER, FLOUR_BIN, FLOUR, 2);
+        gather(&mut city, MILLER, FLOUR_BIN, FLOUR, 1);
         make(&mut city, MILLER, BAKE, 30);
         (holding(&city, MILLER, BREAD), refused(&city, MILLER))
     };
@@ -167,7 +167,7 @@ fn bread_is_baked_only_while_the_oven_burns() {
 
 #[test]
 fn the_mill_grinds_while_the_brack_runs_and_not_once_it_freezes() {
-    // A bin of wheat in the mill: four sheaves make a scoop of flour in ten minutes. In a hard
+    // A bin of wheat in the mill: two sheaves make a scoop of flour in ten minutes. In a hard
     // frost, once the Brack has iced over, the wheel stands still.
     let grind = |frost: bool| {
         let mut pkg = ashford();
@@ -186,7 +186,7 @@ fn the_mill_grinds_while_the_brack_runs_and_not_once_it_freezes() {
         }
         let mut city = City::from(pkg);
         city.run(60);
-        gather(&mut city, MILLER, FLOUR_BIN, WHEAT, 4);
+        gather(&mut city, MILLER, FLOUR_BIN, WHEAT, 2);
         make(&mut city, MILLER, GRIND, 10);
         (holding(&city, MILLER, FLOUR), refused(&city, MILLER))
     };

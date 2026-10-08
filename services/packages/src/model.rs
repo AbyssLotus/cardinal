@@ -551,6 +551,8 @@ pub struct MindsRules {
     /// The world's sleeping hours, `(from, to)` in whole hours; wrapping past midnight when
     /// `from > to` (Amendment A-18).
     pub sleep_hours: (i64, i64),
+    /// What mending something of one's own, or one's household's, is worth (Amendment A-45).
+    pub repair_value: i64,
 }
 
 /// Tunable rules deposits follow (Amendment A-15).

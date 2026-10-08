@@ -202,6 +202,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut need_weight: Option<i64> = None;
     let mut hungry_above: Option<i64> = None;
     let mut work_value: Option<i64> = None;
+    let mut repair_value: Option<i64> = None;
     let mut tired_margin: Option<i64> = None;
     let mut sleep_hours: Option<(i64, i64)> = None;
     let mut courtship_step: Option<u64> = None;
@@ -523,6 +524,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "need_weight" => need_weight = Some(parse_num(value, line_no)?),
                 "hungry_above" => hungry_above = Some(parse_num(value, line_no)?),
                 "work_value" => work_value = Some(parse_num(value, line_no)?),
+                "repair_value" => repair_value = Some(parse_num(value, line_no)?),
                 "tired_margin" => tired_margin = Some(parse_num(value, line_no)?),
                 "sleep_hours" => sleep_hours = Some(parse_hours(value, line_no)?),
                 other => {
@@ -1257,6 +1259,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             work_value: require(work_value, "rules.minds.work_value")?,
             tired_margin: require(tired_margin, "rules.minds.tired_margin")?,
             sleep_hours: require(sleep_hours, "rules.minds.sleep_hours")?,
+            repair_value: require(repair_value, "rules.minds.repair_value")?,
         }),
     };
     let resources_rules = regrow_step.map(|regrow_step_seconds| ResourcesRules {

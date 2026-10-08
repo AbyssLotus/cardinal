@@ -305,6 +305,8 @@ pub fn minds_config(package: &WorldPackage) -> Option<MindsConfig> {
             tired_margin: r.tired_margin,
             sleep_from_seconds: r.sleep_hours.0 * 3600,
             sleep_to_seconds: r.sleep_hours.1 * 3600,
+            bare_hand_hardness: package.physical_rules.bare_hand_hardness,
+            repair_value: r.repair_value,
         },
         // A resident crossing into the scene keeps their pace and their hours (Amendment A-24).
         residents: package.residents_rules.map(|rr| minds::seam::ResidentMind {
@@ -1299,11 +1301,39 @@ fn starting_knowledge(
                 if let Some(fed) = read(material, physical::schema::MATERIAL_NUTRITION) {
                     out.push((FactKey::pair(mind, info::NUTRITION, material), fed));
                 }
+                // How hard it is (Amendment A-45).
+                if let Some(hard) = read(material, physical::schema::MATERIAL_HARDNESS) {
+                    out.push((FactKey::pair(mind, info::HARDNESS, material), hard));
+                }
+            }
+        }
+        // How whole it is, and whether it is a fixture; for a place, whether it is walled and
+        // what its ground is (A-45).
+        if let Some(whole) = read(thing, physical::schema::INTEGRITY) {
+            out.push((FactKey::pair(mind, info::INTEGRITY, thing), whole));
+        }
+        if read(thing, SOLID) == Some(Value::Bool(true)) {
+            out.push((FactKey::pair(mind, info::FIXTURE, thing), Value::Bool(true)));
+        }
+        if is_place(store, thing) || read(thing, physical::schema::PLACE).is_some() {
+            let walled = read(thing, ENCLOSED) == Some(Value::Bool(true));
+            out.push((
+                FactKey::pair(mind, info::WALLED, thing),
+                Value::Bool(walled),
+            ));
+            if let Some(ground) = ancestry(store, thing, CONTAINED_IN)
+                .into_iter()
+                .find_map(|p| read(p, physical::schema::GROUND))
+            {
+                out.push((FactKey::pair(mind, info::GROUND, thing), ground));
             }
         }
         if let Some(yields) = read(thing, resources::schema::YIELD_MADE_OF) {
             out.push((FactKey::pair(mind, info::YIELDS, thing), yields));
             if let Value::Entity(material) = yields {
+                if let Some(hard) = read(material, physical::schema::MATERIAL_HARDNESS) {
+                    out.push((FactKey::pair(mind, info::HARDNESS, material), hard));
+                }
                 if let Some(fed) = read(material, physical::schema::MATERIAL_NUTRITION) {
                     out.push((FactKey::pair(mind, info::NUTRITION, material), fed));
                 }

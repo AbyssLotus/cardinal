@@ -109,6 +109,9 @@ pub const REASON_CURIOSITY: i64 = 7;
 /// The goal is a thing the mind wants: one it owns, to keep at home, or one no one owns, made of
 /// something it likes, to claim (Amendment A-19).
 pub const REASON_WANT: i64 = 8;
+/// The goal is to mend something of the mind's own, or its household's, that is damaged
+/// (Amendment A-45).
+pub const REASON_REPAIR: i64 = 9;
 
 /// A need met by its object's presence (Living Systems' mechanism code, Amendment A-11).
 pub const MET_BY_PRESENCE: i64 = 1;
@@ -135,6 +138,10 @@ pub const STEP_DROP: i64 = 7;
 pub const STEP_MAKE: i64 = 8;
 /// Claiming a thing no one owns (Amendment A-19).
 pub const STEP_CLAIM: i64 = 9;
+/// Digging the ground where the mind stands (Amendment A-45).
+pub const STEP_DIG: i64 = 10;
+/// Mending a thing (Amendment A-45).
+pub const STEP_MEND: i64 = 11;
 
 /// What a consuming goal is for: the substance a craving wants (an entity reference). Absent for
 /// hunger, which any food meets.
@@ -221,3 +228,19 @@ pub const ACT_MAKE: FactType = FactType::new("economy.act.make");
 pub const ACT_CLAIM: FactType = FactType::new("economy.act.claim");
 /// To lie down and rest — **Living Systems'** intent (Appendix A, Ruling 15).
 pub const REST: FactType = FactType::new("living.act.rest");
+/// To dig the ground where one stands — **Physical Reality's** intent (Amendment A-42).
+pub const ACT_DIG: FactType = FactType::new("physical.act.dig");
+/// What to mend — **Physical Reality's** intent (Amendment A-31).
+pub const ACT_MEND: FactType = FactType::new("physical.act.mend");
+
+/// How hard the mind believes a material is (a fact about a pair; Amendment A-45).
+pub const BELIEF_HARDNESS: FactType = FactType::new("info.belief.hardness");
+/// Whether the mind believes a place is walled (a fact about a pair).
+pub const BELIEF_WALLED: FactType = FactType::new("info.belief.walled");
+/// What the mind believes a place's ground is made of (a fact about a pair).
+pub const BELIEF_GROUND: FactType = FactType::new("info.belief.ground");
+/// How whole the mind believes a thing is (a fact about a pair); absent, whole.
+pub const BELIEF_INTEGRITY: FactType = FactType::new("info.belief.integrity");
+/// Whether the mind believes a thing is a fixture, not a piece to carry off (a fact about a
+/// pair).
+pub const BELIEF_FIXTURE: FactType = FactType::new("info.belief.fixture");

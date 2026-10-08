@@ -190,6 +190,20 @@ Going, on the user's word, with every recommendation in §6 taken. Built in the 
   farmer, the miller, and a baker at work, nothing would make flour.
 - **Built:** R4, mending takes material (A-44): `tests/reference/tests/mending.rs`. Found: a ruin's
   mass was counted as a solid block, four times its shell.
+- **Built:** R5, agents get what they need (A-45): `tests/reference/tests/labour.rs`. Found and
+  fixed along the way:
+  - minds counted anything with a material among its parts as a source of it (Alice's front
+    door, for timber), and fixtures as pieces to carry off. Perception now shows what is a
+    fixture, and a source is a deposit or a piece made of that alone;
+  - minds had no way across open ground between places with no opening, so the farmer could not
+    reach the mill.
+
+  Millside's farmer, miller, and baker now keep the mill in bread. Of the jobs §4 R5 lists, the
+  quarryman, the miner, the woodcutter, and the smith are not given to anyone in Ashford yet:
+  each works (the tests set Carol to the seam and Erin to the clay), but nothing in Ashford uses
+  iron, planks, or blocks yet, so a standing job would only pile them up. The closing week (§5)
+  still runs on the stand-in larders for everyone but Millside. The storm-and-rebuild and the
+  vein shrinking daily wait for those jobs to have a reason to exist.
 
 Retired as planned: the flour bin's and the miller's loaves' regrowth, once the chains that feed
 them stand (R3). The manor pantry, the Heron's stores, and the fish barrel stay as stand-ins for

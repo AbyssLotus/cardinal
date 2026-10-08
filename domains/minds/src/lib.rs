@@ -110,6 +110,8 @@ mod tests {
                 work_value: 250,
                 sleep_from_seconds: 22 * 3600,
                 sleep_to_seconds: 6 * 3600,
+                bare_hand_hardness: 1000,
+                repair_value: 280,
             },
             residents: Some(seam::ResidentMind {
                 walk_speed_cm_s: 120,
@@ -161,6 +163,8 @@ mod tests {
             "economy.act.make",
             "economy.act.claim",
             "living.act.rest",
+            "physical.act.dig",
+            "physical.act.mend",
         ];
         for system in domain().systems() {
             for fact in system.writes() {

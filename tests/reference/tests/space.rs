@@ -182,10 +182,20 @@ fn millside_lies_in_regions_that_overlap_without_nesting() {
     assert!(!is_within(s, e(FARM), e(FOX_RUN)));
     assert!(!overlaps(s, e(FOX_RUN), e(FARMHOUSE)));
     // The frost hollow is the field and the mill, which do not touch — and what is in the mill:
-    // its millstone and oven, the inside of its door (Amendment A-43), the miller, his loaves.
+    // its millstone and oven, the inside of its door (Amendment A-43), the miller, his daughter
+    // the baker (Amendment A-45), his loaves.
     assert_eq!(
         ids(members_of(s, e(FROST_HOLLOW))),
-        vec![FAR_FIELD, MILL, 620, 621, 1402, MILLER, MILLERS_LOAVES]
+        vec![
+            FAR_FIELD,
+            MILL,
+            620,
+            621,
+            1402,
+            MILLER,
+            2063,
+            MILLERS_LOAVES
+        ]
     );
     // The farmer and the miller live on different holdings but drink from one river.
     let shared: Vec<u64> = ids(shared_regions(s, e(FARMER), e(MILLER)));

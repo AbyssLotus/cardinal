@@ -163,6 +163,7 @@ need_above = 3000                   # a longing or craving felt past 30% moves a
 need_weight = 20                    # what each hundredth of a percent past that is worth
 hungry_above = 4000                 # past 40% hungry, a mind goes looking for food
 work_value = 250                    # what working one's job is worth, in its hours
+repair_value = 280                  # what mending one's own is worth: more than work (A-45)
 sleep_hours = 22-6                  # the hours a mind with nothing to do sleeps, once at all tired
 
 [rules.resources]
@@ -426,6 +427,7 @@ part_below = 3000                   # both this cool: they part
 2060 = 0, 0, 0              # the farmer, in the farmhouse
 2061 = 0, 0, 0              # a fox, in the wood
 2062 = 0, 0, 0              # the miller, in the mill
+2063 = -100, 150, 0         # the baker, his daughter, by the oven (Amendment A-45)
 2070 = 500, 1000, 50        # a villager at the foot of the Hill
 2080 = 2500, 2000, 300      # Jory, in the west valley
 2081 = 5500, 2000, 300      # Kit, in the east valley
@@ -630,6 +632,7 @@ part_below = 3000                   # both this cool: they part
 2052 = 25, 15, 185
 2060 = 25, 15, 175
 2062 = 25, 15, 175
+2063 = 22, 14, 165
 2070 = 25, 15, 175
 2080 = 25, 15, 175
 2081 = 25, 15, 175
@@ -716,6 +719,7 @@ part_below = 3000                   # both this cool: they part
 2060 = mobile
 2061 = mobile
 2062 = mobile
+2063 = mobile
 2070 = mobile
 2080 = mobile
 2081 = mobile
@@ -797,6 +801,7 @@ part_below = 3000                   # both this cool: they part
 2060 = 601, 3700
 2061 = 603, 3880
 2062 = 604, 3700
+2063 = 604, 3700
 2070 = 12, 3700
 2080 = 12, 3700
 2081 = 12, 3700
@@ -828,6 +833,7 @@ part_below = 3000                   # both this cool: they part
 2060 = 3000
 2061 = 3000             # the fox
 2062 = 3000
+2063 = 3000
 2070 = 3000
 2080 = 3000
 2081 = 3000
@@ -860,9 +866,10 @@ part_below = 3000                   # both this cool: they part
 2041 = 3, 3105                                                         # Ida: the fen and its cranberries
 2050 = 500, 3106                                                       # the captain: her ship and its stores
 2051 = 500, 3106                                                       # the bosun likewise
-2060 = 601, 3108                                                       # the farmer: the farmhouse and its larder
+2060 = 601, 3108, 1403, 1404, 600, 3123, 14, 1401, 1402, 604               # the farmer: home, his wheat, and the way to the mill (A-45)
 2061 = 603, 3110                                                       # the fox: the wood and its brambles
-2062 = 604, 3109                                                       # the miller: the mill and his loaves
+2062 = 604, 3109, 620, 951, 1401, 1402, 14                               # the miller: the mill, his millstone, the grinding
+2063 = 604, 3109, 621, 952, 1401, 1402, 14                               # the baker: the mill, the oven, the baking
 2080 = 12, 3112                                                        # Jory: the west valley's bush
 2081 = 12, 3113                                                        # Kit: the east valley's bush
 2082 = 12, 3114                                                        # Lena: the ridgeline's bush
@@ -894,6 +901,7 @@ part_below = 3000                   # both this cool: they part
 2060 = 140              # the farmer
 2061 = 250              # the fox
 2062 = 140              # the miller
+2063 = 130              # the baker
 2070 = 140              # the villager
 2080 = 140              # Jory
 2081 = 140              # Kit
@@ -1003,15 +1011,15 @@ part_below = 3000                   # both this cool: they part
 # deposit = what each unit is made of and its size, how many ripen a day, the most it holds,
 # and how many it holds now
 3100 = made_of:704, size:4x4x8, per_day:20, cap:30, stock:6     # the apple tree
-3101 = made_of:709, size:8x8x6, per_day:3, cap:6, stock:4     # the manor pantry, in the hall
+3101 = made_of:709, size:8x8x6, per_day:3, cap:6, stock:4     # the manor pantry, in the hall (a stand-in for trade and kitchens not yet built)
 3102 = made_of:704, size:4x4x8, per_day:2, cap:6, stock:4     # a crate of windfall apples in the cellar
 3103 = made_of:709, size:8x8x6, per_day:0, cap:8, stock:8     # the rider's provisions, in the cart
 3104 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bilberry patch on Highmoor
 3105 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a cranberry bog on Southfen
-3106 = made_of:709, size:8x8x6, per_day:3, cap:6, stock:4     # the Heron's stores
-3107 = made_of:710, size:10x4x4, per_day:2, cap:6, stock:4     # a barrel of smoked fish at the harbour gate
-3108 = made_of:709, size:8x8x6, per_day:2, cap:6, stock:4     # the farmhouse larder
-3109 = made_of:709, size:8x8x6, per_day:2, cap:6, stock:4     # the miller's loaves
+3106 = made_of:709, size:8x8x6, per_day:3, cap:6, stock:4     # the Heron's stores (a stand-in for trade and kitchens not yet built)
+3107 = made_of:710, size:10x4x4, per_day:2, cap:6, stock:4     # a barrel of smoked fish at the harbour gate (a stand-in for trade and kitchens not yet built)
+3108 = made_of:709, size:8x8x6, per_day:2, cap:6, stock:4     # the farmhouse larder (a stand-in for trade and kitchens not yet built)
+3109 = made_of:709, size:8x8x6, per_day:0, cap:6, stock:4     # the miller's loaves: no longer filling themselves (A-45)
 3110 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # brambles in the wood
 3111 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush at the foot of the Hill
 3112 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush in the west valley
@@ -1019,20 +1027,20 @@ part_below = 3000                   # both this cool: they part
 3114 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush on the ridgeline
 3115 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush below the cliff
 3116 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush by the boulder
-123 = made_of:706, size:5x5x5, per_day:3, cap:20, stock:20     # the flour bin: the mill sends three scoops a day
+123 = made_of:706, size:5x5x5, per_day:0, cap:20, stock:20     # the flour bin: twenty scoops, no longer filling themselves (A-45)
 # Worked with effort and a tool fit for them, renewing by their kind (Amendment A-41):
 3120 = made_of:715, size:10x10x8, per_day:0, cap:2000, stock:2000, renewal:nonrenewable, grade:6000, difficulty:30000    # an iron seam in the deep gallery
 3121 = made_of:716, size:10x10x8, per_day:0, cap:1000, stock:1000, renewal:nonrenewable, grade:4000, difficulty:20000    # a copper seam beside it, poorer
 3122 = made_of:700, size:50x8x8, per_day:1, cap:40, stock:30, renewal:threshold, floor:10, difficulty:15000, grows:400/1500/1000    # a stand of timber in the wood
-3123 = made_of:717, size:10x10x10, per_day:4, cap:60, stock:10, grows:500/2000/2000    # the wheat on the farm
+3123 = made_of:717, size:10x10x10, per_day:40, cap:200, stock:60, grows:500/2000/2000    # the wheat on the farm
 
 # ---- Making (Amendment A-17) ---------------------------------------------------------------
 [recipes]
 # recipe = what it needs (material x how many), what it makes and how big, where, and how long
 950 = needs:704x2 706x1, makes:707, size:10x10x5, at:122, takes:3600    # an apple pie, at the hearth
 # The chains (Amendment A-43): heat, a mill's water, a tool to hand; some make several at once.
-951 = needs:717x4, makes:706, size:5x5x5, at:620, takes:600, power:605    # flour, ground while the Brack turns the mill
-952 = needs:706x2, makes:709, size:8x8x6, at:621, takes:1800, heat:yes   # bread, in the burning oven
+951 = needs:717x2, makes:706, size:5x5x5, at:620, takes:600, power:605    # flour, ground from two sheaves while the Brack turns the mill
+952 = needs:706x1, makes:709, size:8x8x6, at:621, takes:1800, heat:yes   # a loaf from a scoop of flour, in the burning oven
 953 = needs:700x1, makes:700, size:50x10x2, at:622, takes:900, tool:3000, count:4    # planks, sawn from a log
 954 = needs:700x2, makes:719, size:10x10x10, at:623, takes:3600, heat:yes, count:2   # charcoal, from the kiln
 955 = needs:715x2 719x1, makes:702, size:10x5x5, at:624, takes:3600, heat:yes        # an iron bar, at the forge
@@ -1043,10 +1051,17 @@ part_below = 3000                   # both this cool: they part
 # job = carry a material from a source, or make a recipe; the store it keeps, how many, and when
 960 = carry:704, from:3100, to:103, keep:6, hours:6-18     # the orchard round: apples to the kitchen
 961 = make:950, to:103, keep:2, hours:8-20                  # the baking: pies for the kitchen
+# Millside's bread (Amendment A-45): wheat to the mill, flour ground there, bread baked there.
+962 = carry:717, from:3123, to:604, keep:8, hours:6-18      # the harvest: wheat to the mill
+963 = make:951, to:604, keep:4, hours:6-18                  # the grinding: flour in the mill
+964 = make:952, to:604, keep:4, hours:6-18                  # the bread: loaves in the mill
 
 [roles]
 2003 = 960              # Carol works the orchard
 2002 = 961              # Bob bakes
+2060 = 962              # the farmer brings in the wheat (Amendment A-45)
+2062 = 963              # the miller grinds it
+2063 = 964              # and his daughter bakes the flour into bread
 
 # ---- Wants (Amendment A-19) -----------------------------------------------------------------
 [owners]

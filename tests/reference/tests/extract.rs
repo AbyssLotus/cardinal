@@ -200,7 +200,8 @@ fn timber_felled_below_its_floor_never_regrows() {
 
 #[test]
 fn wheat_grows_when_it_is_warm_and_wet() {
-    // Three spring days: the Vale's wheat ripens as warm as it stands and as wet as its ground is.
+    // Three spring days: the Vale's wheat ripens as warm as it stands and as wet as its ground is,
+    // by half again at least.
     // In frost, nothing; on dry ground, nothing.
     let after_three_days = |change: &dyn Fn(&mut WorldPackage)| {
         let mut pkg = at_ticks(600);
@@ -209,6 +210,12 @@ fn wheat_grows_when_it_is_warm_and_wet() {
         city.run(3 * 144);
         stock(&city, WHEAT)
     };
+    let start = at_ticks(600)
+        .deposits
+        .iter()
+        .find(|d| d.id == WHEAT)
+        .unwrap()
+        .stock;
     let spring = after_three_days(&|_| {});
     let frost = after_three_days(&|p| {
         p.regions
@@ -218,9 +225,9 @@ fn wheat_grows_when_it_is_warm_and_wet() {
             .temperature_centi_c = -1_000;
     });
     let drought = after_three_days(&|p| p.ground_water.retain(|(c, _)| *c != VALE));
-    assert!(spring >= 15, "it grew: {spring}");
-    assert_eq!(frost, 10, "not in frost");
-    assert_eq!(drought, 10, "not on dry ground");
+    assert!(spring >= start * 3 / 2, "it grew: {start} to {spring}");
+    assert_eq!(frost, start, "not in frost");
+    assert_eq!(drought, start, "not on dry ground");
 }
 
 #[test]

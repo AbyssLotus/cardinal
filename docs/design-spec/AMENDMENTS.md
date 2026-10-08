@@ -1793,3 +1793,71 @@ still filling themselves (A-45).
 
 **Rationale.** `docs/audits/resources.md`, slice R4: "repairing a house should take the
 materials it needs."
+
+## A-45 — Agents get what they need: tools, digging, the mill's jobs, and repair (2026-10)
+
+**Edits:**
+- Vol. II Ch. 3 (perception: what is seen of hardness, wholeness, fixtures, places, and ground)
+- Vol. II Ch. 5 (minds: work that extracts, digging, open ground, and the want to repair)
+- Vol. III Ch. 3 (who takes from deposits: the labour is the organism's)
+- Appendix B (Ashford's Millside: the farmer, the miller, and the baker at work)
+
+**Change.**
+- **What is seen** (Information). Perception adds, as beliefs about pairs:
+  - how hard a material is, seen in what is made of it, or known from a deposit's yield;
+  - how whole a thing is (absent: whole, as far as one knows);
+  - whether a thing is a **fixture**: solid, a body in the way, not a piece to carry off and use.
+    Written only for what is one;
+  - for a place, whether it is **walled** (`false`: open ground, entered anywhere along its
+    edge), and for the place underfoot, what its **ground** is made of.
+
+  Starting knowledge gives the same for what a mind knows at the start.
+- **Open ground** (minds). A mind's map joins a place it believes unwalled to the place around
+  it, with no opening between them. A blocked mind heads for the first *opening* on its way,
+  skipping steps across open ground. The farmer walks from his field to the mill across Millside.
+- **A tool for the work** (minds). Work on something harder than a bare hand works (Physical's
+  rule, A-41, now one of the mind's rules) first fetches a tool:
+  - one it carries believed no softer;
+  - else the nearest it knows of that is not someone else's, a fixture, an opening, a place, or
+    a deposit.
+
+  With none to be had, the work is let go.
+- **What counts as a source** (minds). A deposit believed to bear the material, or a **piece**:
+  a thing believed made of that material and nothing else, not a fixture, an opening, or a
+  place, and never what the mind is working on. Before this, any thing with the material among
+  its parts would do: a door with timber in it, for timber. Where nothing of it is known, a mind
+  **digs** it, at the nearest place it believes has ground of it (A-42): it stands there, digs
+  go after go, and carries off what comes up.
+- **Repair** (minds; a want, beside A-19's). A mind believes a thing damaged when it believes it
+  less than whole. If the thing is its own, its household's, or its home, it may mend it. The
+  want is worth `rules.minds.repair_value`, less the way there, and it does not press like
+  hunger.
+  - It fetches a tool fit for the thing's weakest material.
+  - It fetches a piece of that material, from a store or a source, digging it if need be.
+  - It goes to the thing (into it, if it is a place; else up beside it) and mends, go after go.
+    Each go uses up what it takes (A-44).
+  - Done once it believes the thing whole. Given up if no tool or no material is to be had.
+- **Millside feeds itself** (Ashford).
+  - The farmer carries wheat from his field to the mill (job 962).
+  - The miller grinds it while the Brack turns his wheel (job 963).
+  - His daughter, the baker, bakes the flour into bread at the oven (job 964).
+  - The miller's loaves and the flour bin no longer fill themselves.
+  - Grinding takes two sheaves to a scoop, and a loaf takes one scoop. The field holds up to
+    200 sheaves and ripens 40 a day in season.
+  - The manor pantry, the Heron's stores, the fish barrel, and the farmhouse larder are marked as
+    stand-ins for trade and kitchens not yet built.
+
+**In Ashford** (`tests/reference/tests/labour.rs`):
+- Over two days at ten-minute ticks, the farmer crosses to the mill with wheat. The miller grinds
+  and the baker bakes, and neither goes hungry.
+- Carol, set to carry iron ore from the seam to the mine mouth, fetches the hammer first: ore is
+  too hard for a hand.
+- Erin, set to carry clay to the kitchen with none lying anywhere she knows, digs it from the
+  yard's clay by hand and carries it in.
+- Carol mends her half-smashed crate. She wakes at dawn and takes up the hammer. She mends with
+  the timber torch beside the crate, then with logs from a woodpile, one at a time, until the
+  crate is whole. She never tries the shed or the wardrobe (fixtures) or the front door (an
+  opening).
+
+**Rationale.** `docs/audits/resources.md`, slice R5: "there is currently no way for agents to
+get these resources."

@@ -155,6 +155,12 @@ reference engine is being built here, from the specification, in roadmap order
       (A-39)
 - [x] Shut eyes (A-40): a body at rest sees nothing but what it holds; in the sleeping hours only
       what presses gets a sleeper up; absence judged only in a place taken in whole
+- [x] Resources ([plan](docs/audits/resources.md)): taking from deposits with a tool fit for
+      them, effort, grade, and four kinds of renewal (A-41); ground, digging, and quarries
+      wherever the ground is stone (A-42); chains of making that need heat, a mill's water, or a
+      tool to hand (A-43); mending that uses up material (A-44); minds that fetch a tool, dig,
+      cross open ground, and mend what is theirs, and Millside's farmer, miller, and baker
+      feeding the mill with nothing filling itself (A-45)
 - [ ] Minds that flee fire and break a way through; fire and storm at the city tier
 - [ ] Carrying things across the seam; city generation at scale; the hot store; parallel shards
 - [ ] Hardening, from the hostile audit: a sealed mutation path, multi-cause provenance,

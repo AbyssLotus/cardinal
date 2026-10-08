@@ -106,8 +106,33 @@ pub const RECIPE_AT: FactType = FactType::new("info.belief.recipe.at");
 /// that it knows of.
 pub const OWNER: FactType = FactType::new("info.belief.owner");
 
+/// How hard the holder believes a material is (Amendment A-45): a fact about a pair — the holder
+/// and the material. Learned by seeing things made of it.
+pub const HARDNESS: FactType = FactType::new("info.belief.hardness");
+
+/// Whether the holder believes a place is walled (Amendment A-45): a fact about a pair. `false`:
+/// open ground, walked into and out of anywhere along its edge.
+pub const WALLED: FactType = FactType::new("info.belief.walled");
+
+/// What the holder believes a place's ground is made of (Amendment A-45): a fact about a pair,
+/// learned by standing on it.
+pub const GROUND: FactType = FactType::new("info.belief.ground");
+
+/// How whole the holder believes a thing is, in hundredths of a percent (Amendment A-45): a fact
+/// about a pair. Absent: whole, as far as it knows.
+pub const INTEGRITY: FactType = FactType::new("info.belief.integrity");
+
+/// Whether the holder believes a thing is a fixture (Amendment A-45): solid, a body in the way,
+/// not a piece to carry off and use. A fact about a pair, written only for what is one.
+pub const FIXTURE: FactType = FactType::new("info.belief.fixture");
+
 /// Every fact type this layer owns.
 pub const OWNED: &[FactType] = &[
+    HARDNESS,
+    FIXTURE,
+    WALLED,
+    GROUND,
+    INTEGRITY,
     OWNER,
     WORK_ROLE,
     WORK_CARRIES,
@@ -207,5 +232,16 @@ pub const SOC_JOB_TO: FactType = FactType::new("society.job.to");
 pub const SOC_JOB_KEEP: FactType = FactType::new("society.job.keep");
 /// A job's hours — **Society's**.
 pub const SOC_JOB_HOURS: FactType = FactType::new("society.job.hours");
+/// How hard a material is — **Physical Reality's** (Amendment A-45).
+pub const PHYS_HARDNESS: FactType = FactType::new("physical.material.hardness");
+/// Whether a place is walled — **Physical Reality's**.
+pub const PHYS_ENCLOSED: FactType = FactType::new("physical.space.enclosed");
+/// Whether an entity is a place one can be in — **Physical Reality's**.
+pub const PHYS_PLACE: FactType = FactType::new("physical.space.place");
+/// What a place's ground is made of — **Physical Reality's** (A-42).
+pub const PHYS_GROUND: FactType = FactType::new("physical.space.ground");
+/// How whole a thing is — **Physical Reality's** (A-27).
+pub const PHYS_INTEGRITY: FactType = FactType::new("physical.body.integrity");
+
 /// How far an organism can see, centimetres — **Living Systems'**. Whoever has it perceives.
 pub const LIVING_SIGHT_RANGE: FactType = FactType::new("living.sense.sight_range");
