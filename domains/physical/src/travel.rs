@@ -20,8 +20,8 @@
 //!   (A*, eight-connected, never cutting a corner) and walks to the farthest point of that path
 //!   it can reach in a straight line. Waypoints sit on the ground (or on a low solid top), and
 //!   on terrain no leg is longer than half a sample spacing, so a walker stays on the ground.
-//!   Planning state — which entities are places, each region's obstacles, its grid — is built
-//!   once per tick and shared by every traveller.
+//!   Planning state — each region's obstacles, its grid, the ways between places — is built
+//!   once per tick, as travellers need it, and shared by every traveller.
 //! - **One body per opening per tick**: if two would pass through the same opening on the same
 //!   tick, the lower id goes and the other waits a tick.
 //! - It acts only on a body that is standing on something and not mid-leg; a body that is
@@ -168,15 +168,13 @@ impl Grid {
 }
 
 /// Planning state built during one evaluation of [`Travel`] and shared by every traveller in it:
-/// which entities are places, each region's tall solids, its terrain cells' slopes, and its
-/// planning grids. Nothing here outlives the evaluation — systems hold no state between ticks
+/// each region's tall solids, its terrain cells' slopes, and its planning grids. Nothing here outlives the evaluation — systems hold no state between ticks
 /// (Vol. II Ch. 3) — but within a tick a crowd crossing one room plans against one grid instead
 /// of each rebuilding it (sweep D8). Every cache is a `BTreeMap`, so nothing depends on hash
 /// order.
 struct Planner<'v> {
     view: &'v dyn CommittedView,
     rules: MoveRules,
-    places: BTreeSet<EntityId>,
     walls: BTreeMap<EntityId, Vec<(EntityId, BodyBox)>>,
     slopes: BTreeMap<(EntityId, i64, i64), Option<i64>>,
     grids: BTreeMap<(EntityId, i64), Grid>,
@@ -305,14 +303,6 @@ fn way_out(view: &dyn CommittedView, here: EntityId, at: [i64; 3]) -> [i64; 3] {
 
 impl<'v> Planner<'v> {
     fn new(view: &'v dyn CommittedView, rules: MoveRules) -> Self {
-        // A place is anything one can be *in*: a region with openings, or one an opening leads
-        // to. Found once per tick rather than by scanning every portal for every traveller.
-        let mut places: BTreeSet<EntityId> = view.entities_with(HAS_PORTAL).into_iter().collect();
-        for portal in view.entities_with(LEADS_TO) {
-            if let Some(dest) = portal_destination(view, portal) {
-                places.insert(dest);
-            }
-        }
         let impassable = view
             .entities_with(crate::schema::WATER_LEVEL)
             .into_iter()
@@ -322,7 +312,6 @@ impl<'v> Planner<'v> {
         Self {
             view,
             rules,
-            places,
             walls: BTreeMap::new(),
             slopes: BTreeMap::new(),
             grids: BTreeMap::new(),
@@ -352,9 +341,14 @@ impl<'v> Planner<'v> {
             .clone()
     }
 
-    /// Whether `target` is a place one goes into, rather than a thing one walks up to.
+    /// Whether `target` is a place one goes into, rather than a thing one walks up to: a place, a
+    /// region with openings, or one an opening leads to — asked of the index of where openings
+    /// lead, not by reading every opening in the world each tick.
     fn is_place(&self, target: EntityId) -> bool {
-        self.places.contains(&target) || is_true(self.view, target, PLACE)
+        let view = self.view;
+        is_true(view, target, PLACE)
+            || view.read(FactKey::new(target, HAS_PORTAL)).is_some()
+            || !view.holding(LEADS_TO, Value::Entity(target)).is_empty()
     }
 
     /// The solid bodies in `frame` too tall to step onto from the ground beneath them — what a

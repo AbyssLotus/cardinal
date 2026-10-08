@@ -265,6 +265,12 @@ impl Domain for PhysicalDomain {
         "physical"
     }
 
+    fn agenda(&self) -> Vec<FactType> {
+        // Where each opening leads, indexed by where: travel asks whether any opening leads to a
+        // place in one range walk, not by reading every opening each tick.
+        vec![schema::LEADS_TO]
+    }
+
     fn owns(&self, fact_type: FactType) -> bool {
         fact_type == schema::TEMPERATURE
             || fact_type == schema::TEMPERATURE_ANOMALY
