@@ -1706,3 +1706,56 @@ Lanes cobbled; `tests/reference/tests/quarry.rs`):
 - In pits that hold two spadefuls, the third spadeful comes from a second pit beside the first.
 
 **Rationale.** `docs/audits/resources.md`, slice R1: "stone anywhere the ground is stone."
+
+---
+
+## A-43 — The chains: heat, power, tools, and what a making yields (2026-10)
+
+**Edits:**
+- Vol. III Ch. 4 §4.4 (production: what a making needs besides its inputs)
+- Vol. IV (recipes' `heat`, `power`, `wind`, `tool`, `count`)
+
+**Change.** A recipe (A-17) may also need, and Economy judges it when the making begins:
+- **heat**: its workplace burning (A-28): an oven, a kiln, a forge. Cold, it is refused
+  ("no fire").
+- **power from water**: the water that turns its mill must be running, at or above its normal
+  level and not frozen over (A-39). Otherwise it is refused.
+- **power from wind**: at least so much wind at the workplace (A-36).
+- **a tool**: something the maker holds, not used up in the making, no softer than the recipe
+  asks: an edge for sawing.
+- **count**: how many things it makes at once. Absent, one.
+
+The inputs still leave the world as the making begins, and what is made arrives when its time is
+up (A-17).
+
+**In Ashford** (`tests/reference/tests/chains.rs`):
+- Copper and charcoal as materials.
+- Workplaces:
+  - a millstone in the mill, turned by the Brack;
+  - a bread oven beside it;
+  - a sawpit and a charcoal kiln in the wood;
+  - a forge in the miners' cabin on the Hill.
+- The oven, the kiln, and the forge are kept burning.
+- The mill and the farmhouse get doors: before, nothing could have come in or gone out.
+- Recipes:
+  - flour from four sheaves of wheat, while the Brack turns the mill;
+  - bread from two scoops of flour, in the burning oven;
+  - four planks sawn from a log, with an edge to hand;
+  - two lumps of charcoal from two logs, in the burning kiln;
+  - an iron bar from two lumps of ore and one of charcoal at the forge, and a copper bar the
+    same way.
+
+What the tests show:
+- The miller bakes a loaf from two scoops of flour in half an hour. With the oven cold, he
+  cannot.
+- He grinds four sheaves into a scoop of flour in ten minutes. In a hard frost, once the Brack
+  has iced over, the wheel stands still.
+- Carol fells a log and saws it into four planks with the hammer in hand. Without it, the log
+  stays a log.
+- Two logs in the kiln give two lumps of charcoal in an hour.
+- At the forge, two lumps of ore and one of charcoal give an iron bar in an hour.
+
+**Not yet:** who does this work of their own accord, and the flour bin and the miller's loaves
+still filling themselves (A-45).
+
+**Rationale.** `docs/audits/resources.md`, slice R3.

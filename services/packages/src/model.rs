@@ -606,6 +606,16 @@ pub struct RecipeSpec {
     pub at: u64,
     /// How long the product is in the making, in seconds.
     pub takes_seconds: i64,
+    /// That its workplace must be burning (Amendment A-43).
+    pub heat: bool,
+    /// The water that turns its mill.
+    pub power: Option<u64>,
+    /// The wind, cm/s, that turns its mill.
+    pub wind: Option<i64>,
+    /// How hard a tool the maker must hold.
+    pub tool: Option<i64>,
+    /// How many things it makes at once; `None`, one.
+    pub count: Option<i64>,
 }
 
 /// What a job does (Amendment A-18): one of the engine's closed set of mechanisms.

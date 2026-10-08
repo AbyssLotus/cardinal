@@ -1512,6 +1512,7 @@ fn parse_deposit(id: u64, value: &str, line_no: usize) -> Result<DepositSpec, Pa
 /// seconds in the making. Every field is required.
 fn parse_recipe(id: u64, value: &str, line_no: usize) -> Result<RecipeSpec, ParseError> {
     let (mut needs, mut makes, mut size, mut at, mut takes) = (None, None, None, None, None);
+    let (mut heat, mut power, mut wind, mut tool, mut count) = (false, None, None, None, None);
     let pair = |s: &str| -> Result<(i64, i64), ParseError> {
         let (a, b) = s
             .split_once('x')
@@ -1548,6 +1549,12 @@ fn parse_recipe(id: u64, value: &str, line_no: usize) -> Result<RecipeSpec, Pars
             }
             "at" => at = Some(parse_num(v.trim(), line_no)?),
             "takes" => takes = Some(parse_num(v.trim(), line_no)?),
+            // What else the making needs, and how many it makes (Amendment A-43).
+            "heat" => heat = matches!(v.trim(), "yes" | "true"),
+            "power" => power = Some(parse_num(v.trim(), line_no)?),
+            "wind" => wind = Some(parse_num(v.trim(), line_no)?),
+            "tool" => tool = Some(parse_num(v.trim(), line_no)?),
+            "count" => count = Some(parse_num(v.trim(), line_no)?),
             other => {
                 return Err(ParseError::at(
                     line_no,
@@ -1564,6 +1571,11 @@ fn parse_recipe(id: u64, value: &str, line_no: usize) -> Result<RecipeSpec, Pars
         size: size.ok_or_else(|| missing("size"))?,
         at: at.ok_or_else(|| missing("at"))?,
         takes_seconds: takes.ok_or_else(|| missing("takes"))?,
+        heat,
+        power,
+        wind,
+        tool,
+        count,
     })
 }
 

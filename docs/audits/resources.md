@@ -185,6 +185,9 @@ Going, on the user's word, with every recommendation in §6 taken. Built in the 
 
 - **Built:** R2, extraction (A-41): `tests/reference/tests/extract.rs`.
 - **Built:** R1, ground and quarries (A-42): `tests/reference/tests/quarry.rs`.
+- **Built:** R3, the chains (A-43): `tests/reference/tests/chains.rs`. The flour bin's and the
+  loaves' self-filling are retired with the jobs that replace them (R5), not here: without the
+  farmer, the miller, and a baker at work, nothing would make flour.
 
 Retired as planned: the flour bin's and the miller's loaves' regrowth, once the chains that feed
 them stand (R3). The manor pantry, the Heron's stores, and the fish barrel stay as stand-ins for

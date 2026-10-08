@@ -48,6 +48,17 @@ pub mod schema {
     /// The recipe a maker last asked to make and could not: away from the workplace, without
     /// the inputs, or with something already in the making. The next making clears it.
     pub const MAKE_REFUSED: FactType = FactType::new("economy.make.refused");
+    /// That a recipe needs its workplace burning (Amendment A-43): an oven, a forge, a kiln.
+    pub const RECIPE_HEAT: FactType = FactType::new("economy.recipe.heat");
+    /// The water that turns a recipe's mill (Amendment A-43): it works while that water runs —
+    /// at or above its normal level, and not frozen over.
+    pub const RECIPE_POWER: FactType = FactType::new("economy.recipe.power");
+    /// The wind, in cm/s, that turns a recipe's mill at its workplace.
+    pub const RECIPE_WIND: FactType = FactType::new("economy.recipe.wind");
+    /// How hard a tool the maker must hold, not used up (Amendment A-43): a saw for planks.
+    pub const RECIPE_TOOL: FactType = FactType::new("economy.recipe.tool");
+    /// How many things a recipe makes at once. Absent, one.
+    pub const RECIPE_COUNT: FactType = FactType::new("economy.recipe.count");
 
     /// Who owns a thing (Amendment A-19): an entity reference to its owner.
     pub const OWNER: FactType = FactType::new("economy.owner");
@@ -72,7 +83,25 @@ pub mod schema {
         READY_AT,
         MADE,
         MAKE_REFUSED,
+        RECIPE_HEAT,
+        RECIPE_POWER,
+        RECIPE_WIND,
+        RECIPE_TOOL,
+        RECIPE_COUNT,
     ];
+
+    /// Whether a thing is burning, and how fiercely — **Physical Reality's** (A-28).
+    pub const BURNING: FactType = FactType::new("physical.fire.burning");
+    /// How deep a body of water stands, and its normal depth — **Physical Reality's** (A-39).
+    pub const WATER_LEVEL: FactType = FactType::new("physical.water.level");
+    /// A body of water's depth at rest — **Physical Reality's**.
+    pub const WATER_NORMAL: FactType = FactType::new("physical.water.normal");
+    /// How thick ice lies on water — **Physical Reality's**.
+    pub const ICE: FactType = FactType::new("physical.water.ice");
+    /// A climate's wind — **Physical Reality's**.
+    pub const WIND_SPEED: FactType = FactType::new("physical.environment.wind_speed");
+    /// How hard a material is — **Physical Reality's**.
+    pub const MATERIAL_HARDNESS: FactType = FactType::new("physical.material.hardness");
 
     /// Where a thing is: the place or holder that contains it — **Physical Reality's**.
     pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
@@ -101,14 +130,20 @@ pub const RESTRICTED: &[FactType] = &[
     schema::READY_AT,
     schema::MADE,
     schema::MAKE_REFUSED,
+    schema::RECIPE_HEAT,
+    schema::RECIPE_POWER,
+    schema::RECIPE_WIND,
+    schema::RECIPE_TOOL,
+    schema::RECIPE_COUNT,
 ];
 
 /// Hermetic transformations owned by the Economy domain (Vol. V Ch. 3 §3.1).
 pub mod systems {
     use crate::schema::{
-        ACT_ARRIVE, ACT_CLAIM, ACT_LEAVE, ACT_MAKE, BODY_SIZE, CLAIM_REFUSED, CONTAINED_IN, MADE,
-        MADE_OF, MAKE_REFUSED, MAKING, OWNER, READY_AT, RECIPE_AT, RECIPE_MAKES, RECIPE_NEEDS,
-        RECIPE_SIZE, RECIPE_TAKES,
+        ACT_ARRIVE, ACT_CLAIM, ACT_LEAVE, ACT_MAKE, BODY_SIZE, BURNING, CLAIM_REFUSED,
+        CONTAINED_IN, ICE, MADE, MADE_OF, MAKE_REFUSED, MAKING, MATERIAL_HARDNESS, OWNER, READY_AT,
+        RECIPE_AT, RECIPE_COUNT, RECIPE_HEAT, RECIPE_MAKES, RECIPE_NEEDS, RECIPE_POWER,
+        RECIPE_SIZE, RECIPE_TAKES, RECIPE_TOOL, RECIPE_WIND, WATER_LEVEL, WATER_NORMAL, WIND_SPEED,
     };
     use kernel::fact::{Cause, FactKey, FactType, SystemId};
     use kernel::identity::EntityId;
@@ -129,6 +164,17 @@ pub mod systems {
         MAKE_REFUSED,
         CONTAINED_IN,
         MADE_OF,
+        RECIPE_HEAT,
+        RECIPE_POWER,
+        RECIPE_WIND,
+        RECIPE_TOOL,
+        RECIPE_COUNT,
+        BURNING,
+        WATER_LEVEL,
+        WATER_NORMAL,
+        ICE,
+        WIND_SPEED,
+        MATERIAL_HARDNESS,
     ];
     const PRODUCTION_WRITES: &[FactType] = &[
         ACT_MAKE,
@@ -181,6 +227,51 @@ pub mod systems {
         entity(view, FactKey::new(workplace, CONTAINED_IN))
     }
 
+    /// Why `recipe` cannot be made at `workplace` now, if it cannot (Amendment A-43): its
+    /// workplace is cold, its mill's water is still or frozen, or there is too little wind.
+    fn unpowered(
+        view: &dyn CommittedView,
+        recipe: EntityId,
+        workplace: EntityId,
+    ) -> Option<&'static str> {
+        let heat = view
+            .read(FactKey::new(recipe, RECIPE_HEAT))
+            .map(|f| f.value)
+            == Some(Value::Bool(true));
+        if heat && int(view, FactKey::new(workplace, BURNING)).unwrap_or(0) <= 0 {
+            return Some("no_fire");
+        }
+        if let Some(water) = entity(view, FactKey::new(recipe, RECIPE_POWER)) {
+            let level = int(view, FactKey::new(water, WATER_LEVEL)).unwrap_or(0);
+            let normal = int(view, FactKey::new(water, WATER_NORMAL)).unwrap_or(0);
+            let frozen = int(view, FactKey::new(water, ICE)).unwrap_or(0) > 0;
+            if level < normal || frozen {
+                return Some("the_water_is_still");
+            }
+        }
+        if let Some(wind) = int(view, FactKey::new(recipe, RECIPE_WIND)) {
+            let blowing = kernel::hierarchy::ancestry(view, workplace, CONTAINED_IN)
+                .into_iter()
+                .find_map(|p| int(view, FactKey::new(p, WIND_SPEED)))
+                .unwrap_or(0);
+            if blowing < wind {
+                return Some("too_little_wind");
+            }
+        }
+        None
+    }
+
+    /// How hard `thing` is: as its softest material (Vol. III Ch. 1 §1.9).
+    fn hardness(view: &dyn CommittedView, thing: EntityId) -> Option<i64> {
+        view.read_all(FactKey::new(thing, MADE_OF))
+            .into_iter()
+            .filter_map(|m| match m.value {
+                Value::Entity(m) => int(view, FactKey::new(m, MATERIAL_HARDNESS)),
+                _ => None,
+            })
+            .min()
+    }
+
     impl System for Production {
         fn id(&self) -> SystemId {
             SystemId::new("economy.production")
@@ -224,32 +315,42 @@ pub mod systems {
                     continue; // the workplace is gone, and the work with it
                 };
                 let at_work = entity(view, FactKey::new(maker, CONTAINED_IN)) == Some(place);
-                let thing = ctx.new_entity();
-                if let Some(m) = entity(view, FactKey::new(recipe, RECIPE_MAKES)) {
+                // As many as the recipe makes at once (Amendment A-43).
+                let count = int(view, FactKey::new(recipe, RECIPE_COUNT))
+                    .unwrap_or(1)
+                    .max(1);
+                let mut last = None;
+                for _ in 0..count {
+                    let thing = ctx.new_entity();
+                    if let Some(m) = entity(view, FactKey::new(recipe, RECIPE_MAKES)) {
+                        push(
+                            FactKey::new(thing, MADE_OF),
+                            Change::Add(Value::Entity(m)),
+                            "made",
+                        );
+                    }
+                    if let Some(size) = view.read(FactKey::new(recipe, RECIPE_SIZE)) {
+                        push(
+                            FactKey::new(thing, BODY_SIZE),
+                            Change::Set(size.value),
+                            "made",
+                        );
+                    }
+                    let into = if at_work { maker } else { workplace };
                     push(
-                        FactKey::new(thing, MADE_OF),
-                        Change::Add(Value::Entity(m)),
+                        FactKey::new(thing, ACT_ARRIVE),
+                        Change::Set(Value::Entity(into)),
+                        "made",
+                    );
+                    last = Some(thing);
+                }
+                if let Some(thing) = last {
+                    push(
+                        FactKey::new(maker, MADE),
+                        Change::Set(Value::Entity(thing)),
                         "made",
                     );
                 }
-                if let Some(size) = view.read(FactKey::new(recipe, RECIPE_SIZE)) {
-                    push(
-                        FactKey::new(thing, BODY_SIZE),
-                        Change::Set(size.value),
-                        "made",
-                    );
-                }
-                let into = if at_work { maker } else { workplace };
-                push(
-                    FactKey::new(thing, ACT_ARRIVE),
-                    Change::Set(Value::Entity(into)),
-                    "made",
-                );
-                push(
-                    FactKey::new(maker, MADE),
-                    Change::Set(Value::Entity(thing)),
-                    "made",
-                );
             }
 
             // Requests to make are judged.
@@ -299,13 +400,26 @@ pub mod systems {
                     short |= of_it.len() < count;
                     used.extend(of_it);
                 }
-                if !at_work || busy || short {
+                // A fire, water or wind to turn the mill, and a tool to hand that is not used up
+                // (Amendment A-43).
+                let power = workplace.and_then(|w| unpowered(view, recipe, w));
+                let tool_wanted = int(view, FactKey::new(recipe, RECIPE_TOOL));
+                let tooled = tool_wanted.map_or(true, |wanted| {
+                    held.iter()
+                        .filter(|t| !used.contains(t))
+                        .any(|t| hardness(view, *t).is_some_and(|h| h >= wanted))
+                });
+                if !at_work || busy || short || power.is_some() || !tooled {
                     let why = if !at_work {
                         "away_from_work"
                     } else if busy {
                         "already_making"
-                    } else {
+                    } else if short {
                         "lacks_inputs"
+                    } else if let Some(why) = power {
+                        why
+                    } else {
+                        "no_tool"
                     };
                     push(
                         FactKey::new(maker, MAKE_REFUSED),

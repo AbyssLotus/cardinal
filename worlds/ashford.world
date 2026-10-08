@@ -264,6 +264,11 @@ part_below = 3000                   # both this cool: they part
 3121 = 401                 # the copper seam
 3122 = 603                 # the stand of timber, in the wood
 3123 = 600                 # the wheat, on the farm
+620 = 604                  # the millstone, in the mill (Amendment A-43)
+621 = 604                  # the bread oven, beside it
+622 = 603                  # the sawpit, in the wood
+623 = 603                  # the charcoal kiln, deep in the wood
+624 = 402                  # the forge, in the miners' cabin
 3111 = 12                  # a bush at the foot of the Hill
 3112 = 12                  # a bush in the west valley
 3113 = 12                  # a bush in the east valley
@@ -341,6 +346,11 @@ part_below = 3000                   # both this cool: they part
 3121 = -300, 0, 0
 3122 = 500, 500, 0
 3123 = 1500, 0, 0
+620 = 200, -200, 0
+621 = -250, -250, 0
+622 = -800, 0, 0
+623 = -2500, -2500, 0
+624 = 0, 0, 0
 3111 = 560, 1000, 50
 3112 = 2560, 2000, 300
 3113 = 5560, 2000, 300
@@ -479,8 +489,15 @@ part_below = 3000                   # both this cool: they part
 1355 = 155, 150, 0, -300
 1356 = 156, 150, 0, -300
 1357 = 157, 150, -300, 0
+# The mill and the farmhouse (Amendment A-43): without doors, no grain could come in, nor bread out.
+1401 = 14, 604, 9000, 400           # the mill's door, outside (north wall)
+1402 = 604, 14, 0, 400              # inside
+1403 = 600, 601, 0, 400             # the farmhouse door, outside
+1404 = 601, 600, 0, 400             # inside
 
 [portal_pairs]
+1401 = 1402
+1403 = 1404
 1001 = 1002
 1003 = 1004
 1005 = 1006
@@ -585,6 +602,15 @@ part_below = 3000                   # both this cool: they part
 3121 = 100, 30, 200
 3122 = 100, 100, 1000   # the stand: a stool of timber 2 m across, 10 m tall
 3123 = 2000, 2000, 100  # the wheat: 40 m by 40 m, a metre high
+620 = 60, 60, 80        # the millstone (Amendment A-43)
+621 = 60, 60, 120       # the bread oven
+622 = 100, 50, 50       # the sawpit and its trestle
+623 = 80, 80, 150       # the kiln
+624 = 60, 60, 100       # the forge
+1401 = 45, 10, 205      # the mill's door, and the farmhouse's
+1402 = 45, 10, 205
+1403 = 45, 10, 205
+1404 = 45, 10, 205
 3111 = 40, 40, 100
 3112 = 40, 40, 100
 3113 = 40, 40, 100
@@ -650,6 +676,15 @@ part_below = 3000                   # both this cool: they part
 3100 = solid            # the apple tree
 3120 = solid            # the seams are the gallery's rock (Amendment A-41)
 150 = paved             # the Lanes are cobbled (Amendment A-42)
+620 = solid             # the millstone, oven, sawpit, kiln, and forge stand in the way (A-43)
+621 = solid
+622 = solid
+623 = solid
+624 = solid
+1401 = opaque           # the mill's and the farmhouse's doors
+1402 = opaque
+1403 = opaque
+1404 = opaque
 3121 = solid
 122 = solid             # the hearth
 3006 = solid            # the crate
@@ -720,6 +755,12 @@ part_below = 3000                   # both this cool: they part
 # material = units a pit holds, each unit's size, the work each unit takes
 703 = 5000, 12x10x8, 40000      # granite, cut in blocks of ten kilos: a hammer, and a while at it
 713 = 100000, 10x10x10, 0       # clay, dug out by the spadeful, by hand
+
+# ---- Tended fires (Amendment A-43): the oven, the kiln, and the forge are kept burning ------
+[fires]
+621 = 3000, kept        # the bread oven
+623 = 3000, kept        # the charcoal kiln
+624 = 3000, kept        # the forge
 
 # ---- Ground water (Amendment A-41): how wet each climate's ground is in late April ----------
 [ground_water]
@@ -900,6 +941,8 @@ part_below = 3000                   # both this cool: they part
 716 = density:4200, hardness:4000, flammability:0, thermal_capacity:540     # copper ore
 717 = density:100, hardness:200, flammability:8000    # wheat, standing or in the sheaf
 713 = density:1800, hardness:800, flammability:0, thermal_capacity:900       # clay: the Vale's soil (Amendment A-42)
+718 = density:8960, hardness:3500, flammability:0, conductivity:9500        # copper (Amendment A-43)
+719 = density:300, hardness:100, flammability:9000    # charcoal
 
 [made_of]
 121 = 701               # the lamp: glass
@@ -912,6 +955,15 @@ part_below = 3000                   # both this cool: they part
 3121 = 716              # the copper seam: copper ore
 3122 = 700              # the stand: timber
 3123 = 717              # the wheat
+620 = 703               # the millstone: granite (Amendment A-43)
+621 = 713               # the oven, the kiln: clay
+623 = 713
+622 = 700               # the sawpit: timber
+624 = 703               # the forge: granite
+1401 = 700              # the mill's door, the farmhouse's: timber
+1402 = 700
+1403 = 700
+1404 = 700
 130 = 712               # the hay wagon: straw, piled high
 3009 = 700              # a torch: a stave of timber
 110 = 700               # the shed: timber
@@ -978,6 +1030,13 @@ part_below = 3000                   # both this cool: they part
 [recipes]
 # recipe = what it needs (material x how many), what it makes and how big, where, and how long
 950 = needs:704x2 706x1, makes:707, size:10x10x5, at:122, takes:3600    # an apple pie, at the hearth
+# The chains (Amendment A-43): heat, a mill's water, a tool to hand; some make several at once.
+951 = needs:717x4, makes:706, size:5x5x5, at:620, takes:600, power:605    # flour, ground while the Brack turns the mill
+952 = needs:706x2, makes:709, size:8x8x6, at:621, takes:1800, heat:yes   # bread, in the burning oven
+953 = needs:700x1, makes:700, size:50x10x2, at:622, takes:900, tool:3000, count:4    # planks, sawn from a log
+954 = needs:700x2, makes:719, size:10x10x10, at:623, takes:3600, heat:yes, count:2   # charcoal, from the kiln
+955 = needs:715x2 719x1, makes:702, size:10x5x5, at:624, takes:3600, heat:yes        # an iron bar, at the forge
+956 = needs:716x2 719x1, makes:718, size:10x5x5, at:624, takes:3600, heat:yes        # a copper bar
 
 # ---- Work (Amendment A-18) ------------------------------------------------------------------
 [jobs]

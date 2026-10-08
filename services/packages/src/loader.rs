@@ -1047,6 +1047,24 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             ] {
                 store.seed(FactKey::new(recipe, fact), seeded(v));
             }
+            // What else the making needs, and how many it makes (Amendment A-43).
+            for (fact, v) in [
+                (
+                    economy::schema::RECIPE_HEAT,
+                    r.heat.then_some(Value::Bool(true)),
+                ),
+                (
+                    economy::schema::RECIPE_POWER,
+                    r.power.map(|w| Value::Entity(EntityId::from_raw(w))),
+                ),
+                (economy::schema::RECIPE_WIND, r.wind.map(Value::Int)),
+                (economy::schema::RECIPE_TOOL, r.tool.map(Value::Int)),
+                (economy::schema::RECIPE_COUNT, r.count.map(Value::Int)),
+            ] {
+                if let Some(v) = v {
+                    store.seed(FactKey::new(recipe, fact), seeded(v));
+                }
+            }
         }
     }
 
