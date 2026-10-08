@@ -182,6 +182,13 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     for &(place, _) in &package.latitudes {
         must_exist(place, place, "the place given a latitude");
     }
+    for &(place, material) in &package.ground {
+        must_exist(place, place, "the place given ground");
+        must_exist(place, material, "what its ground is made of");
+    }
+    for &(material, _, _, _) in &package.quarries {
+        must_exist(material, material, "the material quarried");
+    }
     for &(climate, _) in &package.ground_water {
         must_exist(climate, climate, "the climate given ground water");
     }

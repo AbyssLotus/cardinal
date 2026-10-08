@@ -61,6 +61,14 @@ pub mod schema {
     pub const WORK_DONE: FactType = FactType::new("resources.work_done");
     /// That a threshold deposit was taken below its floor and will never regrow.
     pub const COLLAPSED: FactType = FactType::new("resources.collapsed");
+    /// How many units a pit dug in ground of this material holds (Amendment A-42): a fact on the
+    /// material. World data.
+    pub const QUARRY_RESERVE: FactType = FactType::new("resources.quarry.reserve");
+    /// How big each unit cut from such a pit is, as a body's size `[half-width, half-depth,
+    /// height]`, cm.
+    pub const QUARRY_SIZE: FactType = FactType::new("resources.quarry.size");
+    /// The work each unit cut from such a pit takes.
+    pub const QUARRY_DIFFICULTY: FactType = FactType::new("resources.quarry.difficulty");
 
     /// Stock only falls: ore, stone.
     pub const NONRENEWABLE: i64 = 1;
@@ -87,6 +95,9 @@ pub mod schema {
         GROWS,
         WORK_DONE,
         COLLAPSED,
+        QUARRY_RESERVE,
+        QUARRY_SIZE,
+        QUARRY_DIFFICULTY,
     ];
 
     /// One whole unit of stock, in the stock's hundredths.
@@ -102,6 +113,8 @@ pub mod schema {
     pub const GROUND_WATER: FactType = FactType::new("physical.environment.ground_water");
     /// Where a thing is — **Physical Reality's**.
     pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
+    /// That a thing is a pit dug in the ground — **Physical Reality's** (A-42).
+    pub const PIT: FactType = FactType::new("physical.space.pit");
     /// What a thing is made of — **Physical Reality's**.
     pub const MADE_OF: FactType = FactType::new("physical.material.made_of");
     /// A body's size — **Physical Reality's**.
@@ -376,6 +389,84 @@ pub mod systems {
         }
     }
 
+    const QUARRY_READS: &[FactType] = &[
+        crate::schema::PIT,
+        MADE_OF,
+        STOCK,
+        crate::schema::QUARRY_RESERVE,
+        crate::schema::QUARRY_SIZE,
+        crate::schema::QUARRY_DIFFICULTY,
+    ];
+    const QUARRY_WRITES: &[FactType] = &[
+        STOCK,
+        YIELD_MADE_OF,
+        YIELD_SIZE,
+        YIELD_PER_DAY,
+        YIELD_CAP,
+        RENEWAL,
+        DIFFICULTY,
+    ];
+
+    /// Quarries (Vol. III Ch. 3; Amendment A-42): a pit Physical Reality reports dug, not yet a
+    /// deposit, becomes one — a nonrenewable stock of the ground's material, holding the reserve
+    /// the world declares for a pit of that material, each unit of its declared size and work. A
+    /// pit in ground the world declares nothing to be got from holds nothing.
+    pub struct Quarries;
+
+    impl System for Quarries {
+        fn id(&self) -> SystemId {
+            SystemId::new("resources.quarries")
+        }
+        fn reads(&self) -> &'static [FactType] {
+            QUARRY_READS
+        }
+        fn writes(&self) -> &'static [FactType] {
+            QUARRY_WRITES
+        }
+        fn cadence(&self) -> Cadence {
+            Cadence::EveryTick
+        }
+        fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+            let mut out = Vec::new();
+            for pit in view.entities_with(crate::schema::PIT) {
+                if view.read(FactKey::new(pit, STOCK)).is_some() {
+                    continue;
+                }
+                let Some(Value::Entity(ground)) =
+                    view.read(FactKey::new(pit, MADE_OF)).map(|f| f.value)
+                else {
+                    continue;
+                };
+                let reserve = int(view, FactKey::new(ground, crate::schema::QUARRY_RESERVE))
+                    .unwrap_or(0)
+                    .max(0);
+                let size = view
+                    .read(FactKey::new(ground, crate::schema::QUARRY_SIZE))
+                    .map_or(Value::Vec3([10, 10, 10]), |f| f.value);
+                let difficulty =
+                    int(view, FactKey::new(ground, crate::schema::QUARRY_DIFFICULTY)).unwrap_or(0);
+                for (fact, value) in [
+                    (STOCK, Value::Int(reserve * UNIT)),
+                    (YIELD_MADE_OF, Value::Entity(ground)),
+                    (YIELD_SIZE, size),
+                    (YIELD_PER_DAY, Value::Int(0)),
+                    (YIELD_CAP, Value::Int(reserve)),
+                    (RENEWAL, Value::Int(NONRENEWABLE)),
+                    (DIFFICULTY, Value::Int(difficulty)),
+                ] {
+                    out.push(Proposal::new(
+                        self.id(),
+                        FactKey::new(pit, fact),
+                        ctx.basis_tick(),
+                        Change::Set(value),
+                        Cause::new("pit_dug"),
+                    ));
+                }
+            }
+            out
+        }
+    }
+
     /// How a household's larder stands in the scene as its pantry (Amendment A-26): what each
     /// meal is made of, and how big it is.
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -497,10 +588,11 @@ impl Domain for ResourcesDomain {
     fn systems(&self) -> Vec<Box<dyn System>> {
         let c = self.config;
         let step = c.clock.step(c.regrow_step_seconds.saturating_mul(1000));
-        let mut systems: Vec<Box<dyn System>> = vec![Box::new(systems::Deposits::new(
-            step.period_ticks,
-            step.dt_ms,
-        ))];
+        let mut systems: Vec<Box<dyn System>> = vec![
+            Box::new(systems::Deposits::new(step.period_ticks, step.dt_ms)),
+            // Pits dug in the ground become deposits of it (Amendment A-42).
+            Box::new(systems::Quarries),
+        ];
         if let Some(pantries) = c.pantries {
             systems.push(Box::new(systems::Seam::new(pantries)));
         }

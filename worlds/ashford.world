@@ -117,6 +117,7 @@ ice_mm_per_degree_hour = 2          # water freezes 2 mm an hour for each degree
 wade_depth_cm = 50                  # no one wades deeper than 50 cm
 ice_bears_mm = 80                   # ice 8 cm thick bears a walker
 bare_hand_hardness = 1000           # bare hands pick fruit and dig soil; stone, ore, and timber need a tool (A-41)
+pit_half_width_cm = 100             # a pit is broken two metres across (A-42)
 
 [rules.living]
 metabolism_step_seconds = 60
@@ -648,6 +649,7 @@ part_below = 3000                   # both this cool: they part
 120 = solid             # tables
 3100 = solid            # the apple tree
 3120 = solid            # the seams are the gallery's rock (Amendment A-41)
+150 = paved             # the Lanes are cobbled (Amendment A-42)
 3121 = solid
 122 = solid             # the hearth
 3006 = solid            # the crate
@@ -706,6 +708,18 @@ part_below = 3000                   # both this cool: they part
 
 [floods]
 605 = 602               # over its banks, it floods the far field, low frost-hollow ground
+
+# ---- Ground (Amendment A-42): what each place's ground is made of, and what a pit in it holds -
+[ground]
+1 = 713                 # the Vale: clay
+3 = 713                 # Southfen: clay under the fen
+2 = 703                 # Highmoor: granite
+12 = 703                # the Hill: granite under thin soil
+
+[quarry]
+# material = units a pit holds, each unit's size, the work each unit takes
+703 = 5000, 12x10x8, 40000      # granite, cut in blocks of ten kilos: a hammer, and a while at it
+713 = 100000, 10x10x10, 0       # clay, dug out by the spadeful, by hand
 
 # ---- Ground water (Amendment A-41): how wet each climate's ground is in late April ----------
 [ground_water]
@@ -885,6 +899,7 @@ part_below = 3000                   # both this cool: they part
 715 = density:5000, hardness:6000, flammability:0, thermal_capacity:650     # iron ore (Amendment A-41)
 716 = density:4200, hardness:4000, flammability:0, thermal_capacity:540     # copper ore
 717 = density:100, hardness:200, flammability:8000    # wheat, standing or in the sheaf
+713 = density:1800, hardness:800, flammability:0, thermal_capacity:900       # clay: the Vale's soil (Amendment A-42)
 
 [made_of]
 121 = 701               # the lamp: glass

@@ -95,6 +95,11 @@ pub struct WorldPackage {
     /// How wet each climate's ground is when the world begins (Amendment A-41): `(climate,
     /// hundredths of a percent)`.
     pub ground_water: Vec<(u64, i64)>,
+    /// What each place's ground is made of (Amendment A-42): `(place, material)`.
+    pub ground: Vec<(u64, u64)>,
+    /// What a pit dug in ground of a material holds (Amendment A-42): `(material, units, unit
+    /// size, work per unit)`.
+    pub quarries: Vec<(u64, i64, [i64; 3], i64)>,
     /// The world's water (Amendment A-39): ponds, rivers, and the sea.
     pub waters: Vec<WaterSpec>,
     /// Which water each pond or river flows on into: `(from, to)`.
@@ -169,6 +174,8 @@ pub enum Flag {
     Mobile,
     /// A portal that starts closed.
     Closed,
+    /// Ground paved or floored over, not to be dug (Amendment A-42).
+    Paved,
 }
 
 /// The flags one entity carries.
@@ -507,6 +514,8 @@ pub struct PhysicalRules {
     /// The hardest material a bare hand works (Amendment A-41); anything harder needs a tool no
     /// softer than it.
     pub bare_hand_hardness: i64,
+    /// How far to either side of a digger a pit is broken, centimetres (Amendment A-42).
+    pub pit_half_width_cm: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).

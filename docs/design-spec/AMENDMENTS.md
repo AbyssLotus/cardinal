@@ -1663,3 +1663,46 @@ wanted, and it got up for a bottle.
 **Not yet:** digging the ground (A-42).
 
 **Rationale.** `docs/audits/resources.md`, slice R2 (built first: digging is taking from a pit).
+
+---
+
+## A-42 — Ground and quarries (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (what the ground is made of)
+- Vol. III Ch. 3 §3.4 (deposits opened by digging)
+- Vol. IV Ch. 2 §2.2 (world rules: `pit_half_width_cm`), Vol. IV (`[ground]`, `[quarry]`, the
+  `paved` flag)
+
+**Change.**
+- **Ground** (Physical; world data). `[ground] place = material`: what a place's ground is made
+  of, inherited down the nesting as climate is. The Hill's mine mouth stands on the Hill's
+  granite.
+- **Paved** (Physical; world data). A place flagged `paved` is not to be dug: cobbles, floors.
+- **Digging** (`act.dig`, open to any decider; Physical carries it out). A body digs the ground
+  where it stands, if there is ground to dig. There is none:
+  - inside a thing, or in a walled place;
+  - in water, on flooded ground, on ice;
+  - on paved ground;
+  - where nothing up the nesting declares a ground.
+
+  It digs at a pit within its reach that is not dug bare, the lowest first. If there is none, it
+  breaks a new pit where it stands: a thing in the place, `pit_half_width_cm` to either side,
+  made of the ground's material. Either way the dig is a go at that pit, as a pick is (A-41): a
+  hand or a tool fit for the ground, and its effort reported.
+- **Quarries** (Resources). A pit not yet a deposit becomes one. It is nonrenewable, holding
+  what the world declares for a pit in that ground: `[quarry] material = units, unit size, work
+  per unit`. The dig that breaks ground yields nothing of itself. When a pit is dug bare it stays
+  where it is, and the next dig beside it breaks a new one.
+
+**In Ashford** (the Vale and Southfen on clay, Highmoor and the Hill on granite; granite pits hold
+5,000 blocks of ten kilos at hard work; clay pits a hundred thousand spadefuls by hand; the
+Lanes cobbled; `tests/reference/tests/quarry.rs`):
+- At the mine mouth, Carol's first blow with the hammer breaks ground, and the pit gives a granite
+  block every few blows after. The pit holds one fewer.
+- Without a tool she cannot break the granite, and no pit is dug. Erin, in the yard, digs clay by
+  hand: the first dig breaks ground, the second brings it up.
+- Nothing is dug in the kitchen, on the Lanes' cobbles, or in the Brack.
+- In pits that hold two spadefuls, the third spadeful comes from a second pit beside the first.
+
+**Rationale.** `docs/audits/resources.md`, slice R1: "stone anywhere the ground is stone."

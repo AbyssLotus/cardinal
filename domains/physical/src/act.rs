@@ -40,6 +40,15 @@ use std::collections::BTreeMap;
 const ARRIVAL_GAP_CM: i64 = 5;
 
 const ACT_READS: &[FactType] = &[
+    crate::schema::ACT_DIG,
+    crate::schema::PIT,
+    crate::schema::GROUND,
+    crate::schema::PAVED,
+    crate::schema::PLACE,
+    crate::schema::WATER_KIND,
+    crate::schema::FLOOD_DEPTH,
+    crate::schema::ICE,
+    crate::schema::RESOURCE_STOCK,
     YIELD_MADE_OF,
     crate::schema::WETNESS,
     ACT_PUSH,
@@ -85,6 +94,9 @@ const ACT_READS: &[FactType] = &[
     WHOLE_SHAPE,
 ];
 const ACT_WRITES: &[FactType] = &[
+    crate::schema::ACT_DIG,
+    crate::schema::PIT,
+    MADE_OF,
     PICK_EFFORT,
     ACT_PUSH,
     ACT_MEND,
@@ -153,6 +165,7 @@ pub struct Act {
     ignite_intensity: i64,
     mend_scale: i64,
     wall_thickness_cm: i64,
+    pit_half_cm: i64,
 }
 
 /// What a thing's shape and flags were, as [`WHOLE_SHAPE`] keeps them: `[height, flags, 0]`.
@@ -202,7 +215,64 @@ impl Act {
             ignite_intensity,
             mend_scale,
             wall_thickness_cm,
+            pit_half_cm: 100,
         }
+    }
+
+    /// The same, digging pits `pit_half_cm` to either side of where the digger stands (Amendment
+    /// A-42; a world rule).
+    pub const fn with_pits(mut self, pit_half_cm: i64) -> Self {
+        self.pit_half_cm = pit_half_cm;
+        self
+    }
+
+    /// The place `body` stands in and what its ground is made of, if there is ground there to dig
+    /// (Amendment A-42): not inside a thing or a walled place, not in water, on flooded or frozen
+    /// ground, or on ground paved over.
+    fn ground_under(
+        &self,
+        view: &dyn CommittedView,
+        body: EntityId,
+    ) -> Option<(EntityId, EntityId)> {
+        let place = container_of(view, body)?;
+        let int = |fact| {
+            view.read(FactKey::new(place, fact))
+                .and_then(|f| f.value.as_int())
+        };
+        if !is_true(view, place, crate::schema::PLACE)
+            || is_true(view, place, ENCLOSED)
+            || is_true(view, place, crate::schema::PAVED)
+            || view
+                .read(FactKey::new(place, crate::schema::WATER_KIND))
+                .is_some()
+            || int(crate::schema::FLOOD_DEPTH).unwrap_or(0) > 0
+            || int(crate::schema::ICE).unwrap_or(0) > 0
+        {
+            return None;
+        }
+        let ground = kernel::hierarchy::ancestry(view, place, CONTAINED_IN)
+            .into_iter()
+            .find_map(|p| entity_at(view, p, crate::schema::GROUND))?;
+        Some((place, ground))
+    }
+
+    /// A pit in `place` within `body`'s reach that is not dug bare, the lowest first.
+    fn pit_at_hand(
+        &self,
+        view: &dyn CommittedView,
+        body: EntityId,
+        place: EntityId,
+    ) -> Option<EntityId> {
+        crate::nearby::contents(view, place)
+            .into_iter()
+            .filter(|p| is_true(view, *p, crate::schema::PIT))
+            .filter(|p| {
+                view.read(FactKey::new(*p, crate::schema::RESOURCE_STOCK))
+                    .and_then(|f| f.value.as_int())
+                    .map_or(true, |stock| stock >= 100)
+            })
+            .filter(|p| self.within_reach(view, body, *p))
+            .min()
     }
 
     /// The broken things whose integrity has come back whole: to be what they were (Amendment
@@ -322,8 +392,14 @@ impl Act {
             .map(|f| f.value)
         {
             Some(Value::Entity(m)) => crate::materials::hardness(view, m).unwrap_or(0),
-            _ => 0,
+            _ => crate::materials::structural_hardness(view, deposit).unwrap_or(0),
         };
+        self.effort_on(view, body, yields)
+    }
+
+    /// How hard `body` works a material `yields` hard with one go: the hardest blow it lands with
+    /// a tool no softer than it, or a bare hand if it is soft enough — or `None`.
+    fn effort_on(&self, view: &dyn CommittedView, body: EntityId, yields: i64) -> Option<i64> {
         let strength = view
             .read(FactKey::new(body, STRENGTH))
             .and_then(|f| f.value.as_int())
@@ -510,6 +586,7 @@ impl System for Act {
             ACT_STRIKE,
             ACT_IGNITE,
             ACT_MEND,
+            crate::schema::ACT_DIG,
         ] {
             actors.extend(view.entities_with(fact));
         }
@@ -888,6 +965,52 @@ impl System for Act {
                         succeeded = true;
                     }
                     None => refused = Some(target),
+                }
+            }
+            // Digging (Amendment A-42): the ground where the body stands, if there is ground to
+            // dig — at a pit in reach that is not dug bare, or, if none, breaking a new one.
+            if is_true(view, body, crate::schema::ACT_DIG) {
+                push(
+                    body,
+                    crate::schema::ACT_DIG,
+                    Change::Tombstone,
+                    "considered",
+                );
+                match self.ground_under(view, body) {
+                    None => refused = Some(container_of(view, body).unwrap_or(body)),
+                    Some((place, ground)) => match self.pit_at_hand(view, body, place) {
+                        Some(pit) => match self.working_effort(view, body, pit) {
+                            Some(effort) => {
+                                push(body, PICKED, Change::Set(Value::Entity(pit)), "dug");
+                                push(body, PICK_EFFORT, Change::Set(Value::Int(effort)), "dug");
+                                succeeded = true;
+                            }
+                            None => refused = Some(pit),
+                        },
+                        None => {
+                            let hard = crate::materials::hardness(view, ground).unwrap_or(0);
+                            match self.effort_on(view, body, hard) {
+                                Some(effort) => {
+                                    let pit = ctx.new_entity();
+                                    let [x, y, z] = local_position(view, body);
+                                    let half = self.pit_half_cm;
+                                    for (fact, change) in [
+                                        (CONTAINED_IN, Change::Set(Value::Entity(place))),
+                                        (POSITION, Change::Set(Value::Vec3([x, y, z]))),
+                                        (BODY_SIZE, Change::Set(Value::Vec3([half, half, 0]))),
+                                        (MADE_OF, Change::Add(Value::Entity(ground))),
+                                        (crate::schema::PIT, Change::Set(Value::Bool(true))),
+                                    ] {
+                                        push(pit, fact, change, "broke_ground");
+                                    }
+                                    push(body, PICKED, Change::Set(Value::Entity(pit)), "dug");
+                                    push(body, PICK_EFFORT, Change::Set(Value::Int(effort)), "dug");
+                                    succeeded = true;
+                                }
+                                None => refused = Some(place),
+                            }
+                        }
+                    },
                 }
             }
             // Taking from a deposit (Amendments A-15, A-41): within reach, and with a hand or a

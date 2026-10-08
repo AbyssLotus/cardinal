@@ -161,6 +161,8 @@ pub struct PhysicalConfig {
     pub wind: wind::WindRules,
     /// How a deep low brews a gale (Amendment A-33).
     pub gale: systems::Gale,
+    /// How far to either side of a digger a pit is broken, in centimetres (Amendment A-42).
+    pub pit_half_width_cm: i64,
     /// The world's year, its latitude, and its moon (Amendment A-34).
     pub calendar: calendar::Calendar,
     /// Cloud, rain and snow, and fog (Amendment A-35).
@@ -220,6 +222,7 @@ pub const RESTRICTED: &[FactType] = &[
     schema::CONSUMED,
     schema::PICKED,
     schema::PICK_EFFORT,
+    schema::PIT,
     schema::BROKEN,
     schema::BURNING,
     schema::KEPT_FIRE,
@@ -344,6 +347,10 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_PICK
             || fact_type == schema::PICKED
             || fact_type == schema::PICK_EFFORT
+            || fact_type == schema::GROUND
+            || fact_type == schema::PAVED
+            || fact_type == schema::PIT
+            || fact_type == schema::ACT_DIG
             || fact_type == schema::INTEGRITY
             || fact_type == schema::BROKEN
             || fact_type == schema::ACT_STRIKE
@@ -460,16 +467,19 @@ impl Domain for PhysicalDomain {
             Box::new(travel::Gravity::new(c.move_rules())),
             Box::new(travel::Travel::new(c.move_rules())),
             // Opens, shuts, and turns on request, within reach (Amendment A-5).
-            Box::new(act::Act::new(
-                c.reach_cm,
-                c.carry_limit_kg,
-                c.strike,
-                c.wreckage_height_cm,
-                c.move_rules(),
-                c.fire.ignite_intensity,
-                c.mend_scale,
-                c.fire.wall_thickness_cm,
-            )),
+            Box::new(
+                act::Act::new(
+                    c.reach_cm,
+                    c.carry_limit_kg,
+                    c.strike,
+                    c.wreckage_height_cm,
+                    c.move_rules(),
+                    c.fire.ignite_intensity,
+                    c.mend_scale,
+                    c.fire.wall_thickness_cm,
+                )
+                .with_pits(c.pit_half_width_cm),
+            ),
             // What the wind tears at (Amendment A-29).
             Box::new(wind::WindLoad::new(step, c.wind, c.fire.wall_thickness_cm)),
             // Fire: burning, spreading, and the heat it gives (Amendment A-28).
@@ -545,6 +555,13 @@ impl Domain for PhysicalDomain {
             composition::compose_segment_field(current, changes)
         } else if fact_type == schema::POSITION || fact_type == schema::WHOLE_SHAPE {
             composition::compose_vec3(current, changes, None)
+        } else if fact_type == schema::PAVED
+            || fact_type == schema::PIT
+            || fact_type == schema::ACT_DIG
+        {
+            composition::compose_bool(current, changes)
+        } else if fact_type == schema::GROUND {
+            composition::compose_entity_ref(current, changes)
         } else if fact_type == schema::PICK_EFFORT {
             composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
         } else if fact_type == schema::IMPACT {

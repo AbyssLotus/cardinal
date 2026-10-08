@@ -516,6 +516,27 @@ pub const PICK_EFFORT: FactType = FactType::new("physical.body.pick_effort");
 /// must be hard enough to work.
 pub const YIELD_MADE_OF: FactType = FactType::new("resources.yield.made_of");
 
+/// How many hundredths of a unit a deposit holds — **Resources'** fact, read by id (Amendment
+/// A-42): a pit dug bare is passed over for a new one.
+pub const RESOURCE_STOCK: FactType = FactType::new("resources.stock");
+
+/// What a place's ground is made of (Amendment A-42): a material. World data, inherited down
+/// the nesting, as climate is: a quarry on the Hill is cut from the Hill's granite.
+pub const GROUND: FactType = FactType::new("physical.space.ground");
+
+/// That a place's ground is paved, floored, or otherwise not to be broken (Amendment A-42).
+/// World data, for the place itself.
+pub const PAVED: FactType = FactType::new("physical.space.paved");
+
+/// That a thing is a pit dug in the ground (Amendment A-42): made of the ground's material, it
+/// is a deposit of it, which Resources keeps.
+pub const PIT: FactType = FactType::new("physical.space.pit");
+
+/// A decider's intent that a body dig the ground where it stands (Amendment A-42): `true`. Open
+/// to anyone. Carried out where there is ground to dig and the body has a hand or a tool fit for
+/// it; cleared either way.
+pub const ACT_DIG: FactType = FactType::new("physical.act.dig");
+
 /// What a body last consumed (Amendment A-12): an entity reference to the thing, which has left
 /// the world. Written by Physical Reality so Living Systems can judge what it does to the body
 /// (Appendix A, Ruling 9).

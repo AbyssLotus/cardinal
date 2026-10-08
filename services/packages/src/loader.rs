@@ -377,6 +377,7 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             scale: r.strike_scale,
             bare_hand_hardness: r.bare_hand_hardness,
         },
+        pit_half_width_cm: r.pit_half_width_cm,
         wreckage_height_cm: r.wreckage_height_cm,
         mend_scale: r.mend_scale,
         fire: physical::fire::FireRules {
@@ -683,6 +684,7 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 Flag::Enclosed => (ENCLOSED, true),
                 Flag::Mobile => (MOBILE, true),
                 Flag::Closed => (PORTAL_OPEN, false),
+                Flag::Paved => (physical::schema::PAVED, true),
             };
             store.seed(FactKey::new(e, fact), seeded(Value::Bool(value)));
         }
@@ -756,6 +758,14 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         store.seed(
             FactKey::new(EntityId::from_raw(region), physical::schema::STORM),
             seeded(Value::Vec3([from, to, wind])),
+        );
+    }
+
+    // What each place's ground is made of (Amendment A-42).
+    for &(place, material) in &package.ground {
+        store.seed(
+            FactKey::new(EntityId::from_raw(place), physical::schema::GROUND),
+            seeded(Value::Entity(EntityId::from_raw(material))),
         );
     }
 
@@ -961,6 +971,17 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     // Deposits are seeded before anyone's starting knowledge, so a mind that knows a tree knows
     // what it bears and how much (Amendment A-16).
     if has_resources {
+        // What a pit dug in each ground holds (Amendment A-42).
+        for &(material, units, size, work) in &package.quarries {
+            let material = EntityId::from_raw(material);
+            for (fact, v) in [
+                (resources::schema::QUARRY_RESERVE, Value::Int(units)),
+                (resources::schema::QUARRY_SIZE, Value::Vec3(size)),
+                (resources::schema::QUARRY_DIFFICULTY, Value::Int(work)),
+            ] {
+                store.seed(FactKey::new(material, fact), seeded(v));
+            }
+        }
         for d in &package.deposits {
             let deposit = EntityId::from_raw(d.id);
             let unit = resources::schema::UNIT;

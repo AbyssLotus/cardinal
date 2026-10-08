@@ -184,6 +184,7 @@ Going, on the user's word, with every recommendation in §6 taken. Built in the 
 (digging is taking from a pit), R3, R4, R5:
 
 - **Built:** R2, extraction (A-41): `tests/reference/tests/extract.rs`.
+- **Built:** R1, ground and quarries (A-42): `tests/reference/tests/quarry.rs`.
 
 Retired as planned: the flour bin's and the miller's loaves' regrowth, once the chains that feed
 them stand (R3). The manor pantry, the Heron's stores, and the fish barrel stay as stand-ins for

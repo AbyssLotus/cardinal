@@ -148,10 +148,13 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut wade_depth_cm: Option<i64> = None;
     let mut ice_bears_mm: Option<i64> = None;
     let mut bare_hand_hardness: Option<i64> = None;
+    let mut pit_half_width_cm: Option<i64> = None;
     let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
     let mut latitudes: Vec<(u64, i64)> = Vec::new();
     let mut humidities: Vec<(u64, i64)> = Vec::new();
     let mut ground_water: Vec<(u64, i64)> = Vec::new();
+    let mut ground: Vec<(u64, u64)> = Vec::new();
+    let mut quarries: Vec<(u64, i64, [i64; 3], i64)> = Vec::new();
     let mut waters: Vec<WaterSpec> = Vec::new();
     let mut drains: Vec<(u64, u64)> = Vec::new();
     let mut floods: Vec<(u64, Vec<u64>)> = Vec::new();
@@ -451,6 +454,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "wade_depth_cm" => wade_depth_cm = Some(parse_num(value, line_no)?),
                 "ice_bears_mm" => ice_bears_mm = Some(parse_num(value, line_no)?),
                 "bare_hand_hardness" => bare_hand_hardness = Some(parse_num(value, line_no)?),
+                "pit_half_width_cm" => pit_half_width_cm = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -747,6 +751,31 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     .collect::<Result<Vec<u64>, _>>()?;
                 floods.push((water, places));
             }
+            "ground" => {
+                // place = what its ground is made of (Amendment A-42)
+                ground.push((parse_num(key, line_no)?, parse_num(value, line_no)?));
+            }
+            "quarry" => {
+                // material = units a pit holds, unit size XxYxZ, work per unit (Amendment A-42)
+                let material: u64 = parse_num(key, line_no)?;
+                let parts: Vec<&str> = value.split(',').map(str::trim).collect();
+                let [units, size, work] = parts[..] else {
+                    return Err(ParseError::at(line_no, "a quarry is units, XxYxZ, work"));
+                };
+                let dims = size
+                    .split('x')
+                    .map(|n| parse_num(n, line_no))
+                    .collect::<Result<Vec<i64>, _>>()?;
+                let [x, y, z] = dims[..] else {
+                    return Err(ParseError::at(line_no, "a size is XxYxZ"));
+                };
+                quarries.push((
+                    material,
+                    parse_num(units, line_no)?,
+                    [x, y, z],
+                    parse_num(work, line_no)?,
+                ));
+            }
             "ground_water" => {
                 // climate = how wet its ground begins, hundredths of a percent (Amendment A-41)
                 let climate: u64 = parse_num(key, line_no)?;
@@ -959,6 +988,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                         "enclosed" => Flag::Enclosed,
                         "mobile" => Flag::Mobile,
                         "closed" => Flag::Closed,
+                        "paved" => Flag::Paved,
                         other => {
                             return Err(ParseError::at(
                                 line_no,
@@ -1198,6 +1228,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         wade_depth_cm: require(wade_depth_cm, "rules.physical.wade_depth_cm")?,
         ice_bears_mm: require(ice_bears_mm, "rules.physical.ice_bears_mm")?,
         bare_hand_hardness: require(bare_hand_hardness, "rules.physical.bare_hand_hardness")?,
+        pit_half_width_cm: require(pit_half_width_cm, "rules.physical.pit_half_width_cm")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -1352,6 +1383,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         latitudes,
         humidities,
         ground_water,
+        ground,
+        quarries,
         waters,
         drains,
         floods,
@@ -1990,6 +2023,7 @@ ice_mm_per_degree_hour = 2
 wade_depth_cm = 50
 ice_bears_mm = 80
 bare_hand_hardness = 1000
+pit_half_width_cm = 100
 [regions]
 1 = 1500
 ";

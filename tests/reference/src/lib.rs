@@ -214,6 +214,7 @@ const FRONT_DOOR_WRITES: &[FactType] = &[
     physical::schema::ACT_STRIKE,
     physical::schema::ACT_IGNITE,
     physical::schema::ACT_MEND,
+    physical::schema::ACT_DIG,
     economy::schema::ACT_MAKE,
     economy::schema::ACT_CLAIM,
     minds::schema::DIRECTED,
@@ -430,6 +431,12 @@ impl City {
     /// Ask `who` to put down `thing` where it stands.
     pub fn drop_(&mut self, who: u64, thing: u64) -> &mut Self {
         self.order(who, physical::schema::ACT_DROP, Value::Entity(e(thing)));
+        self
+    }
+
+    /// Ask `who` to dig the ground where they stand (Amendment A-42).
+    pub fn dig(&mut self, who: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_DIG, Value::Bool(true));
         self
     }
 
