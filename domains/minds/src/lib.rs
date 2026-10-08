@@ -112,6 +112,7 @@ mod tests {
                 sleep_to_seconds: 6 * 3600,
                 bare_hand_hardness: 1000,
                 repair_value: 280,
+                repair_below: 10_000,
             },
             residents: Some(seam::ResidentMind {
                 walk_speed_cm_s: 120,

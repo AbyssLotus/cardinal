@@ -307,6 +307,7 @@ pub fn minds_config(package: &WorldPackage) -> Option<MindsConfig> {
             sleep_to_seconds: r.sleep_hours.1 * 3600,
             bare_hand_hardness: package.physical_rules.bare_hand_hardness,
             repair_value: r.repair_value,
+            repair_below: r.repair_below,
         },
         // A resident crossing into the scene keeps their pace and their hours (Amendment A-24).
         residents: package.residents_rules.map(|rr| minds::seam::ResidentMind {
@@ -378,6 +379,7 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             tool_percent_per_kg: r.tool_strike_percent_per_kg,
             scale: r.strike_scale,
             bare_hand_hardness: r.bare_hand_hardness,
+            tool_wear: r.tool_wear,
         },
         pit_half_width_cm: r.pit_half_width_cm,
         wreckage_height_cm: r.wreckage_height_cm,
@@ -768,6 +770,17 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         store.seed(
             FactKey::new(EntityId::from_raw(place), physical::schema::GROUND),
             seeded(Value::Entity(EntityId::from_raw(material))),
+        );
+    }
+
+    // How fast each workplace wears in use (Amendment A-46).
+    for &(workplace, per_hour) in &package.wear {
+        store.seed(
+            FactKey::new(
+                EntityId::from_raw(workplace),
+                physical::schema::WEAR_PER_HOUR,
+            ),
+            seeded(Value::Int(per_hour)),
         );
     }
 

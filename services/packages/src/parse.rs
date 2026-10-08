@@ -149,10 +149,12 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut ice_bears_mm: Option<i64> = None;
     let mut bare_hand_hardness: Option<i64> = None;
     let mut pit_half_width_cm: Option<i64> = None;
+    let mut tool_wear: Option<i64> = None;
     let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
     let mut latitudes: Vec<(u64, i64)> = Vec::new();
     let mut humidities: Vec<(u64, i64)> = Vec::new();
     let mut ground_water: Vec<(u64, i64)> = Vec::new();
+    let mut wear: Vec<(u64, i64)> = Vec::new();
     let mut ground: Vec<(u64, u64)> = Vec::new();
     let mut quarries: Vec<(u64, i64, [i64; 3], i64)> = Vec::new();
     let mut waters: Vec<WaterSpec> = Vec::new();
@@ -203,6 +205,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut hungry_above: Option<i64> = None;
     let mut work_value: Option<i64> = None;
     let mut repair_value: Option<i64> = None;
+    let mut repair_below: Option<i64> = None;
     let mut tired_margin: Option<i64> = None;
     let mut sleep_hours: Option<(i64, i64)> = None;
     let mut courtship_step: Option<u64> = None;
@@ -456,6 +459,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "ice_bears_mm" => ice_bears_mm = Some(parse_num(value, line_no)?),
                 "bare_hand_hardness" => bare_hand_hardness = Some(parse_num(value, line_no)?),
                 "pit_half_width_cm" => pit_half_width_cm = Some(parse_num(value, line_no)?),
+                "tool_wear" => tool_wear = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -525,6 +529,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "hungry_above" => hungry_above = Some(parse_num(value, line_no)?),
                 "work_value" => work_value = Some(parse_num(value, line_no)?),
                 "repair_value" => repair_value = Some(parse_num(value, line_no)?),
+                "repair_below" => repair_below = Some(parse_num(value, line_no)?),
                 "tired_margin" => tired_margin = Some(parse_num(value, line_no)?),
                 "sleep_hours" => sleep_hours = Some(parse_hours(value, line_no)?),
                 other => {
@@ -777,6 +782,15 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     [x, y, z],
                     parse_num(work, line_no)?,
                 ));
+            }
+            "wear" => {
+                // workplace = how fast it wears in use, hundredths of a percent an hour (A-46)
+                let workplace: u64 = parse_num(key, line_no)?;
+                let per_hour: i64 = parse_num(value, line_no)?;
+                if per_hour < 0 {
+                    return Err(ParseError::at(line_no, "wear is not negative"));
+                }
+                wear.push((workplace, per_hour));
             }
             "ground_water" => {
                 // climate = how wet its ground begins, hundredths of a percent (Amendment A-41)
@@ -1231,6 +1245,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         ice_bears_mm: require(ice_bears_mm, "rules.physical.ice_bears_mm")?,
         bare_hand_hardness: require(bare_hand_hardness, "rules.physical.bare_hand_hardness")?,
         pit_half_width_cm: require(pit_half_width_cm, "rules.physical.pit_half_width_cm")?,
+        tool_wear: require(tool_wear, "rules.physical.tool_wear")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -1260,6 +1275,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             tired_margin: require(tired_margin, "rules.minds.tired_margin")?,
             sleep_hours: require(sleep_hours, "rules.minds.sleep_hours")?,
             repair_value: require(repair_value, "rules.minds.repair_value")?,
+            repair_below: require(repair_below, "rules.minds.repair_below")?,
         }),
     };
     let resources_rules = regrow_step.map(|regrow_step_seconds| ResourcesRules {
@@ -1386,6 +1402,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         latitudes,
         humidities,
         ground_water,
+        wear,
         ground,
         quarries,
         waters,
@@ -2039,6 +2056,7 @@ wade_depth_cm = 50
 ice_bears_mm = 80
 bare_hand_hardness = 1000
 pit_half_width_cm = 100
+tool_wear = 0
 [regions]
 1 = 1500
 ";

@@ -436,6 +436,17 @@ pub const WHOLE_SHAPE: FactType = FactType::new("physical.body.whole_shape");
 /// not yet worked in. Absent, none.
 pub const MEND_MATERIAL: FactType = FactType::new("physical.body.mend_material");
 
+/// How fast a workplace wears while something is in the making at it, in hundredths of a percent
+/// of its integrity an hour (Amendment A-46): world data. Absent, it does not wear.
+pub const WEAR_PER_HOUR: FactType = FactType::new("physical.body.wear_per_hour");
+
+/// The recipe a maker has in the making — **Economy's** fact, read by its published id to wear
+/// the workplace it is made at (Amendment A-46).
+pub const ECON_MAKING: FactType = FactType::new("economy.making");
+
+/// Where a recipe is made — **Economy's** fact, read by its published id (Amendment A-46).
+pub const ECON_RECIPE_AT: FactType = FactType::new("economy.recipe.at");
+
 /// A decider's intent that a body mend a thing (Amendment A-31): an entity reference. Carried out
 /// only with a tool in hand no softer than the thing's weakest material, on a thing within reach
 /// — or the place one stands in. Cleared either way.

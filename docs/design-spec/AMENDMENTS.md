@@ -1861,3 +1861,48 @@ materials it needs."
 
 **Rationale.** `docs/audits/resources.md`, slice R5: "there is currently no way for agents to
 get these resources."
+
+## A-46 — Use wears things (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (integrity: what use costs a tool and a workplace)
+- Vol. III Ch. 4 §4.4 (making: a workplace worn through makes nothing)
+- Vol. II Ch. 5 (minds: when a thing is worth mending)
+
+**Change.**
+- **A go of work wears the tool that does it** (Physical, Act). A go at a deposit or a pit that
+  needs a tool, and a go of mending, each cost the tool integrity: `rules.physical.tool_wear`
+  for stuff as hard as the tool, less in proportion for softer stuff. Iron on ore (two-thirds
+  as hard) wears twice as fast as iron on timber (a third). The tool is the one that does the
+  go: for extraction, the one that lands the hardest blow (a bare hand, if it lands as hard);
+  for mending, the hardest held that is hard enough, since it wears least.
+- **A tool worn to nothing is used up.** It is gone, like food eaten, not left as wreckage: what
+  was left of it is spent. With it gone, the next go is judged without it.
+- **A workplace wears while something is in the making at it** (Physical, a new system, Wear).
+  The rate is world data (`[wear] workplace = hundredths of a percent an hour`), because a
+  millstone needs dressing far more often than an oven wears. Physical reads Economy's
+  `economy.making` and `economy.recipe.at` by their published ids. Two makers at one workplace
+  wear it twice as fast. The wear is the same at any tick length (Law 14).
+- **A workplace worn through breaks**, as anything does that reaches nothing (A-27). Economy
+  refuses to make anything at a broken workplace (`workplace_broken`) until it is mended
+  (A-31, A-44).
+- **Bare hands mend what bare hands work.** Mending needed a tool even for clay. A thing no
+  harder than `bare_hand_hardness` (A-41) is now mended by hand, as it is worked by hand. Minds
+  already assumed this (A-45), and were refused.
+- **A little wear is not worth stopping for** (minds). The repair want (A-45) starts only once a
+  thing is believed below `rules.minds.repair_below`. Once begun, it goes on until the thing is
+  whole.
+
+**In Ashford** (`tests/reference/tests/wear.rs`; `tool_wear = 30`, `repair_below = 9500`):
+- Ten goes of the hammer at the iron seam cost it 2%, and ten at the stand of timber 1%.
+- A hammer all but worn out is spent by one more go at the seam, and the next go is refused.
+- A millstone worn 6% an hour in use loses 1% in ten minutes' grinding and nothing standing
+  idle, the same at minute and ten-second ticks. One all but worn through breaks in its next
+  grinding and grinds nothing after.
+- The baker mends the cracked clay oven by hand with three lumps of clay. The third go is
+  refused: the clay is used up.
+- The miller lets his millstone be at 3% worn. At 8% worn, past Ashford's 5% line, he mends it
+  whole with some two dozen ten-kilo granite blocks and the hammer.
+
+**Rationale.** `docs/audits/resources.md` §9, F2: nothing used iron, blocks, or clay once made,
+so the trades that make them would work a day and stand idle.

@@ -192,7 +192,14 @@ pub struct StrikeRules {
     /// The hardest material a bare hand works (Amendment A-41): fruit, soil. Anything harder is
     /// taken only with a tool no softer than it.
     pub bare_hand_hardness: i64,
+    /// What a go of work costs the tool that does it, in hundredths of a percent of its
+    /// integrity, when the stuff worked is as hard as the tool (Amendment A-46); less, in
+    /// proportion, for softer stuff.
+    pub tool_wear: i64,
 }
+
+/// A tool a go of work is done with, and how hard it is (Amendment A-46); `None`, a bare hand.
+type Tool = Option<(EntityId, i64)>;
 
 impl Act {
     /// Acts within `reach_cm` beyond a body's own extent, carries no more than `carry_limit_kg`,
@@ -296,9 +303,16 @@ impl Act {
             .collect()
     }
 
-    /// Whether `body` can mend `target` (Amendment A-31): it is damaged; within reach, or the
-    /// place the body stands in; and the body holds a tool no softer than its weakest material.
-    fn can_mend(&self, view: &dyn CommittedView, body: EntityId, target: EntityId) -> bool {
+    /// What `body` can mend `target` with (Amendment A-31), if it can: it is damaged; within
+    /// reach, or the place the body stands in; and the body has a bare hand for it, if it is no
+    /// harder than a hand works (Amendment A-46), or holds a tool no softer than its weakest
+    /// material — the hardest, which wears least, the lower id among equals.
+    fn mend_tool(
+        &self,
+        view: &dyn CommittedView,
+        body: EntityId,
+        target: EntityId,
+    ) -> Option<Tool> {
         let damaged = view.read(FactKey::new(target, INTEGRITY)).is_some();
         let near = container_of(view, body) == Some(target)
             || if view.read(FactKey::new(target, LEADS_TO)).is_some() {
@@ -306,12 +320,66 @@ impl Act {
             } else {
                 self.within_reach(view, body, target)
             };
-        let tool = crate::materials::structural_hardness(view, target).is_some_and(|resists| {
-            crate::nearby::contents(view, body).into_iter().any(|t| {
-                crate::materials::structural_hardness(view, t).is_some_and(|h| h >= resists)
-            })
-        });
-        damaged && near && tool
+        if !damaged || !near {
+            return None;
+        }
+        let resists = crate::materials::structural_hardness(view, target)?;
+        if resists <= self.strike.bare_hand_hardness {
+            return Some(None);
+        }
+        let mut best: Tool = None;
+        for t in crate::nearby::contents(view, body) {
+            let Some(h) = crate::materials::structural_hardness(view, t) else {
+                continue;
+            };
+            if h >= resists
+                && best.map_or(true, |(b, bh)| {
+                    (h, std::cmp::Reverse(t)) > (bh, std::cmp::Reverse(b))
+                })
+            {
+                best = Some((t, h));
+            }
+        }
+        best.map(Some)
+    }
+
+    /// What a go of work on stuff `worked` hard costs `tool` (Amendment A-46): integrity, by the
+    /// world's rule, in proportion to how hard the stuff is against the tool. Worn to nothing, the
+    /// tool is used up and gone — what was left of it spent, not left as wreckage.
+    fn wear(
+        &self,
+        view: &dyn CommittedView,
+        ctx: &TickContext,
+        tool: Tool,
+        worked: i64,
+    ) -> Vec<(EntityId, FactType, Change, &'static str)> {
+        let Some((tool, hard)) = tool else {
+            return Vec::new();
+        };
+        let mut rng = ctx.rng(tool.raw() ^ (1 << 63));
+        let worn = kernel::fixed::div_dither(
+            self.strike.tool_wear as i128 * worked.max(0) as i128,
+            hard.max(1) as i128,
+            &mut rng,
+        ) as i64;
+        if worn <= 0 {
+            return Vec::new();
+        }
+        let whole = view
+            .read(FactKey::new(tool, INTEGRITY))
+            .and_then(|f| f.value.as_int())
+            .unwrap_or(PERCENT_FULL);
+        if whole > worn {
+            return vec![(tool, INTEGRITY, Change::Delta(-worn), "worn")];
+        }
+        let mut gone = vec![
+            (tool, CONTAINED_IN, Change::Tombstone, "worn_out"),
+            (tool, POSITION, Change::Tombstone, "worn_out"),
+        ];
+        if view.read(FactKey::new(tool, INTEGRITY)).is_some() {
+            gone.push((tool, INTEGRITY, Change::Tombstone, "worn_out"));
+        }
+        gone
     }
 
     /// The pieces of `target`'s weakest material — what gave way, and what mends it — that `body`
@@ -429,7 +497,7 @@ impl Act {
         view: &dyn CommittedView,
         body: EntityId,
         deposit: EntityId,
-    ) -> Option<i64> {
+    ) -> Option<(i64, Tool, i64)> {
         let yields = match view
             .read(FactKey::new(deposit, YIELD_MADE_OF))
             .map(|f| f.value)
@@ -438,32 +506,47 @@ impl Act {
             _ => crate::materials::structural_hardness(view, deposit).unwrap_or(0),
         };
         self.effort_on(view, body, yields)
+            .map(|(effort, tool)| (effort, tool, yields))
     }
 
-    /// How hard `body` works a material `yields` hard with one go: the hardest blow it lands with
-    /// a tool no softer than it, or a bare hand if it is soft enough — or `None`.
-    fn effort_on(&self, view: &dyn CommittedView, body: EntityId, yields: i64) -> Option<i64> {
+    /// How hard `body` works a material `yields` hard with one go, and what with: the hardest
+    /// blow it lands with a tool no softer than it — the lower id among equals — or a bare hand if
+    /// it is soft enough and lands as hard; or `None`.
+    fn effort_on(
+        &self,
+        view: &dyn CommittedView,
+        body: EntityId,
+        yields: i64,
+    ) -> Option<(i64, Tool)> {
         let strength = view
             .read(FactKey::new(body, STRENGTH))
             .and_then(|f| f.value.as_int())
             .unwrap_or(0)
             .max(0) as i128;
         let r = &self.strike;
-        let hand =
-            (yields <= r.bare_hand_hardness).then_some(strength * r.hand_percent as i128 / 100);
-        let tools = crate::nearby::contents(view, body)
-            .into_iter()
-            .filter_map(|tool| {
-                let hard = crate::materials::structural_hardness(view, tool)?;
-                let grams = crate::materials::weight_g(view, tool)? as i128;
-                (hard >= yields).then(|| {
-                    let swung = strength
-                        * (r.hand_percent as i128 * 1000 + r.tool_percent_per_kg as i128 * grams)
-                        / 100_000;
-                    swung.min(hard as i128)
-                })
-            });
-        tools.chain(hand).max().map(|e| e as i64)
+        let mut best: Option<(i128, Tool)> = (yields <= r.bare_hand_hardness)
+            .then_some((strength * r.hand_percent as i128 / 100, None));
+        let mut held = crate::nearby::contents(view, body);
+        held.sort_unstable();
+        for tool in held {
+            let (Some(hard), Some(grams)) = (
+                crate::materials::structural_hardness(view, tool),
+                crate::materials::weight_g(view, tool),
+            ) else {
+                continue;
+            };
+            if hard < yields {
+                continue;
+            }
+            let swung = (strength
+                * (r.hand_percent as i128 * 1000 + r.tool_percent_per_kg as i128 * grams as i128)
+                / 100_000)
+                .min(hard as i128);
+            if best.map_or(true, |(b, _)| swung > b) {
+                best = Some((swung, Some((tool, hard))));
+            }
+        }
+        best.map(|(e, tool)| (e as i64, tool))
     }
 
     /// The integrity a blow by `body` takes from `target`, or `None` if it cannot land or leaves
@@ -967,7 +1050,7 @@ impl System for Act {
             if let Some(target) = entity_at(view, body, ACT_MEND) {
                 push(body, ACT_MEND, Change::Tombstone, "considered");
                 let mut mended = false;
-                if self.can_mend(view, body, target) {
+                if let Some(tool) = self.mend_tool(view, body, target) {
                     let kg = crate::fire::structure_kg(view, target, self.wall_thickness_cm).max(1);
                     let mut rng = ctx.rng(target.raw());
                     let full = kernel::fixed::div_dither(
@@ -1006,6 +1089,12 @@ impl System for Act {
                     };
                     if restored > 0 {
                         push(target, INTEGRITY, Change::Delta(restored), "mended");
+                        // The go wears the tool it was done with (Amendment A-46).
+                        let resists =
+                            crate::materials::structural_hardness(view, target).unwrap_or(0);
+                        for (e, fact, change, why) in self.wear(view, ctx, tool, resists) {
+                            push(e, fact, change, why);
+                        }
                         let left = (stuff - grams_for(restored)).max(0) as i64;
                         let change = if left > 0 {
                             Change::Set(Value::Int(left))
@@ -1069,9 +1158,12 @@ impl System for Act {
                     None => refused = Some(container_of(view, body).unwrap_or(body)),
                     Some((place, ground)) => match self.pit_at_hand(view, body, place) {
                         Some(pit) => match self.working_effort(view, body, pit) {
-                            Some(effort) => {
+                            Some((effort, tool, worked)) => {
                                 push(body, PICKED, Change::Set(Value::Entity(pit)), "dug");
                                 push(body, PICK_EFFORT, Change::Set(Value::Int(effort)), "dug");
+                                for (e, fact, change, why) in self.wear(view, ctx, tool, worked) {
+                                    push(e, fact, change, why);
+                                }
                                 succeeded = true;
                             }
                             None => refused = Some(pit),
@@ -1079,7 +1171,10 @@ impl System for Act {
                         None => {
                             let hard = crate::materials::hardness(view, ground).unwrap_or(0);
                             match self.effort_on(view, body, hard) {
-                                Some(effort) => {
+                                Some((effort, tool)) => {
+                                    for (e, fact, change, why) in self.wear(view, ctx, tool, hard) {
+                                        push(e, fact, change, why);
+                                    }
                                     let pit = ctx.new_entity();
                                     let [x, y, z] = local_position(view, body);
                                     let half = self.pit_half_cm;
@@ -1107,9 +1202,12 @@ impl System for Act {
             if let Some(deposit) = entity_at(view, body, ACT_PICK) {
                 push(body, ACT_PICK, Change::Tombstone, "considered");
                 match self.working_effort(view, body, deposit) {
-                    Some(effort) if self.within_reach(view, body, deposit) => {
+                    Some((effort, tool, worked)) if self.within_reach(view, body, deposit) => {
                         push(body, PICKED, Change::Set(Value::Entity(deposit)), "picked");
                         push(body, PICK_EFFORT, Change::Set(Value::Int(effort)), "picked");
+                        for (e, fact, change, why) in self.wear(view, ctx, tool, worked) {
+                            push(e, fact, change, why);
+                        }
                         succeeded = true;
                     }
                     _ => refused = Some(deposit),

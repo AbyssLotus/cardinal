@@ -85,6 +85,9 @@ pub struct MindRules {
     pub bare_hand_hardness: i64,
     /// What mending something of one's own, or one's household's, is worth (Amendment A-45).
     pub repair_value: i64,
+    /// How whole a thing must fall below, in hundredths of a percent, before it is worth mending;
+    /// once begun, mending goes on until it is whole (Amendment A-46).
+    pub repair_below: i64,
 }
 
 const THINK_READS: &[FactType] = &[
@@ -780,10 +783,19 @@ impl Think {
         }
 
         // Repair (Amendment A-45): what is the mind's own, or its household's — or its home itself
-        // — that it believes damaged, and can reach.
+        // — that it believes worn or damaged enough to be worth mending (Amendment A-46), or is
+        // mending already and not yet whole, and can reach.
         let home = mind.own_entity(HOME);
+        let mending = (mind.own_int(REASON) == Some(REASON_REPAIR))
+            .then(|| mind.own_entity(GOAL))
+            .flatten();
         for (thing, whole) in mind.view.read_about(mind.me, BELIEF_INTEGRITY) {
-            let damaged = whole.value.as_int().is_some_and(|w| w < 10_000);
+            let below = if mending == Some(thing) {
+                10_000
+            } else {
+                r.repair_below
+            };
+            let damaged = whole.value.as_int().is_some_and(|w| w < below);
             let owner = mind.belief_entity(BELIEF_OWNER, thing);
             let ours =
                 Some(thing) == home || owner == Some(mind.me) || (owner.is_some() && owner == home);

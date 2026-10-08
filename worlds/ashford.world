@@ -118,6 +118,7 @@ wade_depth_cm = 50                  # no one wades deeper than 50 cm
 ice_bears_mm = 80                   # ice 8 cm thick bears a walker
 bare_hand_hardness = 1000           # bare hands pick fruit and dig soil; stone, ore, and timber need a tool (A-41)
 pit_half_width_cm = 100             # a pit is broken two metres across (A-42)
+tool_wear = 30                      # a go on stuff as hard as the tool costs it 0.3% (A-46)
 
 [rules.living]
 metabolism_step_seconds = 60
@@ -164,6 +165,7 @@ need_weight = 20                    # what each hundredth of a percent past that
 hungry_above = 4000                 # past 40% hungry, a mind goes looking for food
 work_value = 250                    # what working one's job is worth, in its hours
 repair_value = 280                  # what mending one's own is worth: more than work (A-45)
+repair_below = 9500                 # a thing is worth mending once worn below 95% (A-46)
 sleep_hours = 22-6                  # the hours a mind with nothing to do sleeps, once at all tired
 
 [rules.resources]

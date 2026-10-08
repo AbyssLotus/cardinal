@@ -95,6 +95,9 @@ pub struct WorldPackage {
     /// How wet each climate's ground is when the world begins (Amendment A-41): `(climate,
     /// hundredths of a percent)`.
     pub ground_water: Vec<(u64, i64)>,
+    /// How fast each workplace wears while something is in the making at it (Amendment A-46):
+    /// `(workplace, hundredths of a percent of its integrity an hour)`.
+    pub wear: Vec<(u64, i64)>,
     /// What each place's ground is made of (Amendment A-42): `(place, material)`.
     pub ground: Vec<(u64, u64)>,
     /// What a pit dug in ground of a material holds (Amendment A-42): `(material, units, unit
@@ -516,6 +519,9 @@ pub struct PhysicalRules {
     pub bare_hand_hardness: i64,
     /// How far to either side of a digger a pit is broken, centimetres (Amendment A-42).
     pub pit_half_width_cm: i64,
+    /// What a go of work costs the tool that does it, hundredths of a percent of its integrity,
+    /// working stuff as hard as itself (Amendment A-46).
+    pub tool_wear: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).
@@ -553,6 +559,9 @@ pub struct MindsRules {
     pub sleep_hours: (i64, i64),
     /// What mending something of one's own, or one's household's, is worth (Amendment A-45).
     pub repair_value: i64,
+    /// How whole, in hundredths of a percent, a thing of one's own must fall below before it is
+    /// worth mending (Amendment A-46).
+    pub repair_below: i64,
 }
 
 /// Tunable rules deposits follow (Amendment A-15).

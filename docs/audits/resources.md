@@ -208,3 +208,61 @@ Going, on the user's word, with every recommendation in §6 taken. Built in the 
 Retired as planned: the flour bin's and the miller's loaves' regrowth, once the chains that feed
 them stand (R3). The manor pantry, the Heron's stores, and the fish barrel stay as stand-ins for
 trade not yet built, marked so in the world file.
+
+## 9. Follow-ups: what was left open (2026-10-08)
+
+The user asked to work on what R5 left open. Four things were open.
+
+### F1. Travel's cost at city scale
+
+At the city bench (100,000 residents, a 600-person scene), travel cost about 9.4 ms a tick,
+against 2.3 ms recorded before. The planner built, every tick, the set of every place an opening
+leads to: a read of every opening in the city, whether or not anyone was travelling. Physical
+now indexes where openings lead (the store's naming index, A-24), and the planner asks it only
+for the targets travellers have. No rule changes.
+
+### F2. Use wears things (A-46)
+
+Nothing in Ashford consumes iron, blocks, or clay once it is made, so the miner, the quarryman,
+and the smith would work a day and then stand idle. The physical answer is that use wears the
+things that do it.
+- **Tools.** Each go of work with a tool wears it: a go at a deposit or pit that needs a tool,
+  and a go of mending. The wear is in proportion to how hard the stuff worked is against the
+  tool: iron on ore wears faster than iron on timber. A tool worn to nothing is used up and
+  gone, like food eaten. It is not wreckage: what was left of it is spent.
+- **Workplaces.** Each hour a making is under way wears its workplace: the millstone, the oven,
+  the forge. A workplace worn through is broken and makes nothing until mended.
+- **Bare hands mend what bare hands work.** Mending needed a tool even for clay. It now takes a
+  bare hand where the thing is no harder than a hand works (as extraction already does, A-41).
+- **Minds mend their worn things.** A thing a little worn is not worth stopping for. The repair
+  want (A-45) starts below a declared share of whole, and keeps on until it is whole.
+
+### F3. Every store filled by someone (A-47)
+
+Ashford's last self-filling stores are retired. Each is fed by someone's work instead.
+- **The Hill folk take up the trades**, near where they live:
+  - a miner: iron ore to the forge;
+  - a charcoal burner: logs felled, charcoal burnt, and brought to the forge;
+  - a smith: iron smelted into bars, which are the tools anyone takes up when theirs wears out;
+  - a quarryman: granite blocks to the mill, for its millstone;
+  - a woodcutter: logs to Alice's yard, for mending.
+- **Workplaces have owners who mend them:**
+  - the miller mends his millstone with the quarryman's granite;
+  - the baker mends her oven with clay she digs herself;
+  - the smith mends his forge.
+- **Bread for the manor and the farmhouse comes from the mill.** The manor pantry and the
+  farmhouse larder become stores that only what is brought fills.
+- **Fish for the harbour comes from the sea.** A shoal off the quay is a living stock. The
+  Heron's stores and the fish barrel stop filling themselves.
+- **Apples are laid by in the cellar.** The windfall crate stops filling itself; Gwen keeps it
+  stocked from the tree.
+
+### F4. The closing week
+
+The week test (`week.rs`) becomes the closing test §5 planned:
+- nothing made fills itself: no deposit of anything a recipe makes renews;
+- nobody starves;
+- the iron seam is smaller at the end of every day than at its start;
+- the millstone wears and is mended with the quarry's granite;
+- a storm in the middle of the week damages what the household owns, and they mend it from the
+  woodcutter's logs.

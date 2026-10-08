@@ -55,6 +55,7 @@ pub mod systems;
 pub mod terrain;
 pub mod travel;
 pub mod water;
+pub mod wear;
 pub mod wet;
 pub mod wind;
 
@@ -355,6 +356,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::PICKED
             || fact_type == schema::PICK_EFFORT
             || fact_type == schema::MEND_MATERIAL
+            || fact_type == schema::WEAR_PER_HOUR
             || fact_type == schema::GROUND
             || fact_type == schema::PAVED
             || fact_type == schema::PIT
@@ -490,6 +492,8 @@ impl Domain for PhysicalDomain {
             ),
             // What the wind tears at (Amendment A-29).
             Box::new(wind::WindLoad::new(step, c.wind, c.fire.wall_thickness_cm)),
+            // Workplaces wearing while something is in the making at them (Amendment A-46).
+            Box::new(wear::Wear::new(c.clock.step(c.clock.tick_ms()))),
             // Fire: burning, spreading, and the heat it gives (Amendment A-28).
             Box::new(fire::Fire::new(
                 c.clock.step(c.fire.step_seconds.saturating_mul(1000)),

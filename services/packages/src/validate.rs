@@ -189,6 +189,9 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     for &(material, _, _, _) in &package.quarries {
         must_exist(material, material, "the material quarried");
     }
+    for &(workplace, _) in &package.wear {
+        must_exist(workplace, workplace, "the workplace that wears");
+    }
     for &(climate, _) in &package.ground_water {
         must_exist(climate, climate, "the climate given ground water");
     }

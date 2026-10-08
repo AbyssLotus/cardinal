@@ -102,6 +102,9 @@ pub mod schema {
     pub const WIND_SPEED: FactType = FactType::new("physical.environment.wind_speed");
     /// How hard a material is — **Physical Reality's**.
     pub const MATERIAL_HARDNESS: FactType = FactType::new("physical.material.hardness");
+    /// That a thing is broken — **Physical Reality's** (A-27): a workplace worn through makes
+    /// nothing (A-46).
+    pub const BROKEN: FactType = FactType::new("physical.body.broken");
 
     /// Where a thing is: the place or holder that contains it — **Physical Reality's**.
     pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
@@ -140,7 +143,7 @@ pub const RESTRICTED: &[FactType] = &[
 /// Hermetic transformations owned by the Economy domain (Vol. V Ch. 3 §3.1).
 pub mod systems {
     use crate::schema::{
-        ACT_ARRIVE, ACT_CLAIM, ACT_LEAVE, ACT_MAKE, BODY_SIZE, BURNING, CLAIM_REFUSED,
+        ACT_ARRIVE, ACT_CLAIM, ACT_LEAVE, ACT_MAKE, BODY_SIZE, BROKEN, BURNING, CLAIM_REFUSED,
         CONTAINED_IN, ICE, MADE, MADE_OF, MAKE_REFUSED, MAKING, MATERIAL_HARDNESS, OWNER, READY_AT,
         RECIPE_AT, RECIPE_COUNT, RECIPE_HEAT, RECIPE_MAKES, RECIPE_NEEDS, RECIPE_POWER,
         RECIPE_SIZE, RECIPE_TAKES, RECIPE_TOOL, RECIPE_WIND, WATER_LEVEL, WATER_NORMAL, WIND_SPEED,
@@ -175,6 +178,7 @@ pub mod systems {
         ICE,
         WIND_SPEED,
         MATERIAL_HARDNESS,
+        BROKEN,
     ];
     const PRODUCTION_WRITES: &[FactType] = &[
         ACT_MAKE,
@@ -403,6 +407,15 @@ pub mod systems {
                 // A fire, water or wind to turn the mill, and a tool to hand that is not used up
                 // (Amendment A-43).
                 let power = workplace.and_then(|w| unpowered(view, recipe, w));
+                // A workplace worn through, or broken, makes nothing until mended (A-46).
+                let power = power.or_else(|| {
+                    workplace
+                        .filter(|w| {
+                            view.read(FactKey::new(*w, BROKEN)).map(|f| f.value)
+                                == Some(Value::Bool(true))
+                        })
+                        .map(|_| "workplace_broken")
+                });
                 let tool_wanted = int(view, FactKey::new(recipe, RECIPE_TOOL));
                 let tooled = tool_wanted.map_or(true, |wanted| {
                     held.iter()
