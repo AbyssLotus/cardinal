@@ -375,6 +375,7 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             hand_percent: r.hand_strike_percent,
             tool_percent_per_kg: r.tool_strike_percent_per_kg,
             scale: r.strike_scale,
+            bare_hand_hardness: r.bare_hand_hardness,
         },
         wreckage_height_cm: r.wreckage_height_cm,
         mend_scale: r.mend_scale,
@@ -758,6 +759,14 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         );
     }
 
+    // How wet each climate's ground begins (Amendment A-41).
+    for &(climate, wet) in &package.ground_water {
+        store.seed(
+            FactKey::new(EntityId::from_raw(climate), physical::schema::GROUND_WATER),
+            seeded(Value::Int(wet)),
+        );
+    }
+
     // Climates' normal humidity, where it differs from the world's (Amendment A-35).
     for &(climate, normal) in &package.humidities {
         store.seed(
@@ -966,6 +975,18 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 (resources::schema::YIELD_CAP, Value::Int(d.cap)),
             ] {
                 store.seed(FactKey::new(deposit, fact), seeded(v));
+            }
+            // How it renews, how poor it is, how hard it is to work, and how it grows (A-41).
+            for (fact, v) in [
+                (resources::schema::RENEWAL, d.renewal.map(Value::Int)),
+                (resources::schema::FLOOR, d.floor.map(Value::Int)),
+                (resources::schema::GRADE, d.grade.map(Value::Int)),
+                (resources::schema::DIFFICULTY, d.difficulty.map(Value::Int)),
+                (resources::schema::GROWS, d.grows.map(Value::Vec3)),
+            ] {
+                if let Some(v) = v {
+                    store.seed(FactKey::new(deposit, fact), seeded(v));
+                }
             }
         }
     }

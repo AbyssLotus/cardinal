@@ -22,8 +22,9 @@ use crate::schema::{
     ACT_OPEN, ACT_PICK, ACT_PUSH, ACT_REFUSED, ACT_STRIKE, ACT_TAKE, BODY_SIZE, BROKEN, BURNING,
     CONSUMED, CONTAINED_IN, ENCLOSED, FALL_HEIGHT, HAS_PORTAL, HEADING, IMPACT, INTEGRITY,
     LEADS_TO, MADE_OF, MATERIAL_DENSITY, MATERIAL_EDIBLE, MATERIAL_FLAMMABILITY, MATERIAL_HARDNESS,
-    MOBILE, MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PERCENT_FULL, PICKED, PORTAL_FAR_SIDE,
-    PORTAL_OPEN, POSITION, SOLID, STRENGTH, TERRAIN_SAMPLE, TERRAIN_SPACING, WHOLE_SHAPE,
+    MOBILE, MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PERCENT_FULL, PICKED, PICK_EFFORT,
+    PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION, SOLID, STRENGTH, TERRAIN_SAMPLE, TERRAIN_SPACING,
+    WHOLE_SHAPE, YIELD_MADE_OF,
 };
 use crate::space::{far_side, local_position, portal_destination};
 use crate::terrain::is_true;
@@ -39,6 +40,7 @@ use std::collections::BTreeMap;
 const ARRIVAL_GAP_CM: i64 = 5;
 
 const ACT_READS: &[FactType] = &[
+    YIELD_MADE_OF,
     crate::schema::WETNESS,
     ACT_PUSH,
     SOLID,
@@ -83,6 +85,7 @@ const ACT_READS: &[FactType] = &[
     WHOLE_SHAPE,
 ];
 const ACT_WRITES: &[FactType] = &[
+    PICK_EFFORT,
     ACT_PUSH,
     ACT_MEND,
     IMPACT,
@@ -171,6 +174,9 @@ pub struct StrikeRules {
     /// Integrity lost per unit a blow lands harder than the thing's weakest material, per
     /// kilogram the thing weighs.
     pub scale: i64,
+    /// The hardest material a bare hand works (Amendment A-41): fruit, soil. Anything harder is
+    /// taken only with a tool no softer than it.
+    pub bare_hand_hardness: i64,
 }
 
 impl Act {
@@ -300,6 +306,45 @@ impl Act {
                 Some(swung.min(hard))
             });
         tools.chain(std::iter::once(hand)).max().unwrap_or(0) as i64
+    }
+
+    /// How hard `body` works `deposit` with one go (Amendment A-41): the hardest blow it can land
+    /// with what is fit for what the deposit yields — a tool no softer than it, or a bare hand if
+    /// it is soft enough — or `None` if it has nothing fit.
+    fn working_effort(
+        &self,
+        view: &dyn CommittedView,
+        body: EntityId,
+        deposit: EntityId,
+    ) -> Option<i64> {
+        let yields = match view
+            .read(FactKey::new(deposit, YIELD_MADE_OF))
+            .map(|f| f.value)
+        {
+            Some(Value::Entity(m)) => crate::materials::hardness(view, m).unwrap_or(0),
+            _ => 0,
+        };
+        let strength = view
+            .read(FactKey::new(body, STRENGTH))
+            .and_then(|f| f.value.as_int())
+            .unwrap_or(0)
+            .max(0) as i128;
+        let r = &self.strike;
+        let hand =
+            (yields <= r.bare_hand_hardness).then_some(strength * r.hand_percent as i128 / 100);
+        let tools = crate::nearby::contents(view, body)
+            .into_iter()
+            .filter_map(|tool| {
+                let hard = crate::materials::structural_hardness(view, tool)?;
+                let grams = crate::materials::weight_g(view, tool)? as i128;
+                (hard >= yields).then(|| {
+                    let swung = strength
+                        * (r.hand_percent as i128 * 1000 + r.tool_percent_per_kg as i128 * grams)
+                        / 100_000;
+                    swung.min(hard as i128)
+                })
+            });
+        tools.chain(hand).max().map(|e| e as i64)
     }
 
     /// The integrity a blow by `body` takes from `target`, or `None` if it cannot land or leaves
@@ -845,13 +890,17 @@ impl System for Act {
                     None => refused = Some(target),
                 }
             }
+            // Taking from a deposit (Amendments A-15, A-41): within reach, and with a hand or a
+            // tool hard enough for what it yields. The go's effort is reported with it.
             if let Some(deposit) = entity_at(view, body, ACT_PICK) {
                 push(body, ACT_PICK, Change::Tombstone, "considered");
-                if self.within_reach(view, body, deposit) {
-                    push(body, PICKED, Change::Set(Value::Entity(deposit)), "picked");
-                    succeeded = true;
-                } else {
-                    refused = Some(deposit);
+                match self.working_effort(view, body, deposit) {
+                    Some(effort) if self.within_reach(view, body, deposit) => {
+                        push(body, PICKED, Change::Set(Value::Entity(deposit)), "picked");
+                        push(body, PICK_EFFORT, Change::Set(Value::Int(effort)), "picked");
+                        succeeded = true;
+                    }
+                    _ => refused = Some(deposit),
                 }
             }
             match refused {

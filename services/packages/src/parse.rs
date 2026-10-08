@@ -147,9 +147,11 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut ice_mm_per_degree_hour: Option<i64> = None;
     let mut wade_depth_cm: Option<i64> = None;
     let mut ice_bears_mm: Option<i64> = None;
+    let mut bare_hand_hardness: Option<i64> = None;
     let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
     let mut latitudes: Vec<(u64, i64)> = Vec::new();
     let mut humidities: Vec<(u64, i64)> = Vec::new();
+    let mut ground_water: Vec<(u64, i64)> = Vec::new();
     let mut waters: Vec<WaterSpec> = Vec::new();
     let mut drains: Vec<(u64, u64)> = Vec::new();
     let mut floods: Vec<(u64, Vec<u64>)> = Vec::new();
@@ -448,6 +450,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 }
                 "wade_depth_cm" => wade_depth_cm = Some(parse_num(value, line_no)?),
                 "ice_bears_mm" => ice_bears_mm = Some(parse_num(value, line_no)?),
+                "bare_hand_hardness" => bare_hand_hardness = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -743,6 +746,18 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     .map(|p| parse_num(p.trim(), line_no))
                     .collect::<Result<Vec<u64>, _>>()?;
                 floods.push((water, places));
+            }
+            "ground_water" => {
+                // climate = how wet its ground begins, hundredths of a percent (Amendment A-41)
+                let climate: u64 = parse_num(key, line_no)?;
+                let wet: i64 = parse_num(value, line_no)?;
+                if !(0..=10_000).contains(&wet) {
+                    return Err(ParseError::at(
+                        line_no,
+                        "ground water lies between 0 and 10000",
+                    ));
+                }
+                ground_water.push((climate, wet));
             }
             "humidity" => {
                 // climate = normal humidity, hundredths of a percent (Amendment A-35)
@@ -1182,6 +1197,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         )?,
         wade_depth_cm: require(wade_depth_cm, "rules.physical.wade_depth_cm")?,
         ice_bears_mm: require(ice_bears_mm, "rules.physical.ice_bears_mm")?,
+        bare_hand_hardness: require(bare_hand_hardness, "rules.physical.bare_hand_hardness")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -1335,6 +1351,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         storms,
         latitudes,
         humidities,
+        ground_water,
         waters,
         drains,
         floods,
@@ -1384,6 +1401,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
 /// field is required.
 fn parse_deposit(id: u64, value: &str, line_no: usize) -> Result<DepositSpec, ParseError> {
     let (mut made_of, mut size, mut per_day, mut cap, mut stock) = (None, None, None, None, None);
+    let mut extra = DepositSpec::default();
     for part in value.split(',') {
         let (k, v) = part
             .split_once(':')
@@ -1404,6 +1422,38 @@ fn parse_deposit(id: u64, value: &str, line_no: usize) -> Result<DepositSpec, Pa
             "per_day" => per_day = Some(parse_num(v.trim(), line_no)?),
             "cap" => cap = Some(parse_num(v.trim(), line_no)?),
             "stock" => stock = Some(parse_num(v.trim(), line_no)?),
+            // How it renews, how poor it is, and how hard it is to work (Amendment A-41).
+            "renewal" => {
+                extra.renewal = Some(match v.trim() {
+                    "nonrenewable" => 1,
+                    "renewable" => 2,
+                    "threshold" => 3,
+                    "flow" => 4,
+                    other => {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("a deposit renews as nonrenewable, renewable, threshold, or flow, not {other:?}"),
+                        ))
+                    }
+                })
+            }
+            "floor" => extra.floor = Some(parse_num(v.trim(), line_no)?),
+            "grade" => extra.grade = Some(parse_num(v.trim(), line_no)?),
+            "difficulty" => extra.difficulty = Some(parse_num(v.trim(), line_no)?),
+            "grows" => {
+                let parts = v
+                    .trim()
+                    .split('/')
+                    .map(|n| parse_num(n, line_no))
+                    .collect::<Result<Vec<i64>, _>>()?;
+                let [from, full, water] = parts[..] else {
+                    return Err(ParseError::at(line_no, "grows is FROM/FULL/WATER"));
+                };
+                if full <= from {
+                    return Err(ParseError::at(line_no, "it grows fully warmer than it begins"));
+                }
+                extra.grows = Some([from, full, water]);
+            }
             other => {
                 return Err(ParseError::at(
                     line_no,
@@ -1420,6 +1470,7 @@ fn parse_deposit(id: u64, value: &str, line_no: usize) -> Result<DepositSpec, Pa
         per_day: per_day.ok_or_else(|| missing("per_day"))?,
         cap: cap.ok_or_else(|| missing("cap"))?,
         stock: stock.ok_or_else(|| missing("stock"))?,
+        ..extra
     })
 }
 
@@ -1938,6 +1989,7 @@ tidal_period_seconds = 0
 ice_mm_per_degree_hour = 2
 wade_depth_cm = 50
 ice_bears_mm = 80
+bare_hand_hardness = 1000
 [regions]
 1 = 1500
 ";

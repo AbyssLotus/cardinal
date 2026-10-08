@@ -92,6 +92,9 @@ pub struct WorldPackage {
     /// Climates' normal humidity, where it differs from the world's baseline (Amendment A-35):
     /// `(climate, hundredths of a percent)`.
     pub humidities: Vec<(u64, i64)>,
+    /// How wet each climate's ground is when the world begins (Amendment A-41): `(climate,
+    /// hundredths of a percent)`.
+    pub ground_water: Vec<(u64, i64)>,
     /// The world's water (Amendment A-39): ponds, rivers, and the sea.
     pub waters: Vec<WaterSpec>,
     /// Which water each pond or river flows on into: `(from, to)`.
@@ -501,6 +504,9 @@ pub struct PhysicalRules {
     pub wade_depth_cm: i64,
     /// How thick ice must be, millimetres, to bear a walker.
     pub ice_bears_mm: i64,
+    /// The hardest material a bare hand works (Amendment A-41); anything harder needs a tool no
+    /// softer than it.
+    pub bare_hand_hardness: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).
@@ -546,8 +552,9 @@ pub struct ResourcesRules {
 }
 
 /// A deposit: a thing in the world holding a stock that regrows, and yields an item per pick
-/// (Amendment A-15).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// (Amendment A-15) — or per so much work, as hard as its make and as poor as its grade, and
+/// renewing as its class says (Amendment A-41).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct DepositSpec {
     /// The deposit's entity id.
     pub id: u64,
@@ -561,6 +568,17 @@ pub struct DepositSpec {
     pub cap: i64,
     /// Units it holds at the start.
     pub stock: i64,
+    /// How it renews: nonrenewable 1, renewable 2, threshold 3, flow 4 (Amendment A-41); `None`,
+    /// renewable.
+    pub renewal: Option<i64>,
+    /// The units below which a threshold deposit collapses.
+    pub floor: Option<i64>,
+    /// Its grade, in hundredths of a percent.
+    pub grade: Option<i64>,
+    /// The work each unit takes at full grade.
+    pub difficulty: Option<i64>,
+    /// That it grows as living things do: `[from, full, water]`.
+    pub grows: Option<[i64; 3]>,
 }
 
 /// A recipe: what it needs, what it makes, where, and how long the making takes

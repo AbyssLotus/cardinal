@@ -219,6 +219,7 @@ pub const RESTRICTED: &[FactType] = &[
     schema::SEEN_WHOLE,
     schema::CONSUMED,
     schema::PICKED,
+    schema::PICK_EFFORT,
     schema::BROKEN,
     schema::BURNING,
     schema::KEPT_FIRE,
@@ -342,6 +343,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_LEAVE
             || fact_type == schema::ACT_PICK
             || fact_type == schema::PICKED
+            || fact_type == schema::PICK_EFFORT
             || fact_type == schema::INTEGRITY
             || fact_type == schema::BROKEN
             || fact_type == schema::ACT_STRIKE
@@ -543,6 +545,8 @@ impl Domain for PhysicalDomain {
             composition::compose_segment_field(current, changes)
         } else if fact_type == schema::POSITION || fact_type == schema::WHOLE_SHAPE {
             composition::compose_vec3(current, changes, None)
+        } else if fact_type == schema::PICK_EFFORT {
+            composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
         } else if fact_type == schema::IMPACT {
             composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
         } else if fact_type == schema::ACT_PUSH {

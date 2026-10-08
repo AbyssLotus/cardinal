@@ -508,6 +508,14 @@ pub const ACT_PICK: FactType = FactType::new("physical.act.pick");
 /// judge (Appendix A, Ruling 16).
 pub const PICKED: FactType = FactType::new("physical.body.picked");
 
+/// How hard a body's last go at a deposit was, as a blow's strength (Amendment A-41): reported
+/// with [`PICKED`], for Resources to put toward the deposit's next unit.
+pub const PICK_EFFORT: FactType = FactType::new("physical.body.pick_effort");
+
+/// What a deposit yields — **Resources'** fact, read by id (Amendment A-41): what a go at it
+/// must be hard enough to work.
+pub const YIELD_MADE_OF: FactType = FactType::new("resources.yield.made_of");
+
 /// What a body last consumed (Amendment A-12): an entity reference to the thing, which has left
 /// the world. Written by Physical Reality so Living Systems can judge what it does to the body
 /// (Appendix A, Ruling 9).

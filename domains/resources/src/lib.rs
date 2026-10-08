@@ -42,6 +42,35 @@ pub mod schema {
     /// open to anyone. Deliveries proposed in one tick add up; the deposit takes them in the next.
     pub const RESTOCK: FactType = FactType::new("resources.act.restock");
 
+    /// How a deposit renews (Vol. III Ch. 3 §3.4; Amendment A-41): [`NONRENEWABLE`],
+    /// [`RENEWABLE`], [`THRESHOLD`], or [`FLOW`]. Absent, renewable.
+    pub const RENEWAL: FactType = FactType::new("resources.renewal");
+    /// The stock, in whole units, below which a threshold deposit collapses and never regrows.
+    pub const FLOOR: FactType = FactType::new("resources.floor");
+    /// How rich a deposit is, in hundredths of a percent: the poorer, the more work each unit
+    /// takes. Absent, full.
+    pub const GRADE: FactType = FactType::new("resources.grade");
+    /// The work each unit of a deposit takes at full grade, in the units of a blow's strength
+    /// (Amendment A-27). Absent or zero: one go, one unit.
+    pub const DIFFICULTY: FactType = FactType::new("resources.difficulty");
+    /// That a deposit grows as living things do (Amendment A-41): `[from, full, water]` — no
+    /// regrowth at or below `from` centidegrees, full regrowth from `full`, and only as much as
+    /// the ground holds of `water` (hundredths of a percent of ground water).
+    pub const GROWS: FactType = FactType::new("resources.grows");
+    /// The work put into a deposit toward its next unit, by whoever works it.
+    pub const WORK_DONE: FactType = FactType::new("resources.work_done");
+    /// That a threshold deposit was taken below its floor and will never regrow.
+    pub const COLLAPSED: FactType = FactType::new("resources.collapsed");
+
+    /// Stock only falls: ore, stone.
+    pub const NONRENEWABLE: i64 = 1;
+    /// Regrows toward its cap at its rate.
+    pub const RENEWABLE: i64 = 2;
+    /// Regrows as renewable stock does, until it is taken below its floor; then never.
+    pub const THRESHOLD: i64 = 3;
+    /// Refills to its cap each step, and cannot be stockpiled at the source: a well.
+    pub const FLOW: i64 = 4;
+
     /// Every fact type this domain owns.
     pub const OWNED: &[FactType] = &[
         STOCK,
@@ -51,6 +80,13 @@ pub mod schema {
         YIELD_CAP,
         PICK_JUDGED,
         RESTOCK,
+        RENEWAL,
+        FLOOR,
+        GRADE,
+        DIFFICULTY,
+        GROWS,
+        WORK_DONE,
+        COLLAPSED,
     ];
 
     /// One whole unit of stock, in the stock's hundredths.
@@ -58,6 +94,14 @@ pub mod schema {
 
     /// The deposit a body last picked from — **Physical Reality's** report.
     pub const PICKED: FactType = FactType::new("physical.body.picked");
+    /// How hard that go was, as a blow's strength — **Physical Reality's** report (A-41).
+    pub const PICK_EFFORT: FactType = FactType::new("physical.body.pick_effort");
+    /// A place's air temperature — **Physical Reality's**.
+    pub const TEMPERATURE: FactType = FactType::new("physical.environment.temperature");
+    /// How wet a climate's ground is — **Physical Reality's** (A-38).
+    pub const GROUND_WATER: FactType = FactType::new("physical.environment.ground_water");
+    /// Where a thing is — **Physical Reality's**.
+    pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
     /// What a thing is made of — **Physical Reality's**.
     pub const MADE_OF: FactType = FactType::new("physical.material.made_of");
     /// A body's size — **Physical Reality's**.
@@ -77,8 +121,10 @@ pub mod schema {
 /// Hermetic transformations owned by the Resources domain (Vol. V Ch. 3 §3.1).
 pub mod systems {
     use crate::schema::{
-        ACT_ARRIVE, BODY_SIZE, LARDER, MADE_OF, PANTRY_CROSSING, PANTRY_LEAVING, PICKED,
-        PICK_JUDGED, RESTOCK, STOCK, UNIT, YIELD_CAP, YIELD_MADE_OF, YIELD_PER_DAY, YIELD_SIZE,
+        ACT_ARRIVE, BODY_SIZE, COLLAPSED, CONTAINED_IN, DIFFICULTY, FLOOR, FLOW, GRADE,
+        GROUND_WATER, GROWS, LARDER, MADE_OF, NONRENEWABLE, PANTRY_CROSSING, PANTRY_LEAVING,
+        PICKED, PICK_EFFORT, PICK_JUDGED, RENEWAL, RESTOCK, STOCK, TEMPERATURE, THRESHOLD, UNIT,
+        WORK_DONE, YIELD_CAP, YIELD_MADE_OF, YIELD_PER_DAY, YIELD_SIZE,
     };
     use kernel::fact::{Cause, FactKey, FactType, SystemId};
     use kernel::fixed::div_dither;
@@ -97,16 +143,72 @@ pub mod systems {
         PICKED,
         PICK_JUDGED,
         RESTOCK,
+        PICK_EFFORT,
+        RENEWAL,
+        FLOOR,
+        GRADE,
+        DIFFICULTY,
+        GROWS,
+        WORK_DONE,
+        COLLAPSED,
+        TEMPERATURE,
+        GROUND_WATER,
+        CONTAINED_IN,
     ];
-    const DEPOSIT_WRITES: &[FactType] =
-        &[STOCK, PICK_JUDGED, MADE_OF, BODY_SIZE, ACT_ARRIVE, RESTOCK];
+    const DEPOSIT_WRITES: &[FactType] = &[
+        STOCK,
+        PICK_JUDGED,
+        MADE_OF,
+        BODY_SIZE,
+        ACT_ARRIVE,
+        RESTOCK,
+        WORK_DONE,
+        COLLAPSED,
+    ];
 
-    /// Deposits (Vol. III Ch. 3; Amendment A-15): every tick, each pick Physical Reality reported
-    /// and this domain has not judged takes one whole unit from the deposit — the lower picker id
-    /// first, while there is one — and brings a new item, made of the deposit's material and of
-    /// its size, into the picker's hand. Every `regrow_ticks` ticks the stock regrows at the
-    /// deposit's daily rate, up to its cap. A bare deposit yields nothing. Units delivered to it
-    /// (Amendment A-26) are added before anything is picked.
+    /// Full, in hundredths of a percent.
+    const FULL: i64 = 10_000;
+
+    /// The nearest of `thing` and what encloses it to carry `fact`, and its value.
+    fn ambient(view: &dyn CommittedView, thing: EntityId, fact: FactType) -> Option<i64> {
+        kernel::hierarchy::ancestry(view, thing, CONTAINED_IN)
+            .into_iter()
+            .find_map(|place| int(view, FactKey::new(place, fact)))
+    }
+
+    /// How fast a growing deposit regrows now, in hundredths of a percent of its rate
+    /// (Amendment A-41): as warm as it stands between its `from` and `full`, and as much as the
+    /// ground holds of the water it needs. A deposit that does not grow regrows at its rate.
+    fn growth(view: &dyn CommittedView, deposit: EntityId) -> i64 {
+        let Some([from, full, water]) = view
+            .read(FactKey::new(deposit, GROWS))
+            .and_then(|f| f.value.as_vec3())
+        else {
+            return FULL;
+        };
+        let air = ambient(view, deposit, TEMPERATURE).unwrap_or(from);
+        let warmth = ((air - from) * FULL / (full - from).max(1)).clamp(0, FULL);
+        let wet = if water <= 0 {
+            FULL
+        } else {
+            let ground = ambient(view, deposit, GROUND_WATER).unwrap_or(0);
+            (ground * FULL / water).clamp(0, FULL)
+        };
+        warmth * wet / FULL
+    }
+
+    /// Deposits (Vol. III Ch. 3; Amendments A-15, A-41). Every tick, each go at a deposit Physical
+    /// Reality reported and this domain has not judged puts its effort into the deposit, the
+    /// lower picker id first. Once the work put in reaches what a unit takes — its difficulty
+    /// over its grade; nothing, for fruit — one whole unit leaves the stock, and a new item, made
+    /// of the deposit's material and of its size, arrives in the hand of the one whose go
+    /// finished it. A bare deposit yields nothing. Units delivered to it (Amendment A-26) are
+    /// added before anything is taken.
+    ///
+    /// Every `regrow_ticks` ticks the stock renews as its class says: a nonrenewable deposit
+    /// never; a flow refills to its cap; a renewable or threshold deposit regrows at its daily
+    /// rate up to its cap — as it grows, if it does (warmth and water) — and a threshold deposit
+    /// taken below its floor has collapsed, and never regrows again.
     pub struct Deposits {
         regrow_ticks: u64,
         regrow_ms: u64,
@@ -172,6 +274,16 @@ pub mod systems {
             for deposit in view.entities_with(STOCK) {
                 let before = int(view, FactKey::new(deposit, STOCK)).unwrap_or(0);
                 let mut stock = before;
+                let worked = int(view, FactKey::new(deposit, WORK_DONE)).unwrap_or(0);
+                let mut work = worked;
+                let grade = int(view, FactKey::new(deposit, GRADE))
+                    .unwrap_or(FULL)
+                    .max(1);
+                let per_unit = int(view, FactKey::new(deposit, DIFFICULTY))
+                    .unwrap_or(0)
+                    .max(0)
+                    .saturating_mul(FULL)
+                    / grade;
                 if let Some(units) = int(view, FactKey::new(deposit, RESTOCK)) {
                     stock += units.max(0) * UNIT;
                     push(
@@ -183,6 +295,15 @@ pub mod systems {
                 for picker in picks.remove(&deposit).unwrap_or_default() {
                     if stock < UNIT {
                         continue; // bare: the hand comes away empty
+                    }
+                    // The go's effort, toward the next unit: one go yields one unit at most.
+                    if per_unit > 0 {
+                        let effort = int(view, FactKey::new(picker, PICK_EFFORT)).unwrap_or(0);
+                        work = (work + effort.max(0)).min(per_unit);
+                        if work < per_unit {
+                            continue;
+                        }
+                        work = 0;
                     }
                     stock -= UNIT;
                     let item = ctx.new_entity();
@@ -208,12 +329,37 @@ pub mod systems {
                         "picked",
                     );
                 }
-                if regrowing {
+                if work != worked {
+                    let change = if work == 0 {
+                        Change::Tombstone
+                    } else {
+                        Change::Set(Value::Int(work))
+                    };
+                    push(FactKey::new(deposit, WORK_DONE), change, "worked");
+                }
+                // A threshold stock taken below its floor collapses, for good.
+                let renewal = int(view, FactKey::new(deposit, RENEWAL)).unwrap_or(0);
+                let mut collapsed = view.read(FactKey::new(deposit, COLLAPSED)).is_some();
+                let floor = int(view, FactKey::new(deposit, FLOOR)).unwrap_or(0) * UNIT;
+                if renewal == THRESHOLD && !collapsed && stock < floor {
+                    collapsed = true;
+                    push(
+                        FactKey::new(deposit, COLLAPSED),
+                        Change::Set(Value::Bool(true)),
+                        "taken_below_its_floor",
+                    );
+                }
+                let cap = int(view, FactKey::new(deposit, YIELD_CAP)).unwrap_or(0) * UNIT;
+                if regrowing && renewal == FLOW {
+                    stock = stock.max(cap);
+                } else if regrowing && renewal != NONRENEWABLE && !collapsed {
                     let per_day = int(view, FactKey::new(deposit, YIELD_PER_DAY)).unwrap_or(0);
-                    let cap = int(view, FactKey::new(deposit, YIELD_CAP)).unwrap_or(0) * UNIT;
                     let grow = div_dither(
-                        per_day as i128 * UNIT as i128 * self.regrow_ms as i128,
-                        86_400_000,
+                        per_day as i128
+                            * UNIT as i128
+                            * self.regrow_ms as i128
+                            * growth(view, deposit) as i128,
+                        86_400_000 * FULL as i128,
                         &mut ctx.rng(deposit.raw()),
                     ) as i64;
                     stock = (stock + grow).min(cap.max(stock));

@@ -1609,3 +1609,57 @@ mean tide; `tests/reference/tests/water.rs`):
 **Rationale.** A-34 found that a body lying down still saw. When the calendar moved Ashford's
 dawn before the end of its sleeping hours, the first light showed a resting mind something it
 wanted, and it got up for a bottle.
+
+---
+
+## A-41 — Taking from deposits: tools, effort, grade, and renewal (2026-10)
+
+**Edits:**
+- Vol. III Ch. 3 §3.4 (yield as a function of grade, capability, and method; the four renewal
+  classes: built)
+- Vol. III Ch. 1 §1.9 (a tool no softer than what it works)
+- Vol. IV Ch. 2 §2.2 (world rules: `bare_hand_hardness`), Vol. IV (deposits' `renewal`, `floor`,
+  `grade`, `difficulty`, `grows`; `[ground_water]`)
+
+**Change.**
+- **One way to take from a deposit.** A go at a deposit (`act.pick`, A-15) needs, within reach, a
+  hand or a tool fit for what the deposit yields. A bare hand works only what is no harder than
+  the world's `bare_hand_hardness`: fruit, berries, wheat. Anything harder needs a tool no softer
+  than it: a hammer for ore, an edge for timber. With nothing fit, the go is refused.
+- **Effort** (Physical; a report). Each go's effort is reported with it: the hardest blow the body
+  lands with what is fit, as a strike is judged (A-27), by strength and the tool's weight, never
+  harder than the tool.
+- **Work** (Resources). A deposit's `difficulty` is the work each unit takes at full grade. Its
+  `grade` divides that, so a seam half as rich takes twice the work. Each go's effort goes toward
+  the next unit, whoever's go it is. The go that completes it takes one unit from the stock into
+  that hand. One go yields one unit at most. A deposit with no difficulty yields a unit to every
+  go, as before.
+- **Renewal** (Resources; world data per deposit):
+  - *nonrenewable*: never regrows;
+  - *renewable* (the default, as before): regrows at its daily rate up to its cap;
+  - *threshold*: as renewable, until it is taken below its `floor`; then it has collapsed, and
+    never regrows again;
+  - *flow*: refills to its cap at each renewal, and cannot be stockpiled at the source.
+- **Growing things** (Resources). A renewable or threshold deposit that `grows` regrows only as
+  warm as it stands between its two temperatures, and only as much as its climate's ground holds
+  the water it needs (A-38).
+- **Ground water at the start** (world data): `[ground_water] climate = level`. Ground that
+  began bone dry would grow nothing until it rained.
+
+**In Ashford** (`tests/reference/tests/extract.rs`):
+- An iron seam (grade 60%) and a poorer copper seam in the mine's deep gallery, nonrenewable;
+  a stand of timber in the wood (threshold: floor ten logs; it grows); wheat on the farm (it
+  grows); iron ore, copper ore, and wheat as materials. Bare hands work what is no harder than
+  soil. The Vale's ground begins at 40% wet, Highmoor's 60%, Southfen's 80%.
+- Carol cannot work the iron seam with her hands. With the hammer, a few blows bring a lump of
+  ore away, and the seam holds one fewer.
+- Carol works it in fewer blows than Erin; at half the grade, it takes her about twice as many.
+- Three days on, the seam has not regrown.
+- Felled to its floor, the stand regrows a log a day. Felled one below it, it never regrows.
+- In three spring days the wheat ripens by half again. In frost, or on dry ground, it does not
+  grow at all.
+- Brambles declared to flow are back to their full eight at the next renewal.
+
+**Not yet:** digging the ground (A-42).
+
+**Rationale.** `docs/audits/resources.md`, slice R2 (built first: digging is taking from a pit).

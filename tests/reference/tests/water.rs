@@ -24,6 +24,9 @@ fn ashford(seconds: u64, humidity: i64) -> WorldPackage {
     pkg.physical_rules.humidity_variability = 0;
     pkg.physical_rules.pressure_variability = 0;
     pkg.physical_rules.humidity_baseline = humidity;
+    // The ground begins dry, so what the weather does to it shows plainly (Ashford's own
+    // begins damp: Amendment A-41).
+    pkg.ground_water.clear();
     pkg
 }
 
