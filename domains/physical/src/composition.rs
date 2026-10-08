@@ -86,6 +86,53 @@ pub fn compose_additive(
     Ok(Resolved::Write(Value::Int(start.saturating_add(delta_sum))))
 }
 
+/// A level that is absent at zero — wetness, ground water, lying snow (Amendment A-38): any
+/// number of systems may add to it or take from it in one tick; a set fixes the base, a
+/// tombstone sets it to zero; the sum is clamped into `[0, max]`, and nothing left is nothing.
+pub fn compose_fading(
+    current: Option<Value>,
+    changes: &[Change],
+    max: i64,
+) -> Result<Resolved, ResolveError> {
+    let mut base: i64 = current.and_then(|v| v.as_int()).unwrap_or(0);
+    let mut set_seen = false;
+    let mut delta: i64 = 0;
+    for change in changes {
+        match change {
+            Change::Set(v) | Change::Create(v) => {
+                if set_seen {
+                    return Err(ResolveError::new(
+                        "two competing sets with no declared tie-break",
+                    ));
+                }
+                set_seen = true;
+                base = v
+                    .as_int()
+                    .ok_or(ResolveError::new("this fact requires an integer value"))?;
+            }
+            Change::Tombstone | Change::Retire => {
+                if set_seen {
+                    return Err(ResolveError::new(
+                        "two competing sets with no declared tie-break",
+                    ));
+                }
+                set_seen = true;
+                base = 0;
+            }
+            Change::Delta(d) => delta = delta.saturating_add(*d),
+            Change::Add(_) | Change::Remove(_) => {
+                return Err(ResolveError::new(
+                    "this fact is single-valued; use Set/Delta, not Add/Remove",
+                ))
+            }
+        }
+    }
+    match base.saturating_add(delta).clamp(0, max) {
+        0 => Ok(Resolved::Tombstone),
+        n => Ok(Resolved::Write(Value::Int(n))),
+    }
+}
+
 /// Sum deltas as [`compose_additive`], then clamp the result into `[min, max]`. Used by the
 /// percentage fields (illumination, humidity), so a random-walk of weather deltas can never
 /// drive them out of range and abort a tick. Tombstones pass through unclamped.

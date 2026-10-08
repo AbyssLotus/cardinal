@@ -105,6 +105,12 @@ front_distance_cm = 2000000         # and the wind carries it the 20 km from one
 opening_air_speed_cm_s = 5          # air trades through an open doorway at 5 cm/s each way (A-37)
 draught_percent = 1000              # and a tenth of the wind outside blows through it
 open_air_height_cm = 1000           # smoke over open ground fills the air ten metres up
+soak_per_mm = 300                   # each millimetre of rain wets the ground 3% (A-38)
+ground_drying_per_hour = 30         # and it dries a few percent a day, faster in sun and wind
+snow_melt_mm_per_degree_hour = 5    # snow melts 5 mm an hour for each degree above freezing
+wetting_per_hour = 20000            # in the hardest rain a thing in the open is soaked in half an hour
+drying_per_hour = 1500              # and dries in an afternoon's sun and breeze
+dry_by_heat_per_hour = 20000        # a fire's full heat dries a soaked thing in half an hour
 
 [rules.living]
 metabolism_step_seconds = 60
@@ -125,6 +131,8 @@ starving_harm_per_hour = 100        # 1% of health lost each hour starving
 strength = 4000                     # people are 40% strong unless said otherwise (Amendment A-27)
 burn_harm_per_hour = 6000           # the full heat of a fire costs 60% of health an hour (A-28)
 smoke_harm_per_hour = 3000          # thick smoke, 30% an hour (A-32)
+chill_wind_cm_s = 2000              # a 20 m/s gale on a body doubles how fast it takes the air's cold (A-38)
+wet_chill_percent = 20000           # soaked through, three times as fast again
 
 [rules.information]
 perception_step_seconds = 1

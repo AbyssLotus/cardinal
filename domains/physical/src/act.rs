@@ -39,6 +39,7 @@ use std::collections::BTreeMap;
 const ARRIVAL_GAP_CM: i64 = 5;
 
 const ACT_READS: &[FactType] = &[
+    crate::schema::WETNESS,
     ACT_PUSH,
     SOLID,
     ACT_OPEN,
@@ -818,7 +819,14 @@ impl System for Act {
                 push(body, ACT_IGNITE, Change::Tombstone, "considered");
                 let in_hand = container_of(view, target) == Some(body);
                 let near = in_hand || self.within_reach(view, body, target);
-                if near && crate::fire::can_catch(view, target) && self.has_flame(view, body) {
+                // A flame lights only what will burn at least as fiercely as a fire begins: not
+                // soaked timber (Amendment A-38).
+                let takes = crate::fire::burns_as(view, target) >= self.ignite_intensity;
+                if near
+                    && takes
+                    && crate::fire::can_catch(view, target)
+                    && self.has_flame(view, body)
+                {
                     let fire = Value::Int(self.ignite_intensity);
                     push(target, BURNING, Change::Set(fire), "set_alight");
                     succeeded = true;

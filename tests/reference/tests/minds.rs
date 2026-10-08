@@ -118,15 +118,17 @@ fn erin_opens_the_shut_door_that_stands_in_her_way() {
     city.close(BOB, DOOR_IN);
     city.run(3); // directed, then commanded, then the door swings to
     assert_eq!(city.read(DOOR_OUT, PORTAL_OPEN), Some(Value::Bool(false)));
-    let mut approached = false;
+    let (mut approached, mut went_in) = (false, false);
     for _ in 0..36 * HOUR {
         city.run(1);
         approached |= own(&city, ERIN, STEP) == Some(Value::Int(STEP_APPROACH));
+        went_in |= city.room_of(ERIN) == KITCHEN;
     }
     assert!(approached, "she went to the door");
     assert_eq!(city.read(DOOR_OUT, PORTAL_OPEN), Some(Value::Bool(true)));
-    // In, and up to the bedroom if the kitchen has grown cold with the door she opened.
-    assert!([KITCHEN, BEDROOM].contains(&city.room_of(ERIN)));
+    // And in. (Where she is a day later is the weather's business: with the door she opened
+    // letting the night in, she may find the morning yard warmer than the house — Amendment A-37.)
+    assert!(went_in, "she went in");
 }
 
 #[test]

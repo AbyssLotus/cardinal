@@ -471,6 +471,20 @@ pub struct PhysicalRules {
     pub draught_percent: i64,
     /// How high over open ground smoke mixes before it is carried off, centimetres.
     pub open_air_height_cm: i64,
+    /// How much wetter the ground grows for each millimetre of water that reaches it, hundredths
+    /// of a percent (Amendment A-38).
+    pub soak_per_mm: i64,
+    /// How fast the ground dries per hour in dry, dark, still air; twice as fast in full sun,
+    /// faster in wind.
+    pub ground_drying_per_hour: i64,
+    /// How many millimetres of lying snow melt per hour for each degree above freezing.
+    pub snow_melt_mm_per_degree_hour: i64,
+    /// How fast a thing in the open soaks in the world's hardest rain, per hour.
+    pub wetting_per_hour: i64,
+    /// How fast a wet thing dries per hour in dry, dark, still air.
+    pub drying_per_hour: i64,
+    /// How fast a fire's full heat dries a wet thing, per hour.
+    pub dry_by_heat_per_hour: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).
@@ -722,6 +736,11 @@ pub struct LivingRules {
     pub burn_harm_per_hour: i64,
     /// Health lost per hour breathing thick smoke (Amendment A-32).
     pub smoke_harm_per_hour: i64,
+    /// The wind on a body, cm/s, that doubles how fast it takes the air's temperature
+    /// (Amendment A-38).
+    pub chill_wind_cm_s: i64,
+    /// How much faster again a soaked body takes it, hundredths of a percent.
+    pub wet_chill_percent: i64,
 }
 
 /// One region the world begins with (Vol. IV Ch. 4, generation): an id, a starting

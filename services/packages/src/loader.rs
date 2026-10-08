@@ -218,6 +218,10 @@ pub fn living_config(package: &WorldPackage) -> Option<LivingConfig> {
         strength: rules.strength,
         burn_harm_per_hour: rules.burn_harm_per_hour,
         smoke_harm_per_hour: rules.smoke_harm_per_hour,
+        chill: living::systems::Chill {
+            wind_cm_s: rules.chill_wind_cm_s,
+            wet: rules.wet_chill_percent,
+        },
     })
 }
 
@@ -387,6 +391,7 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             smoke_per_hour: r.smoke_per_hour,
             smoke_clear_per_hour: r.smoke_clear_per_hour,
             fan_wind_cm_s: r.fire_fan_wind_cm_s,
+            dry_by_heat_per_hour: r.dry_by_heat_per_hour,
         },
         wind: physical::wind::WindRules {
             force_divisor: r.wind_force_divisor,
@@ -408,6 +413,14 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             fog_above: r.fog_above,
             fog_wind_below_cm_s: r.fog_wind_below_cm_s,
             humidity_per_degree: r.humidity_per_degree,
+        },
+        wet: physical::wet::WetRules {
+            soak_per_mm: r.soak_per_mm,
+            ground_drying_per_hour: r.ground_drying_per_hour,
+            snow_melt_mm_per_degree_hour: r.snow_melt_mm_per_degree_hour,
+            wetting_per_hour: r.wetting_per_hour,
+            drying_per_hour: r.drying_per_hour,
+            hardest_rain: r.rain_per_hour,
         },
         air: physical::air::AirRules {
             opening_speed_cm_s: r.opening_air_speed_cm_s,

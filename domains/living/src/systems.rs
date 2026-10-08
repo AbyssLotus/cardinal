@@ -24,7 +24,16 @@ use kernel::time::{SimClock, Step};
 
 /// Reads: the organism's containment (to learn its region) and that region's temperature —
 /// both owned by Physical Reality — plus the organism's own body heat. Writes: body heat.
-const THERMO_READS: &[FactType] = &[CONTAINED_IN, AMBIENT_TEMPERATURE, BODY_HEAT, HEALTH];
+const THERMO_READS: &[FactType] = &[
+    CONTAINED_IN,
+    AMBIENT_TEMPERATURE,
+    BODY_HEAT,
+    HEALTH,
+    crate::schema::WIND_SPEED,
+    crate::schema::ENCLOSED,
+    crate::schema::EXPOSURE,
+    crate::schema::WETNESS,
+];
 const THERMO_WRITES: &[FactType] = &[BODY_HEAT];
 
 /// Homeostasis for every organism: body heat is defended toward a metabolic set point while
@@ -56,19 +65,78 @@ pub struct Thermoregulation {
     set_point_centi_c: i64,
     warm_ms: u64,
     cold_ms: u64,
+    chill: Chill,
+}
+
+/// How wind and wet hurry a body toward the air (Amendment A-38), world rules: the pull toward
+/// ambient grows by one again for every `wind_cm_s` of wind on the body, and by `wet` (hundredths
+/// of a percent) when it is soaked through, in proportion as it is wet.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Chill {
+    /// The wind, in cm/s, that doubles how fast a body takes the air's temperature.
+    pub wind_cm_s: i64,
+    /// How much faster again a soaked body takes it, in hundredths of a percent.
+    pub wet: i64,
 }
 
 impl Thermoregulation {
     /// Configure homeostasis shared by every organism, stepping as `step` says.
     /// `set_point_centi_c` is the metabolic target; `warm_ms`/`cold_ms` are the time constants
-    /// of the pull toward the set point and toward ambient (world-package rules, Vol. IV Ch. 2).
-    pub const fn new(step: Step, set_point_centi_c: i64, warm_ms: u64, cold_ms: u64) -> Self {
+    /// of the pull toward the set point and toward ambient (world-package rules, Vol. IV Ch. 2);
+    /// `chill`, how wind and wet hurry the second (Amendment A-38).
+    pub const fn new(
+        step: Step,
+        set_point_centi_c: i64,
+        warm_ms: u64,
+        cold_ms: u64,
+        chill: Chill,
+    ) -> Self {
         Self {
             step,
             set_point_centi_c,
             warm_ms: if warm_ms == 0 { 1 } else { warm_ms },
             cold_ms: if cold_ms == 0 { 1 } else { cold_ms },
+            chill,
         }
+    }
+
+    /// The wind on `organism`, in cm/s: its climate's, met walking up what encloses it — none
+    /// once a wall stands between (a walled place lets in only the share of the sky it is
+    /// declared open to).
+    fn wind_on(view: &dyn CommittedView, organism: EntityId) -> i128 {
+        let mut share: i128 = 10_000;
+        for place in ancestry(view, organism, CONTAINED_IN).into_iter().skip(1) {
+            if let Some(wind) = int(view, FactKey::new(place, crate::schema::WIND_SPEED)) {
+                return wind.max(0) as i128 * share / 10_000;
+            }
+            let walled = view
+                .read(FactKey::new(place, crate::schema::ENCLOSED))
+                .map(|f| f.value)
+                == Some(kernel::value::Value::Bool(true));
+            if walled {
+                match int(view, FactKey::new(place, crate::schema::EXPOSURE)) {
+                    Some(open) => share = share * open.clamp(0, 10_000) as i128 / 10_000,
+                    None => return 0,
+                }
+            }
+        }
+        0
+    }
+
+    /// The time constant of the pull toward ambient for `organism`, in milliseconds: shortened
+    /// by the wind on it and by how wet it is (Amendment A-38).
+    fn cold_ms_of(&self, view: &dyn CommittedView, organism: EntityId) -> i128 {
+        const FULL: i128 = 10_000;
+        let wind = if self.chill.wind_cm_s > 0 {
+            Self::wind_on(view, organism) * FULL / self.chill.wind_cm_s as i128
+        } else {
+            0
+        };
+        let wetness = int(view, FactKey::new(organism, crate::schema::WETNESS))
+            .unwrap_or(0)
+            .clamp(0, 10_000) as i128;
+        let wet = wetness * self.chill.wet.max(0) as i128 / FULL;
+        (self.cold_ms as i128 * FULL / (FULL + wind + wet)).max(1)
     }
 
     /// The temperature of the air around the organism and its current body heat — or `None` if
@@ -93,18 +161,15 @@ impl Thermoregulation {
         Some((ambient, current))
     }
 
-    /// Body heat after one step from `current`, given `ambient`, rounded without bias.
-    fn settle(&self, ambient: i64, current: i64, rng: &mut Rng) -> i64 {
+    /// Body heat after one step from `current`, given `ambient` and the pull toward it `tc`,
+    /// rounded without bias.
+    fn settle(&self, ambient: i64, current: i64, tc: i128, rng: &mut Rng) -> i64 {
         let (h, s, a) = (
             current as i128,
             self.set_point_centi_c as i128,
             ambient as i128,
         );
-        let (tw, tc, dt) = (
-            self.warm_ms as i128,
-            self.cold_ms as i128,
-            self.step.dt_ms as i128,
-        );
+        let (tw, dt) = (self.warm_ms as i128, self.step.dt_ms as i128);
         let numerator = h * tw * tc + dt * tc * s + dt * tw * a;
         let denominator = tw * tc + dt * tc + dt * tw;
         div_dither(numerator, denominator, rng) as i64
@@ -131,7 +196,8 @@ impl System for Thermoregulation {
             .filter(|organism| alive(view, *organism))
             .filter_map(|organism| {
                 let (ambient, current) = self.state_of(view, organism)?;
-                let next = self.settle(ambient, current, &mut ctx.rng(organism.raw()));
+                let tc = self.cold_ms_of(view, organism);
+                let next = self.settle(ambient, current, tc, &mut ctx.rng(organism.raw()));
                 Some(Proposal::new(
                     self.id(),
                     FactKey::new(organism, BODY_HEAT),

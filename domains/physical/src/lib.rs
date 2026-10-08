@@ -54,6 +54,7 @@ pub mod space;
 pub mod systems;
 pub mod terrain;
 pub mod travel;
+pub mod wet;
 pub mod wind;
 
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
@@ -165,6 +166,8 @@ pub struct PhysicalConfig {
     pub sky: systems::SkyRules,
     /// How air passes through openings (Amendment A-37).
     pub air: air::AirRules,
+    /// How the ground and things get wet and dry, and snow lies (Amendment A-38).
+    pub wet: wet::WetRules,
 }
 
 impl PhysicalConfig {
@@ -269,6 +272,9 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::RAIN
             || fact_type == schema::SNOW
             || fact_type == schema::FOG
+            || fact_type == schema::GROUND_WATER
+            || fact_type == schema::SNOW_DEPTH
+            || fact_type == schema::WETNESS
             || fact_type == schema::POSITION
             || fact_type == schema::BODY_SIZE
             || fact_type == schema::HEADING
@@ -452,6 +458,8 @@ impl Domain for PhysicalDomain {
                 c.fire,
                 c.air,
             )),
+            // The ground, the snow, and what stands in the rain (Amendment A-38).
+            Box::new(wet::Wet::new(step, c.wet)),
             // Walled rooms' air follows the air outside them (Amendment A-5).
             Box::new(systems::Shelter::new(
                 step,
@@ -528,6 +536,10 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::EXPOSURE
         {
             composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
+        } else if fact_type == schema::GROUND_WATER || fact_type == schema::WETNESS {
+            composition::compose_fading(current, changes, schema::PERCENT_FULL)
+        } else if fact_type == schema::SNOW_DEPTH {
+            composition::compose_fading(current, changes, schema::MAX_SIZE)
         } else if fact_type == schema::HUMIDITY_NORMAL
             || fact_type == schema::CLOUD
             || fact_type == schema::FOG

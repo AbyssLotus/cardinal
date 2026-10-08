@@ -1407,3 +1407,65 @@ up; the yard now declares its size, 40 m × 30 m; `tests/reference/tests/air.rs`
   and thin upwind.
 
 **Rationale.** `docs/audits/environment.md` §4, slice 4; A-32's "not yet".
+
+---
+
+## A-38 — Wet and snow (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 (environmental state: soil moisture; snow cover)
+- Vol. III Ch. 1 §1.9 (fire: wet things burn less readily)
+- Vol. III Ch. 2 (body heat: wind and wet hurry a body toward the air's temperature)
+- Vol. IV Ch. 2 §2.2 (world rules: `soak_per_mm`, `ground_drying_per_hour`,
+  `snow_melt_mm_per_degree_hour`, `wetting_per_hour`, `drying_per_hour`, `dry_by_heat_per_hour`;
+  Living's `chill_wind_cm_s`, `wet_chill_percent`)
+
+**Change.**
+- **Ground water** (Physical). How wet a climate's ground is. Rain soaks in at `soak_per_mm` for
+  each millimetre, and so does melting snow. It dries at `ground_drying_per_hour` times how dry
+  the air is, twice as fast in full sun, faster in wind. It does not dry under snow.
+- **Snow cover** (Physical). Snow builds ten times as deep as the water in it, and melts at
+  `snow_melt_mm_per_degree_hour` for each degree above freezing, into the ground.
+- **Wetness** (Physical; open to anyone, as a bucket may be thrown). How wet a thing or a body
+  is. Whatever stands in the open while rain or snow falls soaks, at `wetting_per_hour` in the
+  world's hardest rain, less in lighter. Everything wet dries as the ground does, slowly indoors
+  in a room's still, dim air.
+- **Wet things burn less readily.** A thing burns as its most flammable material, less as much as
+  it is wet. It catches from heat only by that, and a fire on it grows only to that. A flame
+  lights only what will burn at least as fiercely as a fire begins. A fire's heat dries what it
+  reaches, at `dry_by_heat_per_hour` at full heat, so a soaked thing beside a fire holds out
+  until it is dried.
+- **Chill** (Living). A body is pulled toward the air's temperature faster:
+  - by one again for every `chill_wind_cm_s` of wind on it. Living finds that wind as it finds the
+    air: walking up what encloses the body to its climate's wind, none once a wall stands
+    between, and only the declared share through a walled place open to the sky. (A per-body
+    wind report was tried first and dropped: the breeze changes every step, and a write for
+    every body outdoors every step is churn the world does not need.)
+  - by `wet_chill_percent` when soaked through, in proportion as it is wet.
+- Ground water, snow depth, and wetness are levels that vanish at zero. Any number of systems
+  may add to them or take from them in one tick: fire dries, rain wets.
+
+**In Ashford** (`tests/reference/tests/wet.rs`):
+- Three hours of 5 mm rain wet the Vale's ground by about 45%. On a dry spring day, half-wet
+  ground dries even at night, and faster under the sun.
+- Declared five below, saturated air lays 10 cm of snow in two hours, and the frozen ground takes
+  none of it. Twenty centimetres on the spring ground melt by noon, into the ground.
+- An hour of rain soaks the packing crate in the yard. The kitchen table stays dry.
+- Dry, the crate catches from the torch burning beside it. Soaked, it is still drying in the
+  torch's heat forty minutes on.
+- Three hours in a 20 m/s gale leave Erin's body colder than in still air, and colder still in
+  the gale and rain. Bob, in the kitchen with the house shut up, feels no wind. (With the front
+  door open he would be colder too, for the draught it lets in: A-37.)
+- Ashford's ordinary breezes of a few metres a second chill a body only a little: a gale of
+  20 m/s doubles how fast it takes the air's cold.
+- That little is enough to move people, through what they believe of the house's rooms (A-37).
+  Gwen, cold at dawn in a kitchen whose open door let the night in, goes down to the cellar she
+  remembers warmer; the love test keeps her ignorant of the cellar so she stays with Finn.
+  Erin, cold in the bedroom on her second morning, goes out into the yard the sun has warmed
+  first.
+
+**Not yet:**
+- deep snow slowing those who walk through it;
+- rivers, ponds, and flooding (A-39).
+
+**Rationale.** `docs/audits/environment.md` §4, slice 5.

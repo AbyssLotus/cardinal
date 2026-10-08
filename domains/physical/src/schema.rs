@@ -261,6 +261,18 @@ pub const SNOW: FactType = FactType::new("physical.environment.snow");
 /// still air near saturation and shortens sight, as smoke does. Absent, there is none.
 pub const FOG: FactType = FactType::new("physical.environment.fog");
 
+/// How wet a climate's ground is, in hundredths of a percent of what it holds (Amendment A-38):
+/// rain and melting snow soak in; dry air, sun, and wind dry it. Absent, dry.
+pub const GROUND_WATER: FactType = FactType::new("physical.environment.ground_water");
+
+/// How deep snow lies over a climate, in millimetres (Amendment A-38). Absent, none.
+pub const SNOW_DEPTH: FactType = FactType::new("physical.environment.snow_depth");
+
+/// How wet a thing or a body is, in hundredths of a percent (Amendment A-38): soaked by rain and
+/// snow in the open, dried by the air. Wet things burn less readily. Open to anyone — a bucket of
+/// water may be thrown. Absent, dry.
+pub const WETNESS: FactType = FactType::new("physical.body.wetness");
+
 /// Atmospheric pressure at a location, in decapascals (hPa x 10) as fixed-point
 /// (Vol. III Ch. 1 §1.10). Falls with elevation and drifts with weather; the pressure
 /// gradient between adjacent regions is what drives wind.

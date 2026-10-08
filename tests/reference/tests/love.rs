@@ -67,8 +67,17 @@ fn finn_and_gwen_fall_in_love_and_the_courier_does_not() {
 #[test]
 fn apart_gwen_longs_for_finn_and_goes_back_to_him() {
     // Finn, without a mind of his own, keeps to the kitchen; Gwen spends her nights there too, out
-    // of the cold, and by day they fall for each other there.
-    let mut city = still(|p| p.minds.retain(|(m, _)| *m != FINN));
+    // of the cold — she has never been down to the cellar, or she might have gone there, its
+    // stone keeping the day's warmth while the kitchen's open door lets the night in (Amendment
+    // A-37) — and by day they fall for each other there.
+    let mut city = still(|p| {
+        p.minds.retain(|(m, _)| *m != FINN);
+        for (mind, things) in &mut p.knows {
+            if *mind == GWEN {
+                things.retain(|t| ![CELLAR, 1009, 1010].contains(t));
+            }
+        }
+    });
     city.go(FINN, KITCHEN, 140);
     city.run(3 * DAY + 12 * HOUR); // noon on the fourth day, lovers in the kitchen
     assert_eq!((city.room_of(FINN), city.room_of(GWEN)), (KITCHEN, KITCHEN));

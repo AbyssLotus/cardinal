@@ -136,11 +136,19 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut opening_air_speed_cm_s: Option<i64> = None;
     let mut draught_percent: Option<i64> = None;
     let mut open_air_height_cm: Option<i64> = None;
+    let mut soak_per_mm: Option<i64> = None;
+    let mut ground_drying_per_hour: Option<i64> = None;
+    let mut snow_melt_mm_per_degree_hour: Option<i64> = None;
+    let mut wetting_per_hour: Option<i64> = None;
+    let mut drying_per_hour: Option<i64> = None;
+    let mut dry_by_heat_per_hour: Option<i64> = None;
     let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
     let mut latitudes: Vec<(u64, i64)> = Vec::new();
     let mut humidities: Vec<(u64, i64)> = Vec::new();
     let mut burn_harm: Option<i64> = None;
     let mut smoke_harm: Option<i64> = None;
+    let mut chill_wind: Option<i64> = None;
+    let mut wet_chill: Option<i64> = None;
     let mut fire_warmth_per_hour: Option<i64> = None;
     let mut smoke_per_hour: Option<i64> = None;
     let mut smoke_clear_per_hour: Option<i64> = None;
@@ -415,6 +423,16 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 }
                 "draught_percent" => draught_percent = Some(parse_num(value, line_no)?),
                 "open_air_height_cm" => open_air_height_cm = Some(parse_num(value, line_no)?),
+                "soak_per_mm" => soak_per_mm = Some(parse_num(value, line_no)?),
+                "ground_drying_per_hour" => {
+                    ground_drying_per_hour = Some(parse_num(value, line_no)?)
+                }
+                "snow_melt_mm_per_degree_hour" => {
+                    snow_melt_mm_per_degree_hour = Some(parse_num(value, line_no)?)
+                }
+                "wetting_per_hour" => wetting_per_hour = Some(parse_num(value, line_no)?),
+                "drying_per_hour" => drying_per_hour = Some(parse_num(value, line_no)?),
+                "dry_by_heat_per_hour" => dry_by_heat_per_hour = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -443,6 +461,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "strength" => default_strength = Some(parse_num(value, line_no)?),
                 "burn_harm_per_hour" => burn_harm = Some(parse_num(value, line_no)?),
                 "smoke_harm_per_hour" => smoke_harm = Some(parse_num(value, line_no)?),
+                "chill_wind_cm_s" => chill_wind = Some(parse_num(value, line_no)?),
+                "wet_chill_percent" => wet_chill = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -1082,6 +1102,18 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         )?,
         draught_percent: require(draught_percent, "rules.physical.draught_percent")?,
         open_air_height_cm: require(open_air_height_cm, "rules.physical.open_air_height_cm")?,
+        soak_per_mm: require(soak_per_mm, "rules.physical.soak_per_mm")?,
+        ground_drying_per_hour: require(
+            ground_drying_per_hour,
+            "rules.physical.ground_drying_per_hour",
+        )?,
+        snow_melt_mm_per_degree_hour: require(
+            snow_melt_mm_per_degree_hour,
+            "rules.physical.snow_melt_mm_per_degree_hour",
+        )?,
+        wetting_per_hour: require(wetting_per_hour, "rules.physical.wetting_per_hour")?,
+        drying_per_hour: require(drying_per_hour, "rules.physical.drying_per_hour")?,
+        dry_by_heat_per_hour: require(dry_by_heat_per_hour, "rules.physical.dry_by_heat_per_hour")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -1196,6 +1228,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             strength: default_strength,
             burn_harm_per_hour: require(burn_harm, "rules.living.burn_harm_per_hour")?,
             smoke_harm_per_hour: require(smoke_harm, "rules.living.smoke_harm_per_hour")?,
+            chill_wind_cm_s: require(chill_wind, "rules.living.chill_wind_cm_s")?,
+            wet_chill_percent: require(wet_chill, "rules.living.wet_chill_percent")?,
         }),
     };
 
@@ -1822,6 +1856,12 @@ front_distance_cm = 0
 opening_air_speed_cm_s = 5
 draught_percent = 1000
 open_air_height_cm = 1000
+soak_per_mm = 300
+ground_drying_per_hour = 30
+snow_melt_mm_per_degree_hour = 5
+wetting_per_hour = 20000
+drying_per_hour = 1500
+dry_by_heat_per_hour = 20000
 [regions]
 1 = 1500
 ";

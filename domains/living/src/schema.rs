@@ -138,6 +138,19 @@ pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
 /// dangling read (Vol. IV Ch. 2).
 pub const AMBIENT_TEMPERATURE: FactType = FactType::new("physical.environment.temperature");
 
+/// A climate's wind, cm/s — **Physical Reality's** (Amendment A-38).
+pub const WIND_SPEED: FactType = FactType::new("physical.environment.wind_speed");
+
+/// Whether a place is walled — **Physical Reality's**: no wind blows in it.
+pub const ENCLOSED: FactType = FactType::new("physical.space.enclosed");
+
+/// How open a place is to the sky — **Physical Reality's**: a walled place declared exposed lets
+/// that share of the wind in.
+pub const EXPOSURE: FactType = FactType::new("physical.space.exposure");
+
+/// How wet a body is — **Physical Reality's** (Amendment A-38).
+pub const WETNESS: FactType = FactType::new("physical.body.wetness");
+
 /// Absolute zero in centidegrees Celsius (−273.15 °C) — the floor below which body heat is
 /// physically meaningless. The Validate stage rejects any resolved body heat beneath it.
 pub const BODY_HEAT_FLOOR_CENTI_C: i64 = -27315;

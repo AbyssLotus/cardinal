@@ -87,6 +87,8 @@ pub struct LivingConfig {
     pub burn_harm_per_hour: i64,
     /// Health lost per hour breathing thick smoke (Amendment A-32).
     pub smoke_harm_per_hour: i64,
+    /// How wind and wet hurry a body toward the air's temperature (Amendment A-38).
+    pub chill: systems::Chill,
     /// How far a resident sees once they cross into the scene, in centimetres (Amendment A-24) —
     /// if the world has residents.
     pub resident_sight_cm: Option<i64>,
@@ -130,6 +132,7 @@ impl Domain for LivingDomain {
                 c.set_point_centi_c,
                 c.warm_response_seconds.saturating_mul(1000),
                 c.cold_response_seconds.saturating_mul(1000),
+                c.chill,
             )),
             // Tiring and resting, and what harm and healing do to health (Amendment A-10).
             Box::new(systems::Fatigue::new(

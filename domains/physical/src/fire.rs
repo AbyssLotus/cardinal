@@ -26,7 +26,7 @@ use crate::schema::{
     HEAT_EXPOSURE, INTEGRITY, KEPT_FIRE, LEADS_TO, MADE_OF, MATERIAL_DENSITY,
     MATERIAL_FLAMMABILITY, MOBILE, MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PERCENT_FULL,
     PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION, RAIN, SMOKE, SNOW, TEMPERATURE, TERRAIN_SAMPLE,
-    TERRAIN_SPACING, WIND_SPEED,
+    TERRAIN_SPACING, WETNESS, WIND_SPEED,
 };
 use crate::terrain::is_true;
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
@@ -71,6 +71,9 @@ pub struct FireRules {
     /// The wind, in centimetres a second, that fans a fire in the open to twice what its fuel
     /// alone allows, and carries its heat twice as far.
     pub fan_wind_cm_s: i64,
+    /// How fast a fire's full heat dries a wet thing, per hour, in hundredths of a percent
+    /// (Amendment A-38).
+    pub dry_by_heat_per_hour: i64,
 }
 
 /// Every placement and line-of-sight fact, besides fire's own.
@@ -106,8 +109,16 @@ const FIRE_READS: &[FactType] = &[
     TEMPERATURE,
     WIND_SPEED,
     crate::schema::PLACE,
+    WETNESS,
 ];
-const FIRE_WRITES: &[FactType] = &[BURNING, INTEGRITY, HEAT_EXPOSURE, SMOKE, TEMPERATURE];
+const FIRE_WRITES: &[FactType] = &[
+    BURNING,
+    INTEGRITY,
+    HEAT_EXPOSURE,
+    SMOKE,
+    TEMPERATURE,
+    WETNESS,
+];
 
 /// Fire's course, its heat, and what catches (Amendment A-28).
 pub struct Fire {
@@ -203,10 +214,20 @@ fn int(view: &dyn CommittedView, key: FactKey) -> Option<i64> {
     view.read(key).and_then(|f| f.value.as_int())
 }
 
-/// Whether `thing` can catch fire: made of something that burns, with something left to burn,
-/// and not burning already.
+/// How readily `thing` burns, in hundredths of a percent: its most flammable material's
+/// flammability, less as much as it is wet (Amendment A-38) — soaked timber hardly burns.
+pub fn burns_as(view: &dyn CommittedView, thing: EntityId) -> i64 {
+    let dry = PERCENT_FULL
+        - int(view, FactKey::new(thing, WETNESS))
+            .unwrap_or(0)
+            .clamp(0, PERCENT_FULL);
+    crate::materials::flammability_of(view, thing).unwrap_or(0) * dry / PERCENT_FULL
+}
+
+/// Whether `thing` can catch fire: made of something that burns, not too wet to, with something
+/// left to burn, and not burning already.
 pub fn can_catch(view: &dyn CommittedView, thing: EntityId) -> bool {
-    crate::materials::flammability_of(view, thing).is_some_and(|f| f > 0)
+    burns_as(view, thing) > 0
         && int(view, FactKey::new(thing, INTEGRITY)).unwrap_or(PERCENT_FULL) > 0
         && !is_true(view, thing, BROKEN)
         && view.read(FactKey::new(thing, BURNING)).is_none()
@@ -273,7 +294,7 @@ impl System for Fire {
             } else {
                 0
             };
-            let fuel = crate::materials::flammability_of(view, b).unwrap_or(0);
+            let fuel = burns_as(view, b);
             let allows = (fuel + fuel * wind / r.fan_wind_cm_s.max(1)).min(PERCENT_FULL);
             // Rain or snow on what is open to the sky (Amendment A-35).
             let raining = in_the_open
@@ -360,9 +381,24 @@ impl System for Fire {
             }
         }
 
-        // 3. What is given heat enough for its flammability catches.
+        // 3. What is given heat enough for its flammability catches; what is wet is dried by
+        //    the heat first, ten times as fast as by full sun (Amendment A-38).
         for (c, h) in heat {
-            let f = crate::materials::flammability_of(view, c).unwrap_or(0);
+            let wet = int(view, FactKey::new(c, WETNESS)).unwrap_or(0);
+            if wet > 0 {
+                let mut rng = ctx.rng(c.raw() ^ 0xd7e);
+                let dried = self
+                    .over(r.dry_by_heat_per_hour * h / PERCENT_FULL, &mut rng)
+                    .min(wet);
+                if dried > 0 {
+                    push(
+                        FactKey::new(c, WETNESS),
+                        Change::Delta(-dried),
+                        "dried_by_fire",
+                    );
+                }
+            }
+            let f = burns_as(view, c);
             if h * f / PERCENT_FULL >= r.ignition_heat {
                 push(
                     FactKey::new(c, BURNING),

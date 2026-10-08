@@ -710,6 +710,8 @@ Instead it provides the shared context upon which specialized systems operate.
 
 *As built (Amendment A-37):* air trades through every open opening, by its size and the draught through it. An open door lets the night into a room; a hearth's warmth climbs an open stair; smoke drifts from room to room, and from a fire in a still yard in at an open door, until the wind carries it off.
 
+*As built (Amendment A-38):* rain soaks the ground and sun, dry air, and wind dry it; snow lies in frost and melts into the ground in a thaw. Whatever stands in the rain is soaked and dries after; wet things burn less readily, and a fire's heat dries them first. Wind and wet hurry a body toward the air's temperature, but not behind walls.
+
 ---
 
 # 1.11 Physical Constraints
