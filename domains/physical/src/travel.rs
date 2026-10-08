@@ -181,6 +181,9 @@ struct Planner<'v> {
     slopes: BTreeMap<(EntityId, i64, i64), Option<i64>>,
     grids: BTreeMap<(EntityId, i64), Grid>,
     routes: BTreeMap<(EntityId, EntityId, Option<[i64; 3]>), Option<Vec<Way>>>,
+    /// The places no one can walk into this tick: water or flood too deep to wade, not frozen
+    /// hard (Amendment A-39). Found once per tick from the few places with water.
+    impassable: BTreeSet<EntityId>,
 }
 
 /// One step of a way from place to place (Amendment A-30): through an opening, into a place
@@ -310,6 +313,12 @@ impl<'v> Planner<'v> {
                 places.insert(dest);
             }
         }
+        let impassable = view
+            .entities_with(crate::schema::WATER_LEVEL)
+            .into_iter()
+            .chain(view.entities_with(crate::schema::FLOOD_DEPTH))
+            .filter(|p| !crate::water::passable(view, *p, rules.wade_depth_cm, rules.ice_bears_mm))
+            .collect();
         Self {
             view,
             rules,
@@ -318,6 +327,7 @@ impl<'v> Planner<'v> {
             slopes: BTreeMap::new(),
             grids: BTreeMap::new(),
             routes: BTreeMap::new(),
+            impassable,
         }
     }
 
@@ -328,7 +338,7 @@ impl<'v> Planner<'v> {
     fn route(&mut self, body: EntityId, from: EntityId, to: EntityId) -> Option<Vec<Way>> {
         let view = self.view;
         let step = self.rules.step_height_cm;
-        let (wade, bears) = (self.rules.wade_depth_cm, self.rules.ice_bears_mm);
+        let impassable = &self.impassable;
         let key = (from, to, size_of(view, body));
         self.routes
             .entry(key)
@@ -336,7 +346,7 @@ impl<'v> Planner<'v> {
                 let usable = |p: EntityId| {
                     is_open(view, p) && fits(view, body, p) && reachable(view, body, p, step)
                 };
-                let passable = |p: EntityId| crate::water::passable(view, p, wade, bears);
+                let passable = |p: EntityId| !impassable.contains(&p);
                 ways_between(view, from, to, usable, passable)
             })
             .clone()

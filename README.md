@@ -147,7 +147,14 @@ reference engine is being built here, from the specification, in roadmap order
       whoever is inside, and mending with a tool until whole (A-31); fire that warms the air,
       smoke that blinds and chokes, and wind that fans a fire (A-32); wind that carries off loose
       things, pushes from anyone, and gales brewed by deep lows (A-33)
-- [ ] Minds that flee fire and break a way through; fire and storm at the city tier
+- [x] The environment ([plan](docs/audits/environment.md)): a year, seasons, the sun's height,
+      and a moon (A-34); the day's curve, cloud, rain and snow, and fog (A-35); wind from
+      sea-level pressure, and weather carried between climates (A-36); warmth and smoke through
+      open openings, between rooms and to and from the yard (A-37); wet ground, lying snow, wet
+      things, and wind and wet that chill (A-38); ponds, rivers, the sea's tide, floods, and ice
+      (A-39)
+- [ ] Minds that flee fire and break a way through; resting bodies that do not see; fire and
+      storm at the city tier
 - [ ] Carrying things across the seam; city generation at scale; the hot store; parallel shards
 - [ ] Hardening, from the hostile audit: a sealed mutation path, multi-cause provenance,
       benchmark gates in CI

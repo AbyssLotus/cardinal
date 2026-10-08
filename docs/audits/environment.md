@@ -70,6 +70,49 @@ length), and costs nothing where nothing happens: no rain, no wet; no fire, no s
   Highmoor does.
 - Weather at the city tier beyond what climates already give.
 
-## 6. Status
+## 6. Status (2026-10-07)
 
-See the end of this file once slices land.
+All six slices are built, each with its tests in Ashford:
+
+| Slice | Amendment | Tests |
+|---|---|---|
+| Calendar, seasons, the sun, the moon | A-34 | `climate.rs` |
+| The sky: the day's curve, cloud, rain and snow, fog | A-35 | `sky.rs` |
+| Wind from sea-level pressure, and fronts | A-36 | `fronts.rs` |
+| Air between places: warmth and smoke through openings | A-37 | `air.rs` |
+| Wet and snow; wind and wet chill | A-38 | `wet.rs` |
+| Water: ponds, rivers, the sea, floods, ice | A-39 | `water.rs` |
+
+What the building found, beyond the plan:
+- **The wind blew uphill.** It ran down raw pressure differences, and pressure falls with height,
+  so it blew toward the moor whatever the weather. It now compares pressure brought to sea level
+  (A-36).
+- **The day was coldest at midnight.** The day's temperature curve was a triangle from midnight
+  to noon. Fog and dew need the cold at dawn, so the curve is now the world's to declare (A-35).
+- **Shutting a window in a test shut nothing.** Test helpers added `closed` only to openings that
+  already declared flags, and Ashford's windows declare none. A shared helper now shuts any
+  opening (A-37).
+- **A report per body per step is churn.** The wind on each body was first published as a fact.
+  The breeze changes every step, so every body outdoors was rewritten every step. Living now
+  finds the wind itself (A-38).
+- **An open door changes who goes where.** With air passing through openings, Alice's kitchen
+  cools to the night through its open front door. People who remember it warm go in, find it
+  cold, and move on: to the bedroom the stair warmed, the cellar they remember warmer, or the yard
+  the morning sun warmed first (A-37, A-38). Several minds tests were restated around this.
+- **Melt-water was cut sixty-fold.** A rate and an amount were added together. Fixed before
+  commit (A-38).
+- **A river's level depended on tick length** when a step outlasted its drain time. Levels are
+  now solved at the step's end, upstream first (A-39).
+
+**Cost.** The city bench (`examples/city.rs`, 100,000 residents, a 600-person scene, a day at
+minute ticks) runs at 200–212 ms a tick, as it did before these slices (211 ms). None of the new
+systems (seasons, sky, fronts, air, wet, water) reaches a millisecond a tick. Travel now costs
+9.4 ms against 2.3 ms recorded before; it is not the water check, since collecting impassable
+water once per tick changed nothing. Open-ground routing (A-30) is the likely cause, and the next
+thing to profile.
+
+Still open, each noted in its amendment:
+- smoke made by how much burns, not only how fiercely; plumes downwind;
+- people and things carried off by floods; boats on the water's level; walking slowed by snow
+  and shallows;
+- a body lying down still sees (found in A-34; it belongs with perception).
