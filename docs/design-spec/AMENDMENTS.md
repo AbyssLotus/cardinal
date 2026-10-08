@@ -1469,3 +1469,59 @@ up; the yard now declares its size, 40 m × 30 m; `tests/reference/tests/air.rs`
 - rivers, ponds, and flooding (A-39).
 
 **Rationale.** `docs/audits/environment.md` §4, slice 5.
+
+---
+
+## A-39 — Water: ponds, rivers, the sea, floods, and ice (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 (water level, rivers that flood, tides: built)
+- Vol. III Ch. 1 §1.11 ("water flows downhill": built for the world's declared watercourses)
+- Vol. IV Ch. 2 §2.2 (world rules: `tide_amplitude_cm`, `tidal_period_seconds`,
+  `ice_mm_per_degree_hour`, `wade_depth_cm`, `ice_bears_mm`)
+- Vol. IV (the world package: `[water]`, `[drains]`, `[floods]`)
+
+**Change.**
+- **Water** (world data). A place may be water:
+  `[water] place = pond|river|sea, depth cm, bank cm, land drained m², drain seconds`. These
+  give its depth at rest, the depth at which it tops its banks, the land whose rain runs into
+  it, and the time constant at which what stands above its rest flows on. `[drains] a = b`: a
+  pond or river flows on into `b`. `[floods] a = places`: the low ground it covers over its banks.
+- **Water level** (Physical), on the environment's cadence:
+  - The sea stands at its depth plus the tide: `tide_amplitude_cm` over `tidal_period_seconds`,
+    all of it at new and full moon, half at the quarters. What runs into the sea is lost in it.
+  - A pond or river takes in the rain on its own face, all of it. It takes in the rain and
+    melt-water on its land in proportion to how wet the land already is (A-38): dry ground
+    drinks it.
+  - It takes in whatever flows on into it, upstream first, within the same step. What stands
+    above its rest flows on downstream at its drain time.
+  - Each level is solved at the step's own end, so a river stands as high at any tick length.
+- **Floods** (Physical). Water above its banks covers the low ground it floods, as deep as it
+  stands above them. The flood rises and drains as fast as the water drains.
+- **Ice** (Physical). Ice forms on water at `ice_mm_per_degree_hour` for each degree of frost,
+  and melts at the same rate for each degree of thaw.
+- **Water stands in the way.** No one walks into water, or onto flooded ground, deeper than
+  `wade_depth_cm`, unless ice at least `ice_bears_mm` thick bears them. The way is found around
+  it if there is one, and reported blocked if not.
+- **What stands in water is soaked** (A-38): in water not frozen over, or on flooded ground.
+
+**In Ashford** (a pond in the manor grounds, a metre deep; the River Brack past the mill, knee
+deep, 300 hectares draining into it, running to the sea; the sea at the harbour, five metres at
+mean tide; `tests/reference/tests/water.rs`):
+- At new moon the sea rises and falls three metres, high again 12 h 25 min after the first high.
+  At the first quarter it rises and falls half as much.
+- An hour of the hardest rain on land already soaked swells the Brack over its banks and floods
+  the far field more than half a metre deep. On dry land the ground drinks it, and the Brack
+  stays in its banks. The same at minute and ten-minute ticks.
+- Erin, setting out for the far field a kilometre off, finds no way into it while it is flooded.
+  Dry, she gets there.
+- The manor's pond is too deep to wade. In a hard frost it freezes thick enough by midday that
+  Erin walks out onto it.
+- The hammer, dropped in the Brack on a dry day, is wet through at once.
+
+**Not yet:**
+- people and things carried off by floodwater, or drowning;
+- boats that float on the water's level;
+- walking slowed by deep snow and shallow water.
+
+**Rationale.** `docs/audits/environment.md` §4, slice 6.

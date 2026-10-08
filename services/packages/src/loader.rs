@@ -422,6 +422,14 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             drying_per_hour: r.drying_per_hour,
             hardest_rain: r.rain_per_hour,
         },
+        water: physical::water::WaterRules {
+            tide_amplitude_cm: r.tide_amplitude_cm,
+            tidal_period_ms: r.tidal_period_seconds.saturating_mul(1000),
+            ice_mm_per_degree_hour: r.ice_mm_per_degree_hour,
+            wade_depth_cm: r.wade_depth_cm,
+            ice_bears_mm: r.ice_bears_mm,
+            snow_melt_mm_per_degree_hour: r.snow_melt_mm_per_degree_hour,
+        },
         air: physical::air::AirRules {
             opening_speed_cm_s: r.opening_air_speed_cm_s,
             draught: r.draught_percent,
@@ -759,6 +767,36 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             ),
             seeded(Value::Int(normal)),
         );
+    }
+
+    // The world's water (Amendment A-39): what each body of water is, standing at rest; where it
+    // flows on; what it floods.
+    for w in &package.waters {
+        let id = EntityId::from_raw(w.id);
+        for (fact, value) in [
+            (physical::schema::WATER_KIND, w.kind),
+            (physical::schema::WATER_NORMAL, w.depth_cm),
+            (physical::schema::WATER_BANK, w.bank_cm),
+            (physical::schema::CATCHMENT, w.catchment_m2),
+            (physical::schema::WATER_DRAIN_SECONDS, w.drain_seconds),
+            (physical::schema::WATER_LEVEL, w.depth_cm),
+        ] {
+            store.seed(FactKey::new(id, fact), seeded(Value::Int(value)));
+        }
+    }
+    for &(from, to) in &package.drains {
+        store.seed(
+            FactKey::new(EntityId::from_raw(from), physical::schema::DRAINS_TO),
+            seeded(Value::Entity(EntityId::from_raw(to))),
+        );
+    }
+    for (water, places) in &package.floods {
+        for &p in places {
+            store.seed(
+                FactKey::new(EntityId::from_raw(*water), physical::schema::FLOODS),
+                seeded(Value::Entity(EntityId::from_raw(p))),
+            );
+        }
     }
 
     // Latitudes, where a place's differs from the world's (Amendment A-34).

@@ -185,6 +185,19 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     for &(climate, _) in &package.humidities {
         must_exist(climate, climate, "the climate given a humidity");
     }
+    for w in &package.waters {
+        must_exist(w.id, w.id, "the place that is water");
+    }
+    for &(from, to) in &package.drains {
+        must_exist(from, from, "the water that drains");
+        must_exist(from, to, "the water it drains into");
+    }
+    for (water, places) in &package.floods {
+        must_exist(*water, *water, "the water that floods");
+        for &p in places {
+            must_exist(*water, p, "the ground it floods");
+        }
+    }
     if let Some(m) = package.residents_rules.and_then(|r| r.meal_material) {
         must_exist(m, m, "the material meals are made of");
     }

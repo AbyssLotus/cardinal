@@ -63,6 +63,15 @@ const WET_READS: &[FactType] = &[
     WETNESS,
     MADE_OF,
     MOBILE,
+    crate::schema::WATER_LEVEL,
+    crate::schema::FLOOD_DEPTH,
+    crate::schema::ICE,
+    crate::schema::POSITION,
+    crate::schema::BODY_SIZE,
+    crate::schema::HEADING,
+    crate::schema::MOTION_TARGET,
+    crate::schema::MOTION_START,
+    crate::schema::MOTION_END,
 ];
 const WET_WRITES: &[FactType] = &[GROUND_WATER, SNOW_DEPTH, WETNESS];
 
@@ -109,6 +118,16 @@ fn falling_on(view: &dyn CommittedView, thing: EntityId) -> i64 {
         .into_iter()
         .map(|fact| crate::climate::ambient(view, thing, fact).map_or(0, |(_, r)| r.max(0)))
         .sum()
+}
+
+/// Whether `thing` stands in water (Amendment A-39): in a pond, river, or sea not frozen hard, or
+/// on flooded ground.
+fn in_water(view: &dyn CommittedView, thing: EntityId) -> bool {
+    crate::index::container_of(view, thing).is_some_and(|place| {
+        let level = int(view, FactKey::new(place, crate::schema::WATER_LEVEL));
+        let ice = int(view, FactKey::new(place, crate::schema::ICE));
+        (level > 0 && ice == 0) || int(view, FactKey::new(place, crate::schema::FLOOD_DEPTH)) > 0
+    })
 }
 
 /// The wind on a thing: its climate's, in the open; none behind walls.
@@ -208,11 +227,19 @@ impl System for Wet {
             }
         }
 
-        // 2. Things: those in the rain, while it falls anywhere; and whatever is wet.
+        // 2. Things: those in the rain, while it falls anywhere; whatever stands in water or on
+        //    flooded ground (Amendment A-39); and whatever is wet.
         let mut things: BTreeSet<EntityId> = view.entities_with(WETNESS).into_iter().collect();
         if falling_anywhere {
             things.extend(view.entities_with(MADE_OF));
             things.extend(view.entities_with(MOBILE));
+        }
+        for place in view
+            .entities_with(crate::schema::WATER_LEVEL)
+            .into_iter()
+            .chain(view.entities_with(crate::schema::FLOOD_DEPTH))
+        {
+            things.extend(crate::nearby::contents(view, place));
         }
         for thing in things {
             if view.read(FactKey::new(thing, CONTAINED_IN)).is_none() {
@@ -221,11 +248,16 @@ impl System for Wet {
             let mut rng = ctx.rng(thing.raw() ^ 0x3e7);
             let wet = int(view, FactKey::new(thing, WETNESS)).clamp(0, PERCENT_FULL);
             let falling = falling_on(view, thing);
-            let gained = self.over(
-                r.wetting_per_hour * falling / r.hardest_rain.max(1),
-                &mut rng,
-            );
-            let dried = if wet > 0 && falling == 0 {
+            let soaking = in_water(view, thing);
+            let gained = if soaking {
+                PERCENT_FULL
+            } else {
+                self.over(
+                    r.wetting_per_hour * falling / r.hardest_rain.max(1),
+                    &mut rng,
+                )
+            };
+            let dried = if wet > 0 && falling == 0 && !soaking {
                 let wind = wind_on(view, thing);
                 self.over(Self::drying(view, thing, r.drying_per_hour, wind), &mut rng)
             } else {

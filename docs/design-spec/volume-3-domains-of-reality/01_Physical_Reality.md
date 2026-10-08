@@ -712,6 +712,8 @@ Instead it provides the shared context upon which specialized systems operate.
 
 *As built (Amendment A-38):* rain soaks the ground and sun, dry air, and wind dry it; snow lies in frost and melts into the ground in a thaw. Whatever stands in the rain is soaked and dries after; wet things burn less readily, and a fire's heat dries them first. Wind and wet hurry a body toward the air's temperature, but not behind walls.
 
+*As built (Amendment A-39):* a world declares its water — ponds, rivers, and the sea. The sea keeps the tide, highest at springs. Rain on wet land runs into the rivers, which flow on downhill into one another and, over their banks, flood the low ground beside them. Water freezes in frost. No one walks into water or flood deeper than they can wade, unless the ice bears them, and what stands in water is soaked.
+
 ---
 
 # 1.11 Physical Constraints

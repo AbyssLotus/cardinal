@@ -54,6 +54,7 @@ pub mod space;
 pub mod systems;
 pub mod terrain;
 pub mod travel;
+pub mod water;
 pub mod wet;
 pub mod wind;
 
@@ -168,6 +169,8 @@ pub struct PhysicalConfig {
     pub air: air::AirRules,
     /// How the ground and things get wet and dry, and snow lies (Amendment A-38).
     pub wet: wet::WetRules,
+    /// Ponds, rivers, the sea, floods, and ice (Amendment A-39).
+    pub water: water::WaterRules,
 }
 
 impl PhysicalConfig {
@@ -190,6 +193,8 @@ impl PhysicalConfig {
             max_slope_percent: self.max_slope_percent,
             nav_cell_cm: self.nav_cell_cm,
             reach_cm: self.reach_cm,
+            wade_depth_cm: self.water.wade_depth_cm,
+            ice_bears_mm: self.water.ice_bears_mm,
         }
     }
 }
@@ -275,6 +280,16 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::GROUND_WATER
             || fact_type == schema::SNOW_DEPTH
             || fact_type == schema::WETNESS
+            || fact_type == schema::WATER_KIND
+            || fact_type == schema::WATER_NORMAL
+            || fact_type == schema::WATER_BANK
+            || fact_type == schema::WATER_DRAIN_SECONDS
+            || fact_type == schema::CATCHMENT
+            || fact_type == schema::DRAINS_TO
+            || fact_type == schema::FLOODS
+            || fact_type == schema::WATER_LEVEL
+            || fact_type == schema::FLOOD_DEPTH
+            || fact_type == schema::ICE
             || fact_type == schema::POSITION
             || fact_type == schema::BODY_SIZE
             || fact_type == schema::HEADING
@@ -362,6 +377,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::TERRAIN_SAMPLE
             || fact_type == schema::IN_VIEW
             || fact_type == schema::STORM
+            || fact_type == schema::FLOODS
         {
             Cardinality::Many
         } else {
@@ -460,6 +476,8 @@ impl Domain for PhysicalDomain {
             )),
             // The ground, the snow, and what stands in the rain (Amendment A-38).
             Box::new(wet::Wet::new(step, c.wet)),
+            // Ponds, rivers, the sea, floods, and ice (Amendment A-39).
+            Box::new(water::Water::new(c.clock, step, c.water, c.calendar)),
             // Walled rooms' air follows the air outside them (Amendment A-5).
             Box::new(systems::Shelter::new(
                 step,
@@ -538,8 +556,21 @@ impl Domain for PhysicalDomain {
             composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
         } else if fact_type == schema::GROUND_WATER || fact_type == schema::WETNESS {
             composition::compose_fading(current, changes, schema::PERCENT_FULL)
-        } else if fact_type == schema::SNOW_DEPTH {
+        } else if fact_type == schema::SNOW_DEPTH
+            || fact_type == schema::FLOOD_DEPTH
+            || fact_type == schema::ICE
+        {
             composition::compose_fading(current, changes, schema::MAX_SIZE)
+        } else if fact_type == schema::WATER_LEVEL
+            || fact_type == schema::WATER_KIND
+            || fact_type == schema::WATER_NORMAL
+            || fact_type == schema::WATER_BANK
+            || fact_type == schema::WATER_DRAIN_SECONDS
+            || fact_type == schema::CATCHMENT
+        {
+            composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
+        } else if fact_type == schema::DRAINS_TO {
+            composition::compose_entity_ref(current, changes)
         } else if fact_type == schema::HUMIDITY_NORMAL
             || fact_type == schema::CLOUD
             || fact_type == schema::FOG

@@ -82,6 +82,10 @@ pub struct MoveRules {
     pub nav_cell_cm: i64,
     /// How far beyond its own body a body can reach to operate something, in centimetres.
     pub reach_cm: i64,
+    /// The deepest water, in centimetres, a body walks through (Amendment A-39).
+    pub wade_depth_cm: i64,
+    /// How thick ice must be, in millimetres, to bear a walker.
+    pub ice_bears_mm: i64,
 }
 
 /// A body's horizontal radius: the larger of its half-width and half-depth (0 for a point).
@@ -207,6 +211,7 @@ fn ways_between(
     from: EntityId,
     to: EntityId,
     usable: impl Fn(EntityId) -> bool,
+    passable: impl Fn(EntityId) -> bool,
 ) -> Option<Vec<Way>> {
     if from == to {
         return Some(Vec::new());
@@ -235,7 +240,8 @@ fn ways_between(
             }
         }
         for (dest, way) in next {
-            if dest == from || came_by.contains_key(&dest) {
+            // Not into water too deep to wade, or onto ground flooded so (Amendment A-39).
+            if dest == from || came_by.contains_key(&dest) || !passable(dest) {
                 continue;
             }
             came_by.insert(dest, (place, way));
@@ -322,6 +328,7 @@ impl<'v> Planner<'v> {
     fn route(&mut self, body: EntityId, from: EntityId, to: EntityId) -> Option<Vec<Way>> {
         let view = self.view;
         let step = self.rules.step_height_cm;
+        let (wade, bears) = (self.rules.wade_depth_cm, self.rules.ice_bears_mm);
         let key = (from, to, size_of(view, body));
         self.routes
             .entry(key)
@@ -329,7 +336,8 @@ impl<'v> Planner<'v> {
                 let usable = |p: EntityId| {
                     is_open(view, p) && fits(view, body, p) && reachable(view, body, p, step)
                 };
-                ways_between(view, from, to, usable)
+                let passable = |p: EntityId| crate::water::passable(view, p, wade, bears);
+                ways_between(view, from, to, usable, passable)
             })
             .clone()
     }
@@ -811,6 +819,9 @@ impl System for Gravity {
 }
 
 const TRAVEL_READS: &[FactType] = &[
+    crate::schema::WATER_LEVEL,
+    crate::schema::FLOOD_DEPTH,
+    crate::schema::ICE,
     PLACE,
     ENCLOSED,
     TRAVEL_TO,

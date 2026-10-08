@@ -11,7 +11,7 @@ use crate::model::{
     MaterialProperty, MaterialSpec, MindsRules, MotionSpec, NeedKindSpec, OrganismSpec,
     PhysicalRules, PortalDangerSpec, PortalSpec, PositionSpec, RecipeSpec, RegionMembershipSpec,
     RegionSpec, ResidentSpec, ResidentsRules, ResourcesRules, SocietyRules, TerrainSpec,
-    TravelSpec, WorldPackage,
+    TravelSpec, WaterSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -142,9 +142,17 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut wetting_per_hour: Option<i64> = None;
     let mut drying_per_hour: Option<i64> = None;
     let mut dry_by_heat_per_hour: Option<i64> = None;
+    let mut tide_amplitude_cm: Option<i64> = None;
+    let mut tidal_period_seconds: Option<u64> = None;
+    let mut ice_mm_per_degree_hour: Option<i64> = None;
+    let mut wade_depth_cm: Option<i64> = None;
+    let mut ice_bears_mm: Option<i64> = None;
     let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
     let mut latitudes: Vec<(u64, i64)> = Vec::new();
     let mut humidities: Vec<(u64, i64)> = Vec::new();
+    let mut waters: Vec<WaterSpec> = Vec::new();
+    let mut drains: Vec<(u64, u64)> = Vec::new();
+    let mut floods: Vec<(u64, Vec<u64>)> = Vec::new();
     let mut burn_harm: Option<i64> = None;
     let mut smoke_harm: Option<i64> = None;
     let mut chill_wind: Option<i64> = None;
@@ -433,6 +441,13 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "wetting_per_hour" => wetting_per_hour = Some(parse_num(value, line_no)?),
                 "drying_per_hour" => drying_per_hour = Some(parse_num(value, line_no)?),
                 "dry_by_heat_per_hour" => dry_by_heat_per_hour = Some(parse_num(value, line_no)?),
+                "tide_amplitude_cm" => tide_amplitude_cm = Some(parse_num(value, line_no)?),
+                "tidal_period_seconds" => tidal_period_seconds = Some(parse_num(value, line_no)?),
+                "ice_mm_per_degree_hour" => {
+                    ice_mm_per_degree_hour = Some(parse_num(value, line_no)?)
+                }
+                "wade_depth_cm" => wade_depth_cm = Some(parse_num(value, line_no)?),
+                "ice_bears_mm" => ice_bears_mm = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -683,6 +698,51 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "strength" => {
                 let organism: u64 = parse_num(key, line_no)?;
                 strength.push((organism, parse_num(value, line_no)?));
+            }
+            "water" => {
+                // place = pond|river|sea, depth cm, bank cm, catchment m², drain seconds (A-39)
+                let id: u64 = parse_num(key, line_no)?;
+                let mut parts = value.split(',').map(str::trim);
+                let kind = match parts.next().unwrap_or("") {
+                    "pond" => 1,
+                    "river" => 2,
+                    "sea" => 3,
+                    other => {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("water is a pond, a river, or the sea, not {other:?}"),
+                        ))
+                    }
+                };
+                let rest: Vec<&str> = parts.collect();
+                let [depth_cm, bank_cm, catchment_m2, drain_seconds] =
+                    parse_ints::<4>(&rest.join(","), line_no, "depth, bank, catchment, drain")?;
+                if depth_cm < 0 || bank_cm < depth_cm || catchment_m2 < 0 || drain_seconds <= 0 {
+                    return Err(ParseError::at(
+                        line_no,
+                        "water stands below its banks, drains in time, and has no less than no land",
+                    ));
+                }
+                waters.push(WaterSpec {
+                    id,
+                    kind,
+                    depth_cm,
+                    bank_cm,
+                    catchment_m2,
+                    drain_seconds,
+                });
+            }
+            "drains" => {
+                let from: u64 = parse_num(key, line_no)?;
+                drains.push((from, parse_num(value, line_no)?));
+            }
+            "floods" => {
+                let water: u64 = parse_num(key, line_no)?;
+                let places = value
+                    .split(',')
+                    .map(|p| parse_num(p.trim(), line_no))
+                    .collect::<Result<Vec<u64>, _>>()?;
+                floods.push((water, places));
             }
             "humidity" => {
                 // climate = normal humidity, hundredths of a percent (Amendment A-35)
@@ -1114,6 +1174,14 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         wetting_per_hour: require(wetting_per_hour, "rules.physical.wetting_per_hour")?,
         drying_per_hour: require(drying_per_hour, "rules.physical.drying_per_hour")?,
         dry_by_heat_per_hour: require(dry_by_heat_per_hour, "rules.physical.dry_by_heat_per_hour")?,
+        tide_amplitude_cm: require(tide_amplitude_cm, "rules.physical.tide_amplitude_cm")?,
+        tidal_period_seconds: require(tidal_period_seconds, "rules.physical.tidal_period_seconds")?,
+        ice_mm_per_degree_hour: require(
+            ice_mm_per_degree_hour,
+            "rules.physical.ice_mm_per_degree_hour",
+        )?,
+        wade_depth_cm: require(wade_depth_cm, "rules.physical.wade_depth_cm")?,
+        ice_bears_mm: require(ice_bears_mm, "rules.physical.ice_bears_mm")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -1267,6 +1335,9 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         storms,
         latitudes,
         humidities,
+        waters,
+        drains,
+        floods,
         knows,
         minds,
         temperament,
@@ -1862,6 +1933,11 @@ snow_melt_mm_per_degree_hour = 5
 wetting_per_hour = 20000
 drying_per_hour = 1500
 dry_by_heat_per_hour = 20000
+tide_amplitude_cm = 0
+tidal_period_seconds = 0
+ice_mm_per_degree_hour = 2
+wade_depth_cm = 50
+ice_bears_mm = 80
 [regions]
 1 = 1500
 ";

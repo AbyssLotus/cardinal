@@ -92,6 +92,12 @@ pub struct WorldPackage {
     /// Climates' normal humidity, where it differs from the world's baseline (Amendment A-35):
     /// `(climate, hundredths of a percent)`.
     pub humidities: Vec<(u64, i64)>,
+    /// The world's water (Amendment A-39): ponds, rivers, and the sea.
+    pub waters: Vec<WaterSpec>,
+    /// Which water each pond or river flows on into: `(from, to)`.
+    pub drains: Vec<(u64, u64)>,
+    /// The low ground each body of water floods: `(water, places)`.
+    pub floods: Vec<(u64, Vec<u64>)>,
     /// What each mind knows at the start (Amendment A-8; Vol. IV Ch. 5): `(mind, things)`.
     /// For each thing, where it is; for an opening, also where it leads and whether it is open;
     /// for a place, also how warm its air is.
@@ -485,6 +491,16 @@ pub struct PhysicalRules {
     pub drying_per_hour: i64,
     /// How fast a fire's full heat dries a wet thing, per hour.
     pub dry_by_heat_per_hour: i64,
+    /// Half the sea's rise and fall at a spring tide, centimetres (Amendment A-39).
+    pub tide_amplitude_cm: i64,
+    /// From one high tide to the next, seconds; zero, no tide.
+    pub tidal_period_seconds: u64,
+    /// Millimetres of ice formed an hour for each degree of frost, melted for each of thaw.
+    pub ice_mm_per_degree_hour: i64,
+    /// The deepest water, centimetres, one walks through.
+    pub wade_depth_cm: i64,
+    /// How thick ice must be, millimetres, to bear a walker.
+    pub ice_bears_mm: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).
@@ -784,6 +800,23 @@ pub struct AdjacencySpec {
     pub a: u64,
     /// The neighbouring region's raw id.
     pub b: u64,
+}
+
+/// A body of water the world declares (Amendment A-39).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct WaterSpec {
+    /// The place that is water.
+    pub id: u64,
+    /// Pond 1, river 2, sea 3.
+    pub kind: i64,
+    /// How deep it stands at rest, in centimetres.
+    pub depth_cm: i64,
+    /// How deep it may stand before it tops its banks.
+    pub bank_cm: i64,
+    /// How much land drains into it, in square metres.
+    pub catchment_m2: i64,
+    /// How fast it drains what stands above its rest, the time constant in seconds.
+    pub drain_seconds: i64,
 }
 
 /// A region's seeded exposure to the open sky (Vol. III Ch. 1 §1.6), in hundredths of a

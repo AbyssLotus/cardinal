@@ -111,6 +111,11 @@ snow_melt_mm_per_degree_hour = 5    # snow melts 5 mm an hour for each degree ab
 wetting_per_hour = 20000            # in the hardest rain a thing in the open is soaked in half an hour
 drying_per_hour = 1500              # and dries in an afternoon's sun and breeze
 dry_by_heat_per_hour = 20000        # a fire's full heat dries a soaked thing in half an hour
+tide_amplitude_cm = 150             # the sea rises and falls 1.5 m either side of its mean at springs (A-39)
+tidal_period_seconds = 44712        # high water every 12 hours 25 minutes
+ice_mm_per_degree_hour = 2          # water freezes 2 mm an hour for each degree of frost
+wade_depth_cm = 50                  # no one wades deeper than 50 cm
+ice_bears_mm = 80                   # ice 8 cm thick bears a walker
 
 [rules.living]
 metabolism_step_seconds = 60
@@ -219,6 +224,9 @@ part_below = 3000                   # both this cool: they part
 600 = 14                # the farm
 602 = 600               # the far field
 603 = 14                # the wood
+605 = 14                # the River Brack, running past the mill (Amendment A-39)
+307 = 300               # the manor's pond
+506 = 13                # the sea, at the harbour
 
 [containment]
 1 = 9
@@ -369,6 +377,9 @@ part_below = 3000                   # both this cool: they part
 512 = 0, -1000, 0
 # Millside
 600 = 0, 0, 0
+605 = 6000, -2500, 0      # the Brack, south of the wood
+307 = -2000, 2000, 0     # the pond, in the manor grounds
+506 = 10000, -8000, 0    # the sea, beyond the Heron's mooring
 601 = 0, 0, 0
 602 = 3000, 0, 0
 603 = 6000, 0, 0
@@ -497,6 +508,9 @@ part_below = 3000                   # both this cool: they part
 202 = 400, 300, 200     # the loft
 601 = 600, 400, 300     # the farmhouse
 604 = 400, 400, 600     # the mill
+605 = 3000, 300, 0      # the Brack: a 60 m stretch, 6 m wide
+307 = 500, 400, 0       # the pond: 10 m by 8 m
+506 = 10000, 4000, 0    # the sea, as far as the harbour's concern goes: 200 m by 80 m
 1001 = 45, 10, 205      # doors: 90 cm wide, 2.05 m tall
 1002 = 45, 10, 205
 1101 = 45, 10, 205
@@ -665,6 +679,18 @@ part_below = 3000                   # both this cool: they part
 400 = 4000              # the mine mouth: partly open to the sky
 401 = 0                 # the deep gallery: sealed
 402 = 1000              # the miners' cabin: shuttered
+
+# ---- Water (Amendment A-39): place = pond|river|sea, depth cm, bank cm, land drained m2, drain s
+[water]
+307 = pond, 100, 140, 5000, 86400       # the manor's pond: a metre deep, slow to rise and fall
+605 = river, 60, 150, 3000000, 120      # the Brack: knee deep, 300 hectares draining into it
+506 = sea, 500, 800, 0, 3600            # the sea at the harbour: five metres at mean tide
+
+[drains]
+605 = 506               # the Brack runs to the sea
+
+[floods]
+605 = 602               # over its banks, it floods the far field, low frost-hollow ground
 
 # ---- Humidity (Amendment A-35): what each climate's weather departs from --------------------
 [humidity]

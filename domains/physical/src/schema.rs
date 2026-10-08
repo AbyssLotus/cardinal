@@ -273,6 +273,38 @@ pub const SNOW_DEPTH: FactType = FactType::new("physical.environment.snow_depth"
 /// water may be thrown. Absent, dry.
 pub const WETNESS: FactType = FactType::new("physical.body.wetness");
 
+/// That a place is water, and what kind (Amendment A-39): [`crate::water::POND`], `RIVER`, or
+/// `SEA`. World data.
+pub const WATER_KIND: FactType = FactType::new("physical.water.kind");
+
+/// How deep a body of water stands at rest, in centimetres. World data.
+pub const WATER_NORMAL: FactType = FactType::new("physical.water.normal");
+
+/// How deep a body of water may stand before it tops its banks, in centimetres. World data.
+pub const WATER_BANK: FactType = FactType::new("physical.water.bank");
+
+/// How fast a body of water drains what stands above its normal depth: the time constant, in
+/// seconds. World data.
+pub const WATER_DRAIN_SECONDS: FactType = FactType::new("physical.water.drain_seconds");
+
+/// How much land drains into a body of water, in square metres. World data.
+pub const CATCHMENT: FactType = FactType::new("physical.water.catchment");
+
+/// The water a pond or river flows on into (an entity reference). World data.
+pub const DRAINS_TO: FactType = FactType::new("physical.water.drains_to");
+
+/// The low ground a body of water floods when it tops its banks: a set of places. World data.
+pub const FLOODS: FactType = FactType::new("physical.water.floods");
+
+/// How deep a body of water stands now, in centimetres (Amendment A-39).
+pub const WATER_LEVEL: FactType = FactType::new("physical.water.level");
+
+/// How deep floodwater stands over a place, in centimetres (Amendment A-39). Absent, dry.
+pub const FLOOD_DEPTH: FactType = FactType::new("physical.water.flood_depth");
+
+/// How thick the ice on a body of water is, in millimetres (Amendment A-39). Absent, none.
+pub const ICE: FactType = FactType::new("physical.water.ice");
+
 /// Atmospheric pressure at a location, in decapascals (hPa x 10) as fixed-point
 /// (Vol. III Ch. 1 §1.10). Falls with elevation and drifts with weather; the pressure
 /// gradient between adjacent regions is what drives wind.
