@@ -89,6 +89,9 @@ pub struct WorldPackage {
     /// Places' latitudes, where they differ from the world's (Amendment A-34): `(place,
     /// hundredths of a degree north)`.
     pub latitudes: Vec<(u64, i64)>,
+    /// Climates' normal humidity, where it differs from the world's baseline (Amendment A-35):
+    /// `(climate, hundredths of a percent)`.
+    pub humidities: Vec<(u64, i64)>,
     /// What each mind knows at the start (Amendment A-8; Vol. IV Ch. 5): `(mind, things)`.
     /// For each thing, where it is; for an opening, also where it leads and whether it is open;
     /// for a place, also how warm its air is.
@@ -434,6 +437,28 @@ pub struct PhysicalRules {
     pub moon_phase_at_start: i64,
     /// The light of a full moon overhead, hundredths of a percent of full daylight.
     pub moonlight_peak: i64,
+    /// The air's humidity past which cloud forms, hundredths of a percent (Amendment A-35);
+    /// the sky is overcast by the rain line.
+    pub cloud_above: i64,
+    /// How much of the day's light a full overcast keeps out.
+    pub cloud_shade: i64,
+    /// How much of the day/night swing a full overcast holds back.
+    pub cloud_damp: i64,
+    /// How hard it rains with the air saturated, hundredths of a millimetre an hour.
+    pub rain_per_hour: i64,
+    /// The air temperature, centidegrees, at and below which what falls is snow.
+    pub snow_below_centi_c: i64,
+    /// The relative humidity near the ground past which fog forms.
+    pub fog_above: i64,
+    /// The wind, cm/s, at and above which fog cannot settle.
+    pub fog_wind_below_cm_s: i64,
+    /// How much the humidity near the ground rises for each degree the air cools below its day's
+    /// mean, hundredths of a percent.
+    pub humidity_per_degree: i64,
+    /// When in the day the air is coldest, seconds after midnight (Amendment A-35).
+    pub diurnal_coldest_seconds: u64,
+    /// When in the day the air is warmest, seconds after midnight.
+    pub diurnal_warmest_seconds: u64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).

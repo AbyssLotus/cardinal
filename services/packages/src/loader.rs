@@ -339,6 +339,8 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
         day_length_seconds: package.clock.day_seconds,
         environment_step_seconds: r.environment_step_seconds,
         diurnal_amplitude_centi_c: r.diurnal_amplitude_centi_c,
+        diurnal_coldest_seconds: r.diurnal_coldest_seconds,
+        diurnal_warmest_seconds: r.diurnal_warmest_seconds,
         temperature_variability_centi_c: r.temperature_variability_centi_c,
         weather_persistence_seconds: r.weather_persistence_seconds,
         illumination_peak: r.illumination_peak,
@@ -375,7 +377,6 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             reach_cm: r.fire_reach_cm,
             ignition_heat: r.ignition_heat,
             ignite_intensity: r.ignite_intensity,
-            rain_above: r.rain_above,
             douse_per_hour: r.douse_per_hour,
             wall_thickness_cm: r.wall_thickness_cm,
             warmth_per_hour: r.fire_warmth_per_hour,
@@ -392,6 +393,17 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
         gale: physical::systems::Gale {
             below: r.gale_below,
             per_decapascal: r.gale_per_decapascal,
+        },
+        sky: physical::systems::SkyRules {
+            cloud_above: r.cloud_above,
+            rain_above: r.rain_above,
+            cloud_shade: r.cloud_shade,
+            cloud_damp: r.cloud_damp,
+            rain_per_hour: r.rain_per_hour,
+            snow_below_centi_c: r.snow_below_centi_c,
+            fog_above: r.fog_above,
+            fog_wind_below_cm_s: r.fog_wind_below_cm_s,
+            humidity_per_degree: r.humidity_per_degree,
         },
         calendar: physical::calendar::Calendar {
             day_ms: package.clock.day_seconds.saturating_mul(1000),
@@ -484,12 +496,9 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     systems.extend(physical.systems());
     domains.push(Box::new(physical));
 
-    // Seed regions' initial physical state: temperature always, elevation when specified.
+    // Seed regions' elevation when specified; their temperature, once what they are built of
+    // and how open they are is seeded (below).
     for region in &package.regions {
-        store.seed(
-            FactKey::new(EntityId::from_raw(region.id), TEMPERATURE),
-            seeded(Value::Int(region.temperature_centi_c)),
-        );
         if let Some(elev) = region.elevation {
             store.seed(
                 FactKey::new(EntityId::from_raw(region.id), ELEVATION),
@@ -719,6 +728,17 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         );
     }
 
+    // Climates' normal humidity, where it differs from the world's (Amendment A-35).
+    for &(climate, normal) in &package.humidities {
+        store.seed(
+            FactKey::new(
+                EntityId::from_raw(climate),
+                physical::schema::HUMIDITY_NORMAL,
+            ),
+            seeded(Value::Int(normal)),
+        );
+    }
+
     // Latitudes, where a place's differs from the world's (Amendment A-34).
     for &(place, latitude) in &package.latitudes {
         store.seed(
@@ -742,15 +762,38 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         }
     }
 
+    // Regions' temperature (Amendment A-35): a climate open to the sky is declared by the coldest
+    // of its day, and begins as warm above that as the day's swing stands at the first moment —
+    // as exposed and as heavy as it is. A walled room begins at what it declares.
+    let physical = physical_config(package);
+    for region in &package.regions {
+        let id = EntityId::from_raw(region.id);
+        let share = if physical::climate::is_sheltered(&store, id) {
+            0
+        } else {
+            physical::systems::day_share(
+                &store,
+                id,
+                &physical.day_curve(),
+                physical.thermal_mass_reference,
+                physical.clock.ms_at(0),
+            )
+        };
+        store.seed(
+            FactKey::new(id, TEMPERATURE),
+            seeded(Value::Int(region.temperature_centi_c + share)),
+        );
+    }
+
     // The world begins with its light (Amendment A-16): each region lit as the sun stands at the
     // first moment, so a world that opens at midnight opens dark, and nobody sees by a light
     // that is not there.
-    let physical = physical_config(package);
     for (region, light) in physical::systems::light_by_region(
         &store,
         physical.clock.ms_at(0),
         &physical.calendar,
         physical.illumination_peak,
+        physical.sky.cloud_shade,
     ) {
         store.seed(
             FactKey::new(region, physical::schema::ILLUMINATION),

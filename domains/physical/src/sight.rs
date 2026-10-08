@@ -561,15 +561,17 @@ fn in_view_with(
     min_illumination: i64,
     bare: &Bare,
 ) -> BTreeSet<EntityId> {
-    // Smoke (Amendment A-32): in a smoky place one sees only as far as the smoke lets one, and
-    // what is in a smoky place is seen only from as near.
+    // Smoke and fog (Amendments A-32, A-35): in thick air one sees only as far as it lets one,
+    // and what is in thick air is seen only from as near. Asked once per place.
+    let clearness: std::cell::RefCell<std::collections::BTreeMap<EntityId, i64>> =
+        Default::default();
     let clear = |place: Option<EntityId>| {
-        place
-            .and_then(|p| view.read(FactKey::new(p, crate::schema::SMOKE)))
-            .and_then(|f| f.value.as_int())
-            .map_or(crate::schema::PERCENT_FULL, |s| {
-                (crate::schema::PERCENT_FULL - s).max(0)
-            })
+        place.map_or(crate::schema::PERCENT_FULL, |p| {
+            *clearness
+                .borrow_mut()
+                .entry(p)
+                .or_insert_with(|| crate::climate::air_clearness(view, p))
+        })
     };
     let range =
         range * clear(crate::index::container_of(view, observer)) / crate::schema::PERCENT_FULL;
@@ -619,6 +621,8 @@ const SIGHT_READS: &[FactType] = &[
     IN_VIEW,
     crate::schema::BURNING,
     crate::schema::SMOKE,
+    crate::schema::FOG,
+    crate::schema::EXPOSURE,
 ];
 const SIGHT_WRITES: &[FactType] = &[IN_VIEW];
 

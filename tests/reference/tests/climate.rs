@@ -238,12 +238,13 @@ fn indoor_air_follows_the_outdoors_slowly_and_stone_slowest() {
     let swing = |v: &[i64]| v.iter().max().unwrap() - v.iter().min().unwrap();
     let peak = |v: &[i64]| v.iter().enumerate().max_by_key(|(_, t)| **t).unwrap().0 as i64;
     let [vale, kitchen, hall] = &days;
-    // The yard swings the full 5 °C. The kitchen follows with 2.1 °C, peaking 3 h 50 min after
-    // the yard; the granite hall with 1.65 °C, 4 h 50 min after.
-    assert_eq!([swing(vale), swing(kitchen), swing(hall)], [500, 211, 165]);
+    // The yard swings the full 5 °C, coldest at five and warmest at three (Amendment A-35). The
+    // kitchen follows with 2.07 °C, peaking 4 h 40 min after the yard; the granite hall with
+    // 1.64 °C, 5 h 30 min after.
+    assert_eq!([swing(vale), swing(kitchen), swing(hall)], [500, 207, 164]);
     assert_eq!(
         [peak(kitchen) - peak(vale), peak(hall) - peak(vale)],
-        [23, 29]
+        [28, 33]
     );
 }
 
@@ -295,8 +296,17 @@ fn the_deep_gallery_holds_steady_while_the_mine_mouth_follows_the_sky() {
 
 #[test]
 fn the_vale_is_its_normal_plus_its_weather_exactly() {
-    // Nothing accumulates from rounding: at every step the Vale's air is its seeded normal,
-    // 14 °C, plus the current weather anomaly, rounded.
+    // Nothing accumulates from rounding: at every step the Vale's air is what it began at — its
+    // declared 14 °C, plus where the day's swing stood at midnight (Amendment A-35) — plus the
+    // current weather anomaly, rounded.
+    let start = temp(
+        City::from(without_minds(with_tick_seconds(60))).store(),
+        VALE,
+    );
+    assert_eq!(
+        start, 1_578,
+        "14 °C, and midnight 5/14 of the way back from three o'clock"
+    );
     isolated(
         with_tick_seconds(60),
         &["physical.temperature_weather"],
@@ -307,7 +317,7 @@ fn the_vale_is_its_normal_plus_its_weather_exactly() {
                 .and_then(|f| f.value.as_int())
                 .unwrap_or(0) as f64
                 / ANOMALY_SCALE as f64;
-            assert_eq!(temp(s, VALE), 1_400 + anomaly.round() as i64, "tick {t}");
+            assert_eq!(temp(s, VALE), start + anomaly.round() as i64, "tick {t}");
         },
     );
 }
@@ -319,6 +329,10 @@ fn the_year_turns_warm_and_back_again() {
     // is warmest three months on — a month after midsummer — 7 °C up, and coldest half a year
     // after that, 7 °C down; granite Highmoor answers less. A year on, both are where they began.
     let (mut vale, mut moor) = (Vec::new(), Vec::new());
+    let start = temp(
+        City::from(without_minds(with_tick_seconds(86_400))).store(),
+        VALE,
+    );
     isolated(
         with_tick_seconds(86_400),
         &["physical.seasons"],
@@ -348,12 +362,12 @@ fn the_year_turns_warm_and_back_again() {
         day_of(&vale, cold)
     );
     assert!(
-        (2_098..=2_100).contains(&warm) && (700..=702).contains(&cold),
-        "{warm} {cold}"
+        (698..=700).contains(&(warm - start)) && (698..=700).contains(&(start - cold)),
+        "{warm} {cold} from {start}"
     );
     let swing = |v: &[i64]| v.iter().max().unwrap() - v.iter().min().unwrap();
     assert!(swing(&moor) < swing(&vale), "stone answers less");
-    assert_eq!(vale[364], 1_400, "a year on");
+    assert_eq!(vale[364], start, "a year on");
 }
 
 #[test]

@@ -7,7 +7,7 @@
 //! - **a fire takes its course**: it grows toward what its most flammable material allows, and
 //!   eats its integrity at the world's rate, more slowly the more there is of it. One with nothing
 //!   left goes out, and what it burned is broken (Amendment A-27). In the open, under rain, it is
-//!   put out. A kept fire — a tended hearth — neither grows, nor eats, nor dies down;
+//!   put out by rain or snow (Amendment A-35). A kept fire — a tended hearth — neither grows, nor eats, nor dies down;
 //! - **it gives heat**: to everything within its reach — more the nearer, and the fiercer the
 //!   fire — that it has a line to, as light travels: walls keep it out until they burn. A fire
 //!   inside a walled place heats the walls, as near as it is to them; a walled place on fire
@@ -23,10 +23,10 @@
 use crate::index::{container_of, size_of};
 use crate::schema::{
     BODY_SIZE, BROKEN, BURNING, CONTAINED_IN, ENCLOSED, EXPOSURE, HAS_PORTAL, HEADING,
-    HEAT_EXPOSURE, HUMIDITY, INTEGRITY, KEPT_FIRE, LEADS_TO, MADE_OF, MATERIAL_DENSITY,
+    HEAT_EXPOSURE, INTEGRITY, KEPT_FIRE, LEADS_TO, MADE_OF, MATERIAL_DENSITY,
     MATERIAL_FLAMMABILITY, MOBILE, MOTION_END, MOTION_START, MOTION_TARGET, OPAQUE, PERCENT_FULL,
-    PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION, SMOKE, TEMPERATURE, TERRAIN_SAMPLE, TERRAIN_SPACING,
-    WIND_SPEED,
+    PORTAL_FAR_SIDE, PORTAL_OPEN, POSITION, RAIN, SMOKE, SNOW, TEMPERATURE, TERRAIN_SAMPLE,
+    TERRAIN_SPACING, WIND_SPEED,
 };
 use crate::terrain::is_true;
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
@@ -55,8 +55,6 @@ pub struct FireRules {
     pub ignition_heat: i64,
     /// How fiercely a fire burns when it first catches.
     pub ignite_intensity: i64,
-    /// The humidity at and above which rain falls on what is open to the sky.
-    pub rain_above: i64,
     /// How fast rain puts out a fire in the open, per hour.
     pub douse_per_hour: i64,
     /// How thick a walled place's walls, floor, and roof are, in centimetres: what of it burns.
@@ -83,7 +81,8 @@ const FIRE_READS: &[FactType] = &[
     MADE_OF,
     MATERIAL_FLAMMABILITY,
     MATERIAL_DENSITY,
-    HUMIDITY,
+    RAIN,
+    SNOW,
     ENCLOSED,
     EXPOSURE,
     MOBILE,
@@ -262,9 +261,11 @@ impl System for Fire {
             };
             let fuel = crate::materials::flammability_of(view, b).unwrap_or(0);
             let allows = (fuel + fuel * wind / r.fan_wind_cm_s.max(1)).min(PERCENT_FULL);
+            // Rain or snow on what is open to the sky (Amendment A-35).
             let raining = in_the_open
-                && crate::climate::ambient(view, b, HUMIDITY)
-                    .is_some_and(|(_, h)| h >= r.rain_above);
+                && [RAIN, SNOW].into_iter().any(|fall| {
+                    crate::climate::ambient(view, b, fall).is_some_and(|(_, rate)| rate > 0)
+                });
             let next = if raining {
                 i - self.over(r.douse_per_hour, &mut rng)
             } else if i < allows {

@@ -121,8 +121,19 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut lunar_month_seconds: Option<u64> = None;
     let mut moon_phase_at_start: Option<i64> = None;
     let mut moonlight_peak: Option<i64> = None;
+    let mut cloud_above: Option<i64> = None;
+    let mut cloud_shade: Option<i64> = None;
+    let mut cloud_damp: Option<i64> = None;
+    let mut rain_per_hour: Option<i64> = None;
+    let mut snow_below_centi_c: Option<i64> = None;
+    let mut fog_above: Option<i64> = None;
+    let mut fog_wind_below_cm_s: Option<i64> = None;
+    let mut humidity_per_degree: Option<i64> = None;
+    let mut diurnal_coldest_seconds: Option<u64> = None;
+    let mut diurnal_warmest_seconds: Option<u64> = None;
     let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
     let mut latitudes: Vec<(u64, i64)> = Vec::new();
+    let mut humidities: Vec<(u64, i64)> = Vec::new();
     let mut burn_harm: Option<i64> = None;
     let mut smoke_harm: Option<i64> = None;
     let mut fire_warmth_per_hour: Option<i64> = None;
@@ -376,6 +387,20 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "lunar_month_seconds" => lunar_month_seconds = Some(parse_num(value, line_no)?),
                 "moon_phase_at_start" => moon_phase_at_start = Some(parse_num(value, line_no)?),
                 "moonlight_peak" => moonlight_peak = Some(parse_num(value, line_no)?),
+                "cloud_above" => cloud_above = Some(parse_num(value, line_no)?),
+                "cloud_shade" => cloud_shade = Some(parse_num(value, line_no)?),
+                "cloud_damp" => cloud_damp = Some(parse_num(value, line_no)?),
+                "rain_per_hour" => rain_per_hour = Some(parse_num(value, line_no)?),
+                "snow_below_centi_c" => snow_below_centi_c = Some(parse_num(value, line_no)?),
+                "fog_above" => fog_above = Some(parse_num(value, line_no)?),
+                "fog_wind_below_cm_s" => fog_wind_below_cm_s = Some(parse_num(value, line_no)?),
+                "humidity_per_degree" => humidity_per_degree = Some(parse_num(value, line_no)?),
+                "diurnal_coldest_seconds" => {
+                    diurnal_coldest_seconds = Some(parse_num(value, line_no)?)
+                }
+                "diurnal_warmest_seconds" => {
+                    diurnal_warmest_seconds = Some(parse_num(value, line_no)?)
+                }
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -624,6 +649,18 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "strength" => {
                 let organism: u64 = parse_num(key, line_no)?;
                 strength.push((organism, parse_num(value, line_no)?));
+            }
+            "humidity" => {
+                // climate = normal humidity, hundredths of a percent (Amendment A-35)
+                let climate: u64 = parse_num(key, line_no)?;
+                let normal: i64 = parse_num(value, line_no)?;
+                if !(0..=10_000).contains(&normal) {
+                    return Err(ParseError::at(
+                        line_no,
+                        "a humidity lies between 0 and 10000",
+                    ));
+                }
+                humidities.push((climate, normal));
             }
             "latitude" => {
                 // place = hundredths of a degree north (Amendment A-34)
@@ -1007,6 +1044,22 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         lunar_month_seconds: require(lunar_month_seconds, "rules.physical.lunar_month_seconds")?,
         moon_phase_at_start: require(moon_phase_at_start, "rules.physical.moon_phase_at_start")?,
         moonlight_peak: require(moonlight_peak, "rules.physical.moonlight_peak")?,
+        cloud_above: require(cloud_above, "rules.physical.cloud_above")?,
+        cloud_shade: require(cloud_shade, "rules.physical.cloud_shade")?,
+        cloud_damp: require(cloud_damp, "rules.physical.cloud_damp")?,
+        rain_per_hour: require(rain_per_hour, "rules.physical.rain_per_hour")?,
+        snow_below_centi_c: require(snow_below_centi_c, "rules.physical.snow_below_centi_c")?,
+        fog_above: require(fog_above, "rules.physical.fog_above")?,
+        fog_wind_below_cm_s: require(fog_wind_below_cm_s, "rules.physical.fog_wind_below_cm_s")?,
+        humidity_per_degree: require(humidity_per_degree, "rules.physical.humidity_per_degree")?,
+        diurnal_coldest_seconds: require(
+            diurnal_coldest_seconds,
+            "rules.physical.diurnal_coldest_seconds",
+        )?,
+        diurnal_warmest_seconds: require(
+            diurnal_warmest_seconds,
+            "rules.physical.diurnal_warmest_seconds",
+        )?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -1157,6 +1210,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         fires,
         storms,
         latitudes,
+        humidities,
         knows,
         minds,
         temperament,
@@ -1731,6 +1785,16 @@ seasonal_lag_days = 0
 lunar_month_seconds = 0
 moon_phase_at_start = 0
 moonlight_peak = 0
+cloud_above = 7000
+cloud_shade = 7500
+cloud_damp = 6000
+rain_per_hour = 1000
+snow_below_centi_c = 100
+fog_above = 9500
+fog_wind_below_cm_s = 300
+humidity_per_degree = 400
+diurnal_coldest_seconds = 0
+diurnal_warmest_seconds = 43200
 [regions]
 1 = 1500
 ";

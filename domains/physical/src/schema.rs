@@ -239,6 +239,28 @@ pub const ILLUMINATION: FactType = FactType::new("physical.environment.illuminat
 /// (Vol. III Ch. 1 §1.10, environmental state).
 pub const HUMIDITY: FactType = FactType::new("physical.environment.humidity");
 
+/// A climate's normal humidity — what its weather departs from — in hundredths of a percent
+/// (Amendment A-35). World data: a fen is wetter than a dry valley. Absent, the world's baseline.
+pub const HUMIDITY_NORMAL: FactType = FactType::new("physical.environment.humidity_normal");
+
+/// How much of a climate's sky is cloud, in hundredths of a percent (Amendment A-35): it forms as
+/// the air grows humid, dims the day, and holds back the day's warmth and the night's cold.
+/// Absent, a clear sky.
+pub const CLOUD: FactType = FactType::new("physical.environment.cloud");
+
+/// How hard it is raining on a climate, in hundredths of a millimetre of water an hour
+/// (Amendment A-35). Absent, it is not.
+pub const RAIN: FactType = FactType::new("physical.environment.rain");
+
+/// How hard it is snowing on a climate, in hundredths of a millimetre of water an hour
+/// (Amendment A-35): what would have been rain, falling below the world's snow line. Absent, it
+/// is not.
+pub const SNOW: FactType = FactType::new("physical.environment.snow");
+
+/// How thick the fog is over a climate, in hundredths of a percent (Amendment A-35): it forms in
+/// still air near saturation and shortens sight, as smoke does. Absent, there is none.
+pub const FOG: FactType = FactType::new("physical.environment.fog");
+
 /// Atmospheric pressure at a location, in decapascals (hPa x 10) as fixed-point
 /// (Vol. III Ch. 1 §1.10). Falls with elevation and drifts with weather; the pressure
 /// gradient between adjacent regions is what drives wind.

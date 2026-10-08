@@ -704,6 +704,8 @@ Instead it provides the shared context upon which specialized systems operate.
 
 *As built (Amendment A-34):* a world may declare a year, a latitude, and a moon. The sun's height follows the season and the place's latitude, so days lengthen toward midsummer, noon stands lower in winter, and the far north has midnight sun. Every climate open to the sky warms and cools with the seasons, a lag behind the sun. A moon with phases lights the night by the world's measure.
 
+*As built (Amendment A-35):* the air is coldest about dawn and warmest in the afternoon, as the world declares. Each climate has its own normal humidity. Cloud gathers in humid air, dims the day, and holds back the day's swing. Saturated air rains, and below the snow line it snows. The air near the ground is damper as it cools, and in still air near saturation fog lies, shortening sight as smoke does.
+
 ---
 
 # 1.11 Physical Constraints

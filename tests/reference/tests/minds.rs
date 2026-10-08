@@ -70,14 +70,14 @@ fn watch(city: &mut City, who: u64, ticks: u64) -> Vec<Decision> {
 fn erin_comes_in_from_the_cold() {
     let mut city = City::from(still());
     let choices = watch(&mut city, ERIN, 36 * HOUR);
-    // One choice in a day and a half: in the late evening, cold, she makes for the kitchen she
-    // remembers warm.
+    // One choice in a day and a half: toward dawn, as the coldest of the night sets in (the air is
+    // coldest at five: Amendment A-35), she makes for the kitchen she remembers warm.
     assert_eq!(choices.len(), 1, "{choices:?}");
     let choice = &choices[0];
     assert_eq!((choice.goal, choice.reason), (KITCHEN, REASON_WARMTH));
     assert!(choice.score > 0);
     assert!(
-        (19 * HOUR..30 * HOUR).contains(&choice.tick),
+        (4 * HOUR..9 * HOUR).contains(&choice.tick),
         "decided at hour {}",
         choice.tick / HOUR
     );
@@ -146,12 +146,17 @@ fn the_guard_keeps_his_hours() {
 
 #[test]
 fn a_mind_never_heads_for_what_it_does_not_know() {
-    // Ashford as before, except that Erin was never told of the kitchen or its door: as cold as
-    // ever, she has nowhere to go.
+    // Ashford as before, except that Erin was never told of the kitchen or its door, and is too
+    // short-sighted for the dawn to show them to her: as cold as ever, she has nowhere to go.
     let mut pkg = still();
     for (mind, things) in &mut pkg.knows {
         if *mind == ERIN {
             things.retain(|t| *t != KITCHEN && *t != DOOR_OUT && *t != DOOR_IN);
+        }
+    }
+    for (who, range) in &mut pkg.senses {
+        if *who == ERIN {
+            *range = 100;
         }
     }
     let mut city = City::from(pkg);

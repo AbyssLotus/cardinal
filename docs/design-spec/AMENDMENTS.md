@@ -1252,3 +1252,58 @@ together; now a late-April dawn shows a resting mind what it wants, and it gets 
 with perception and is left to it.
 
 **Rationale.** `docs/audits/environment.md` §4, slice 1.
+
+---
+
+## A-35 — The sky: the day's curve, cloud, rain and snow, and fog (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 (environmental state: cloud, precipitation, fog; the day's temperature)
+- Vol. III Ch. 1 §1.11 ("thick fog limits visibility": built)
+- Vol. IV Ch. 2 §2.2 (world rules), Vol. IV (the world package: `[humidity]`)
+
+**Change.**
+- **The day's curve.** A world declares when in the day its air is coldest and when warmest
+  (`diurnal_coldest_seconds`, `diurnal_warmest_seconds`). The swing rises straight from the one to
+  the other and falls straight back. At midnight and noon it is the curve the engine had.
+  A climate's declared temperature is the coldest of its day, as before. It begins as far above
+  that as the curve stands at the first moment.
+- **Humidity normals** (world data). A climate may declare its normal humidity in `[humidity]`;
+  else it is the world's baseline. Its weather departs from that normal as before. This is *the
+  air's* humidity.
+- **Cloud** (Physical; written by the sky). Cloud forms as the air's humidity passes the world's
+  `cloud_above`, and the sky is overcast by `rain_above`.
+  - It keeps out `cloud_shade` of the light: of the region's own sky, and of a room's, through its
+    openings.
+  - It holds back `cloud_damp` of the day's swing: cooler afternoons, milder nights. The sky
+    proposes the change in that share between its step's start and end, against the cloud it
+    committed last, so the share telescopes exactly however cloud comes and goes.
+- **Rain and snow** (Physical; written by the sky). Rain falls from air at `rain_above` or more:
+  `rain_per_hour` with the air saturated, less in proportion below that. At `snow_below_centi_c`
+  or colder, it falls as snow. Both are rates in hundredths of a millimetre an hour, absent when
+  nothing falls. Fire in the open is put out by either (A-28 now reads them, not the humidity).
+- **Humidity near the ground.** The humidity fact is now the air's humidity, raised by
+  `humidity_per_degree` for each degree the air stands below its day's mean, and lowered for each
+  degree above it. The day's mean takes cloud's share into account. So dawns are damp and
+  afternoons dry.
+- **Fog** (Physical; written by the sky). Fog forms where the humidity near the ground passes
+  `fog_above` in air stiller than `fog_wind_below_cm_s`: thicker toward saturation, thinner as
+  the wind rises. It lies over open ground, not in walled rooms.
+- **Thick air and sight.** How clear the air is in a place is what its smoke leaves (A-32) times
+  what its fog leaves. One sees only as far as the air about one lets one, and what is in thick
+  air is seen only from as near.
+
+**In Ashford** (coldest at five, warmest at three; Highmoor 75% humid, Southfen 80%;
+`tests/reference/tests/sky.rs`):
+- At 85% the Vale's sky is three-quarters cloud, and noon is 44% as bright as a clear noon.
+- Under a full overcast the day swings 2 °C, not 5.
+- With cloud coming and going over ten days, the Vale's air is at every step exactly its start,
+  plus the day's swing since, less the share of it the cloud then holds back.
+- At 95% it rains 5 mm an hour; declared at five below, the same air snows.
+- At 86%, still Southfen lies under fog at dawn, lifted by three.
+- At six in a damp dawn Erin cannot see the apple tree across the yard for fog, though it is
+  light enough; by noon she can.
+- With the coldest hour at dawn, Erin now feels the cold toward dawn, not in the late evening,
+  and by then it is light enough to see the way in.
+
+**Rationale.** `docs/audits/environment.md` §4, slice 2.

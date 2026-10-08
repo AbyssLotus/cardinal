@@ -80,6 +80,11 @@ pub struct PhysicalConfig {
     pub environment_step_seconds: u64,
     /// Peak diurnal temperature swing, in centidegrees Celsius.
     pub diurnal_amplitude_centi_c: i64,
+    /// When in the day the air is coldest, and when warmest, in seconds after midnight
+    /// (Amendment A-35).
+    pub diurnal_coldest_seconds: u64,
+    /// When in the day the air is warmest.
+    pub diurnal_warmest_seconds: u64,
     /// Typical size (standard deviation) of weather's departure from normal temperature, in
     /// centidegrees Celsius.
     pub temperature_variability_centi_c: i64,
@@ -152,9 +157,21 @@ pub struct PhysicalConfig {
     pub gale: systems::Gale,
     /// The world's year, its latitude, and its moon (Amendment A-34).
     pub calendar: calendar::Calendar,
+    /// Cloud, rain and snow, and fog (Amendment A-35).
+    pub sky: systems::SkyRules,
 }
 
 impl PhysicalConfig {
+    /// The day's temperature curve these rules give (Amendment A-35).
+    pub const fn day_curve(&self) -> systems::DayCurve {
+        systems::DayCurve {
+            day_ms: self.day_length_seconds.saturating_mul(1000),
+            amplitude_centi_c: self.diurnal_amplitude_centi_c,
+            coldest_ms: self.diurnal_coldest_seconds.saturating_mul(1000),
+            warmest_ms: self.diurnal_warmest_seconds.saturating_mul(1000),
+        }
+    }
+
     /// The movement rules gravity and travel share, drawn from this configuration.
     pub const fn move_rules(&self) -> travel::MoveRules {
         travel::MoveRules {
@@ -241,6 +258,11 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ELEVATION
             || fact_type == schema::EXPOSURE
             || fact_type == schema::LATITUDE
+            || fact_type == schema::HUMIDITY_NORMAL
+            || fact_type == schema::CLOUD
+            || fact_type == schema::RAIN
+            || fact_type == schema::SNOW
+            || fact_type == schema::FOG
             || fact_type == schema::POSITION
             || fact_type == schema::BODY_SIZE
             || fact_type == schema::HEADING
@@ -343,14 +365,12 @@ impl Domain for PhysicalDomain {
         let step = c
             .clock
             .step(c.environment_step_seconds.saturating_mul(1000));
-        let day_ms = c.day_length_seconds.saturating_mul(1000);
         let memory_ms = c.weather_persistence_seconds.saturating_mul(1000);
         let mut systems: Vec<Box<dyn System>> = vec![
             Box::new(systems::DiurnalCycle::new(
                 c.clock,
                 step,
-                day_ms,
-                c.diurnal_amplitude_centi_c,
+                c.day_curve(),
                 c.thermal_mass_reference,
             )),
             Box::new(systems::TemperatureWeather::new(
@@ -364,6 +384,7 @@ impl Domain for PhysicalDomain {
                 step,
                 c.calendar,
                 c.illumination_peak,
+                c.sky.cloud_shade,
             )),
             // The seasons' share of the temperature (Amendment A-34).
             Box::new(systems::Seasons::new(
@@ -373,10 +394,14 @@ impl Domain for PhysicalDomain {
                 c.thermal_mass_reference,
             )),
             Box::new(systems::Precipitation::new(
+                c.clock,
                 step,
                 c.humidity_baseline,
                 c.humidity_variability,
                 memory_ms,
+                c.sky,
+                c.day_curve(),
+                c.thermal_mass_reference,
             )),
             Box::new(systems::PressureSystem::new(
                 step,
@@ -491,6 +516,13 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::EXPOSURE
         {
             composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
+        } else if fact_type == schema::HUMIDITY_NORMAL
+            || fact_type == schema::CLOUD
+            || fact_type == schema::FOG
+        {
+            composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
+        } else if fact_type == schema::RAIN || fact_type == schema::SNOW {
+            composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
         } else if fact_type == schema::LATITUDE {
             composition::compose_bounded(current, changes, -9_000, 9_000)
         } else if fact_type == schema::PORTAL_DANGER || fact_type == schema::PORTAL_DANGER_OVERRIDE

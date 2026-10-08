@@ -68,7 +68,7 @@ burn_per_hour = 30000               # a full fire eats 100 kg of fuel in twenty 
 fire_reach_cm = 300                 # and throws its heat three metres
 ignition_heat = 3000                # heat times flammability at which a thing catches
 ignite_intensity = 2000             # how a fire starts
-rain_above = 9000                   # humidity past which it rains on what is in the open
+rain_above = 9000                   # the air's humidity past which it rains, or snows (A-35)
 douse_per_hour = 40000              # and rain puts a fire out within the quarter hour
 wall_thickness_cm = 20              # a room's walls, floor, and roof: what of it burns
 fire_warmth_per_hour = 2000         # a full fire warms 100 m3 of walled air 20 degrees an hour (A-32)
@@ -90,6 +90,16 @@ seasonal_lag_days = 30              # the warmest of the year a month after mids
 lunar_month_seconds = 2551443       # 29.53 days from new moon to new moon
 moon_phase_at_start = 0             # a new moon on the first night
 moonlight_peak = 120                # a full moon well up in the sky is just enough to see by
+cloud_above = 7000                  # cloud gathers past 70% humidity (Amendment A-35)
+cloud_shade = 7500                  # a full overcast keeps out three quarters of the light
+cloud_damp = 6000                   # and holds back 60% of the day's swing: mild nights, cool days
+rain_per_hour = 1000                # saturated air pours 10 mm an hour
+snow_below_centi_c = 100            # at 1 degree or colder it falls as snow
+fog_above = 9000                    # fog past 90% humidity near the ground
+fog_wind_below_cm_s = 300           # in air stiller than 3 m/s
+humidity_per_degree = 600           # 6% damper for each degree cooler: damp dawns, dry afternoons
+diurnal_coldest_seconds = 18000     # coldest about dawn, at five
+diurnal_warmest_seconds = 54000     # warmest at three in the afternoon
 
 [rules.living]
 metabolism_step_seconds = 60
@@ -641,6 +651,11 @@ part_below = 3000                   # both this cool: they part
 400 = 4000              # the mine mouth: partly open to the sky
 401 = 0                 # the deep gallery: sealed
 402 = 1000              # the miners' cabin: shuttered
+
+# ---- Humidity (Amendment A-35): what each climate's weather departs from --------------------
+[humidity]
+2 = 7500                # Highmoor: the moor is damp, often in cloud
+3 = 8000                # Southfen: the fens are wetter still, and foggy at dawn
 
 # ---- Living things (body heat) ----------------------------------------------------------
 [organisms]
