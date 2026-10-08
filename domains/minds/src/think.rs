@@ -799,7 +799,10 @@ impl Think {
             let owner = mind.belief_entity(BELIEF_OWNER, thing);
             let ours =
                 Some(thing) == home || owner == Some(mind.me) || (owner.is_some() && owner == home);
-            if !damaged || !ours || mind.gave_up_on(thing) {
+            // Given up for want of a tool or the stuff, it is taken up again once both are to be
+            // had (Amendment A-47): a woodpile stacked since, a tool found.
+            if !damaged || !ours || (mind.gave_up_on(thing) && !self.could_mend(mind, here, thing))
+            {
                 continue;
             }
             let Some(place) = mind.place_of(thing) else {
@@ -1306,6 +1309,23 @@ impl Think {
             }
         }
         ground.map(|(_, place)| (Work::Dig(place), place))
+    }
+
+    /// Whether the mind believes it could mend `thing` now (Amendment A-47): it knows what the
+    /// thing is made of, has or knows of a tool fit for it, and carries a piece of its stuff or
+    /// knows where to get some.
+    fn could_mend(&self, mind: &Mind, here: EntityId, thing: EntityId) -> bool {
+        let Some(stuff) = mind.weakest_material(thing) else {
+            return false;
+        };
+        let need = mind.hardness(stuff).unwrap_or(0);
+        if matches!(self.tool_for(mind, here, need), Hand::Lacking) {
+            return false;
+        }
+        mind.carried()
+            .into_iter()
+            .any(|t| mind.made_only_of(t, stuff))
+            || self.source_of(mind, here, stuff, None, None).is_some()
     }
 
     /// What the mind has to work something `need` hard with (Amendment A-45): a bare hand if it is

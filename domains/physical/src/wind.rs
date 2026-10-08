@@ -58,6 +58,7 @@ const WIND_LOAD_READS: &[FactType] = &[
     MOBILE,
     LEADS_TO,
     SOLID,
+    crate::schema::PIT,
     POSITION,
     HEADING,
     MOTION_TARGET,
@@ -151,8 +152,11 @@ impl System for WindLoad {
             None => false,
         };
         for thing in view.entities_with(MADE_OF) {
+            // Not a pit (Amendment A-47): a hole in the ground, weightless as a thing, is not
+            // carried off.
             if is_true(view, thing, MOBILE)
                 || is_true(view, thing, BROKEN)
+                || is_true(view, thing, crate::schema::PIT)
                 || view.read(FactKey::new(thing, LEADS_TO)).is_some()
                 || view.read(FactKey::new(thing, BODY_SIZE)).is_none()
                 || !in_a_place(thing)

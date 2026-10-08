@@ -204,9 +204,11 @@ fn open_place(view: &dyn CommittedView, place: EntityId) -> bool {
 /// The way from place `from` to place `to`, through openings `usable` accepts, and across the edges
 /// of places without walls (Amendment A-30): out of any open place one is in, and into any open
 /// place that holds where one is going. Breadth first; openings before edges, and openings in
-/// ascending id, so the answer is deterministic. Edges are taken only along the two lines of
-/// containers — up from where one is, down toward where one is going — so a search across a city's
-/// open ground does not wander into every street in it.
+/// ascending id, so the answer is deterministic. Edges are taken only along the lines of
+/// containers — up from where one is, down toward where one is going, and down toward any
+/// opening that leads onto that line (Amendment A-47: a hall whose door opens from the grounds
+/// beside the house) — so a search across a city's open ground does not wander into every street
+/// in it.
 fn ways_between(
     view: &dyn CommittedView,
     from: EntityId,
@@ -217,7 +219,21 @@ fn ways_between(
     if from == to {
         return Some(Vec::new());
     }
-    let toward: Vec<EntityId> = kernel::hierarchy::ancestry(view, to, CONTAINED_IN);
+    let mut toward: Vec<EntityId> = kernel::hierarchy::ancestry(view, to, CONTAINED_IN);
+    let mut beside: Vec<EntityId> = Vec::new();
+    for &onto in &toward {
+        for opening in view.holding(LEADS_TO, Value::Entity(onto)) {
+            let Some(from_place) = container_of(view, opening) else {
+                continue;
+            };
+            for p in kernel::hierarchy::ancestry(view, from_place, CONTAINED_IN) {
+                if !toward.contains(&p) && !beside.contains(&p) {
+                    beside.push(p);
+                }
+            }
+        }
+    }
+    toward.extend(beside);
     let mut came_by: BTreeMap<EntityId, (EntityId, Way)> = BTreeMap::new();
     let mut queue = std::collections::VecDeque::from([from]);
     while let Some(place) = queue.pop_front() {

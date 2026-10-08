@@ -266,3 +266,29 @@ The week test (`week.rs`) becomes the closing test §5 planned:
 - the millstone wears and is mended with the quarry's granite;
 - a storm in the middle of the week damages what the household owns, and they mend it from the
   woodcutter's logs.
+
+### Status of the follow-ups
+
+- **F1, built:** 2ff0e72. The planner asks the index, only for the targets travellers have. Its
+  effect at city scale is not measured yet. The city bench now runs far slower than the 200 ms a
+  tick recorded before, and a build from before A-40 and all of this plan (1d955fc) is as slow on
+  this machine. So it is not this work, but the cause is not found. Next to profile.
+- **F2, built:** A-46 (5a97964), `tests/reference/tests/wear.rs`.
+- **F3, built:** A-47, `tests/reference/tests/labour.rs`. Found and fixed: the way into the manor's
+  hall from outside, pits blown away by the wind, a forge standing where one comes into the cabin.
+  Found and left open:
+  - minds have no hysteresis between warmth and work (the gallery was warmed instead);
+  - travel sets a body down in a sizeless place without looking for solids there.
+- **F4, built, short of the plan:** the week checks that every trade is worked, that the seam is
+  smaller at the end and never regrows, and that the millstone wears. Not the seam smaller every
+  day, nor the millstone mended within the week: at the week's ten-minute ticks, labour is a go a
+  tick, and a lump of ore takes hours. The storm and the rebuild are their own test (the gale and
+  Carol's crate): a gale that marks a crate takes tonnes off a house, a month's mending. Wear
+  and mending are shown at minute ticks in `wear.rs`.
+
+**What is next, by what it would unlock:**
+1. **Labour that keeps Law 14.** A go of work should span the tick: effort for the tick's
+   seconds, and patience in seconds, not ticks. Then a week at ten-minute ticks mines what minute
+   ticks do.
+2. **The city bench's slowdown,** found and fixed.
+3. **Hysteresis between warmth and work,** so a chilled worker warms up fully before going back.

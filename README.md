@@ -160,7 +160,8 @@ reference engine is being built here, from the specification, in roadmap order
       wherever the ground is stone (A-42); chains of making that need heat, a mill's water, or a
       tool to hand (A-43); mending that uses up material (A-44); minds that fetch a tool, dig,
       cross open ground, and mend what is theirs, and Millside's farmer, miller, and baker
-      feeding the mill with nothing filling itself (A-45)
+      feeding the mill with nothing filling itself (A-45); tools and workplaces worn by use
+      (A-46); every store filled by someone: the Hill's trades, fish, and the manor's bread (A-47)
 - [ ] Minds that flee fire and break a way through; fire and storm at the city tier
 - [ ] Carrying things across the seam; city generation at scale; the hot store; parallel shards
 - [ ] Hardening, from the hostile audit: a sealed mutation path, multi-cause provenance,

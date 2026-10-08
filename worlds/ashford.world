@@ -201,7 +201,7 @@ part_below = 3000                   # both this cool: they part
 2 = 600, 40000          # Highmoor
 3 = 1800, 500           # Southfen
 400 = 1300, 5300        # the mine mouth (on the Hill)
-401 = 1100, 5300        # the deep gallery
+401 = 1500, 5300        # the deep gallery: warm as the rock keeps it, deep under the Hill (A-47)
 402 = 1500, 5300        # the miners' cabin
 103 = 2000              # Alice's kitchen, still warm from last night's stove
 
@@ -214,6 +214,7 @@ part_below = 3000                   # both this cool: they part
 13 = 10                 # the Harbour
 14 = 10                 # Millside
 100 = 11                # Alice's yard
+112 = 100               # the woodpile, by the shed: a corner of the yard (Amendment A-47)
 101 = 11                # Alice's house
 300 = 11                # the manor grounds
 305 = 11                # the manor house
@@ -266,6 +267,13 @@ part_below = 3000                   # both this cool: they part
 3120 = 401                 # the iron seam, in the deep gallery (Amendment A-41)
 3121 = 401                 # the copper seam
 3122 = 603                 # the stand of timber, in the wood
+3124 = 13                  # fish off the quay (Amendment A-47)
+3125 = 500                 # the Heron's nets, over her side
+3130 = 2080                # each trade's own tool, in hand (Amendment A-47): Jory's pick,
+3131 = 2081                # Kit's, Nell's, and the woodcutter's axe
+3132 = 2084
+3133 = 2083
+3134 = 604                 # the miller's pick, for dressing his stones
 3123 = 600                 # the wheat, on the farm
 620 = 604                  # the millstone, in the mill (Amendment A-43)
 621 = 604                  # the bread oven, beside it
@@ -318,6 +326,7 @@ part_below = 3000                   # both this cool: they part
 14 = -100000, 0, 0
 # Old Town
 100 = 0, 0, 0
+112 = 300, -500, 0
 101 = 1000, 0, 0
 102 = 0, 0, -300
 103 = 0, 0, 0
@@ -348,12 +357,15 @@ part_below = 3000                   # both this cool: they part
 3120 = 300, 0, 0
 3121 = -300, 0, 0
 3122 = 500, 500, 0
+3124 = 8000, -3800, 0     # where the quay meets the sea (Amendment A-47)
+3125 = 0, -1300, 0        # at the Heron's stern
+3134 = 150, 250, 0        # the miller's pick, by the millstone (Amendment A-47)
 3123 = 1500, 0, 0
 620 = 200, -200, 0
 621 = -250, -250, 0
 622 = -800, 0, 0
 623 = -2500, -2500, 0
-624 = 0, 0, 0
+624 = -300, -200, 0     # the forge, against the cabin's back wall: not where one comes in (A-47)
 3111 = 560, 1000, 50
 3112 = 2560, 2000, 300
 3113 = 5560, 2000, 300
@@ -528,6 +540,7 @@ part_below = 3000                   # both this cool: they part
 [bodies]
 # entity = half_width, half_depth, height
 100 = 2000, 1500, 0     # Alice's yard: 40 m x 30 m of open ground, the house standing in it (A-37)
+112 = 75, 50, 0         # the woodpile: a metre and a half by one, between the crate and the shed
 102 = 500, 500, 280     # Alice's rooms: 10 m x 10 m, 2.8 m high
 103 = 500, 500, 280
 104 = 500, 500, 280
@@ -605,6 +618,13 @@ part_below = 3000                   # both this cool: they part
 3120 = 100, 30, 200     # a seam in the gallery wall: 2 m of it showing
 3121 = 100, 30, 200
 3122 = 100, 100, 1000   # the stand: a stool of timber 2 m across, 10 m tall
+3124 = 200, 100, 50     # the fish off the quay: a stretch of water 4 m by 2 m
+3125 = 100, 50, 50      # the Heron's nets
+3130 = 2, 2, 15         # picks and an axe: iron, like the hammer (1.9 kg)
+3131 = 2, 2, 15
+3132 = 2, 2, 15
+3133 = 2, 2, 15
+3134 = 2, 2, 15
 3123 = 2000, 2000, 100  # the wheat: 40 m by 40 m, a metre high
 620 = 60, 60, 80        # the millstone (Amendment A-43)
 621 = 60, 60, 120       # the bread oven
@@ -762,6 +782,13 @@ part_below = 3000                   # both this cool: they part
 703 = 5000, 12x10x8, 40000      # granite, cut in blocks of ten kilos: a hammer, and a while at it
 713 = 100000, 10x10x10, 0       # clay, dug out by the spadeful, by hand
 
+# ---- Wear (Amendment A-46): how fast each workplace wears in use, hundredths of a percent an hour
+[wear]
+620 = 50                # the millstone: dressed every week or so of grinding
+621 = 10                # the oven
+623 = 10                # the kiln
+624 = 20                # the forge
+
 # ---- Tended fires (Amendment A-43): the oven, the kiln, and the forge are kept burning ------
 [fires]
 621 = 3000, kept        # the bread oven
@@ -854,29 +881,29 @@ part_below = 3000                   # both this cool: they part
 2002 = 100, 102, 103, 104, 1001, 1002, 1007, 1008, 1009, 1010, 3100, 122, 123, 950   # Bob: the house, the hearth, and the pie
 2004 = 103, 104, 1007, 1008, 2002, 3100                                      # Dave: upstairs, and Bob below
 2005 = 100, 103, 104, 1001, 1002, 1007, 1008, 1009, 1010, 3100                 # Erin: the yard, the kitchen door, the stairs up to her bedroom
-2003 = 100, 3100, 103, 1001, 1002                                     # Carol: the yard, its tree, the kitchen door
+2003 = 100, 3100, 103, 1001, 1002, 112                                # Carol: the yard, its tree, the kitchen door, the woodpile
 2011 = 100                                                             # the courier: only the yard
-2015 = 300, 301, 302, 303, 1101, 1102, 1103, 1104, 1105, 1106, 3101   # the steward: the manor
+2015 = 300, 301, 302, 303, 1101, 1102, 1103, 1104, 1105, 1106, 3101, 11, 14, 604, 1401, 1402, 3109   # the steward: the manor, and the way to the mill (A-47)
 2016 = 300, 301, 302, 303, 1103, 1104, 3001, 3002, 3003, 3004, 3101   # Ned: the manor, and the vials
-2070 = 12, 200, 201, 202, 1201, 1202, 1203, 1204, 3111   # the villager: home
-2052 = 13, 510, 511, 512, 3107   # the guard: the harbour
+2070 = 12, 200, 201, 202, 1201, 1202, 1203, 1204, 3111, 402, 624, 955, 401, 3120   # the villager: home, the smithy, and the seam (A-47)
+2052 = 13, 510, 511, 512, 3107, 3124   # the guard: the harbour, and the fish off the quay
 2013 = 100, 103, 1001, 1002, 3100                                            # Finn: the yard and the kitchen door
 2014 = 100, 102, 103, 1001, 1002, 1009, 1010, 3100                           # Gwen: and the cellar stairs
 2012 = 102, 3102                                                       # the raccoon: the cellar and its crate
 2030 = 140, 3103                                                       # the rider: the cart and his provisions
 2040 = 2, 3104                                                         # Hal: the moor and its bilberries
 2041 = 3, 3105                                                         # Ida: the fen and its cranberries
-2050 = 500, 3106                                                       # the captain: her ship and its stores
-2051 = 500, 3106                                                       # the bosun likewise
-2060 = 601, 3108, 1403, 1404, 600, 3123, 14, 1401, 1402, 604               # the farmer: home, his wheat, and the way to the mill (A-45)
+2050 = 500, 3106, 3125                                                 # the captain: her ship, its stores, and its nets
+2051 = 500, 3106, 3125                                                 # the bosun likewise
+2060 = 601, 3108, 1403, 1404, 600, 3123, 14, 1401, 1402, 604, 3109         # the farmer: home, his wheat, the way to the mill, and its bread
 2061 = 603, 3110                                                       # the fox: the wood and its brambles
-2062 = 604, 3109, 620, 951, 1401, 1402, 14                               # the miller: the mill, his millstone, the grinding
+2062 = 604, 3109, 620, 951, 1401, 1402, 14, 3134                         # the miller: the mill, his millstone, the grinding, his pick
 2063 = 604, 3109, 621, 952, 1401, 1402, 14                               # the baker: the mill, the oven, the baking
-2080 = 12, 3112                                                        # Jory: the west valley's bush
-2081 = 12, 3113                                                        # Kit: the east valley's bush
+2080 = 12, 3112, 400, 401, 402, 3120, 3130                           # Jory: the west valley's bush, the mine, his pick (A-47)
+2081 = 12, 3113, 14, 603, 3122, 623, 954, 402, 3131                   # Kit: the east valley's bush, the wood, its kiln, the forge
 2082 = 12, 3114                                                        # Lena: the ridgeline's bush
-2083 = 12, 3115                                                        # the hiker: the bush below the cliff
-2084 = 12, 3116                                                        # Nell: the bush by the boulder
+2083 = 12, 3115, 14, 603, 3122, 3133, 11, 100, 112                     # the hiker: the bush below the cliff; the wood, his axe, and Alice's woodpile (A-47)
+2084 = 12, 3116, 402, 3132, 14, 604, 1401, 1402                     # Nell: the bush by the boulder, her pick, the mill (A-47)
 
 # ---- Minds -------------------------------------------------------------------------------
 [minds]
@@ -953,6 +980,7 @@ part_below = 3000                   # both this cool: they part
 713 = density:1800, hardness:800, flammability:0, thermal_capacity:900       # clay: the Vale's soil (Amendment A-42)
 718 = density:8960, hardness:3500, flammability:0, conductivity:9500        # copper (Amendment A-43)
 719 = density:300, hardness:100, flammability:9000    # charcoal
+720 = density:1000, hardness:300, flammability:500, edible:10000, nutrition:3000   # fresh fish (Amendment A-47)
 
 [made_of]
 121 = 701               # the lamp: glass
@@ -964,6 +992,13 @@ part_below = 3000                   # both this cool: they part
 3120 = 715              # the iron seam: iron ore (Amendment A-41)
 3121 = 716              # the copper seam: copper ore
 3122 = 700              # the stand: timber
+3124 = 720              # fish (Amendment A-47)
+3125 = 720
+3130 = 702              # the tools: iron
+3131 = 702
+3132 = 702
+3133 = 702
+3134 = 702
 3123 = 717              # the wheat
 620 = 703               # the millstone: granite (Amendment A-43)
 621 = 713               # the oven, the kiln: clay
@@ -1013,14 +1048,14 @@ part_below = 3000                   # both this cool: they part
 # deposit = what each unit is made of and its size, how many ripen a day, the most it holds,
 # and how many it holds now
 3100 = made_of:704, size:4x4x8, per_day:20, cap:30, stock:6     # the apple tree
-3101 = made_of:709, size:8x8x6, per_day:3, cap:6, stock:4     # the manor pantry, in the hall (a stand-in for trade and kitchens not yet built)
-3102 = made_of:704, size:4x4x8, per_day:2, cap:6, stock:4     # a crate of windfall apples in the cellar
+3101 = made_of:709, size:8x8x6, per_day:0, cap:6, stock:4     # the manor pantry, in the hall: what the steward brings from the mill (A-47)
+3102 = made_of:704, size:4x4x8, per_day:0, cap:6, stock:4     # a crate of apples in the cellar: what Gwen lays by (A-47)
 3103 = made_of:709, size:8x8x6, per_day:0, cap:8, stock:8     # the rider's provisions, in the cart
 3104 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bilberry patch on Highmoor
 3105 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a cranberry bog on Southfen
-3106 = made_of:709, size:8x8x6, per_day:3, cap:6, stock:4     # the Heron's stores (a stand-in for trade and kitchens not yet built)
-3107 = made_of:710, size:10x4x4, per_day:2, cap:6, stock:4     # a barrel of smoked fish at the harbour gate (a stand-in for trade and kitchens not yet built)
-3108 = made_of:709, size:8x8x6, per_day:2, cap:6, stock:4     # the farmhouse larder (a stand-in for trade and kitchens not yet built)
+3106 = made_of:709, size:8x8x6, per_day:0, cap:6, stock:4     # the Heron's stores: what is left of them (A-47)
+3107 = made_of:710, size:10x4x4, per_day:0, cap:6, stock:4     # a barrel of smoked fish at the harbour gate: what is left (A-47)
+3108 = made_of:709, size:8x8x6, per_day:0, cap:6, stock:4     # the farmhouse larder: what is left (A-47)
 3109 = made_of:709, size:8x8x6, per_day:0, cap:6, stock:4     # the miller's loaves: no longer filling themselves (A-45)
 3110 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # brambles in the wood
 3111 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush at the foot of the Hill
@@ -1035,6 +1070,9 @@ part_below = 3000                   # both this cool: they part
 3121 = made_of:716, size:10x10x8, per_day:0, cap:1000, stock:1000, renewal:nonrenewable, grade:4000, difficulty:20000    # a copper seam beside it, poorer
 3122 = made_of:700, size:50x8x8, per_day:1, cap:40, stock:30, renewal:threshold, floor:10, difficulty:15000, grows:400/1500/1000    # a stand of timber in the wood
 3123 = made_of:717, size:10x10x10, per_day:40, cap:200, stock:60, grows:500/2000/2000    # the wheat on the farm
+# Living stocks of fish (Amendment A-47): taken by hand, a net's worth at a time.
+3124 = made_of:720, size:15x5x5, per_day:30, cap:40, stock:20     # fish off the quay
+3125 = made_of:720, size:15x5x5, per_day:20, cap:30, stock:15     # fish in the Heron's nets
 
 # ---- Making (Amendment A-17) ---------------------------------------------------------------
 [recipes]
@@ -1057,6 +1095,14 @@ part_below = 3000                   # both this cool: they part
 962 = carry:717, from:3123, to:604, keep:8, hours:6-18      # the harvest: wheat to the mill
 963 = make:951, to:604, keep:4, hours:6-18                  # the grinding: flour in the mill
 964 = make:952, to:604, keep:4, hours:6-18                  # the bread: loaves in the mill
+# The trades (Amendment A-47): each store kept by someone's work.
+965 = carry:715, from:3120, to:402, keep:6, hours:7-17      # the mine: iron ore to the forge
+966 = make:954, to:402, keep:4, hours:7-17                  # the kiln: charcoal to the forge
+967 = make:955, to:402, keep:3, hours:7-17                  # the smithy: iron bars, the tools anyone takes up
+968 = carry:703, from:12, to:604, keep:16, hours:7-17       # the quarry: granite blocks for the millstone
+969 = carry:700, from:3122, to:112, keep:10, hours:7-17     # the woodpile in Alice's yard, for mending
+970 = carry:709, from:604, to:301, keep:4, hours:8-16       # the steward fetches the manor's bread from the mill
+971 = carry:704, from:3100, to:102, keep:4, hours:8-11     # Gwen lays apples by in the cellar
 
 [roles]
 2003 = 960              # Carol works the orchard
@@ -1064,10 +1110,27 @@ part_below = 3000                   # both this cool: they part
 2060 = 962              # the farmer brings in the wheat (Amendment A-45)
 2062 = 963              # the miller grinds it
 2063 = 964              # and his daughter bakes the flour into bread
+2080 = 965              # Jory mines (Amendment A-47)
+2081 = 966              # Kit burns charcoal
+2070 = 967              # the villager keeps the smithy
+2084 = 968              # Nell quarries
+2083 = 969              # the hiker, staying on, cuts wood
+2015 = 970              # the steward provisions the manor
+2014 = 971              # Gwen keeps the cellar stocked
 
 # ---- Wants (Amendment A-19) -----------------------------------------------------------------
 [owners]
 121 = 2002              # the lamp is Bob's
+3130 = 2080             # the trades' tools are their own (Amendment A-47)
+3131 = 2081
+3132 = 2084
+3133 = 2083
+3134 = 2062
+620 = 2062              # the millstone is the miller's, the oven the baker's (Amendment A-47)
+621 = 2063
+623 = 2081              # the kiln is Kit's, the forge the smith's, the sawpit Lena's
+624 = 2070
+622 = 2083
 
 [curiosity]
 2011 = 100              # the courier wonders what lies past the doors he sees

@@ -1906,3 +1906,76 @@ get these resources."
 
 **Rationale.** `docs/audits/resources.md` §9, F2: nothing used iron, blocks, or clay once made,
 so the trades that make them would work a day and stand idle.
+
+## A-47 — Every store filled by someone (2026-10)
+
+**Edits:**
+- Appendix B (Ashford: the trades, its workplaces' owners and wear, fish, and every
+  self-filling store retired)
+- Vol. II Ch. 5 (minds: a given-up repair taken up again)
+- Vol. III Ch. 1 §1.11 (travel: the way to a room whose door opens from beside its house)
+
+**Change.**
+- **Nothing made fills itself in Ashford.** The manor pantry, the farmhouse larder, the Heron's
+  stores, the fish barrel, and the cellar's apple crate keep what they hold and no longer
+  regrow. What renews is what grows: fruit, berries, wheat, timber, and fish.
+- **The trades** (jobs, each keeping a store):
+  - Jory mines iron ore and brings it to the miners' cabin.
+  - Kit fells logs and burns charcoal at the kiln for the same cabin.
+  - The villager keeps the smithy: iron bars, the tools anyone takes up when theirs wears out
+    (A-46).
+  - Nell quarries granite on the Hill for the millstone.
+  - The hiker cuts wood and stacks it on a woodpile in Alice's yard, for mending.
+  - The steward fetches the manor's bread from the mill.
+  - Gwen lays apples by in the cellar.
+
+  Each trade starts with its own tool, owned and in hand. The miller's pick lies in the mill.
+- **Workplaces have owners, and wear** (`[wear]`, A-46):
+  - the millstone is the miller's (0.5% an hour of grinding);
+  - the oven is the baker's (0.1%);
+  - the kiln is Kit's (0.1%);
+  - the forge is the smith's (0.2%);
+  - the sawpit is the woodcutter's.
+- **Fish.** A shoal off the quay, which the guard fishes, and the Heron's nets over her side,
+  which her crew haul. Both are living stocks.
+- **A given-up repair is taken up again once it can be done** (minds). A mind gave up mending
+  for want of a tool or the stuff, and a give-up lifted only when it learned the thing had moved.
+  A crate never moves, so it was never retried. Now the repair is taken up again once the mind
+  believes it has both a tool fit for it and a piece of its stuff, or a place to get one.
+
+**Found and fixed along the way:**
+- **The way into a room whose door opens from beside its house.** The manor's hall is in the
+  manor house, but its door opens from the grounds. Travel steps into open places only along
+  two lines of containers: up from where one is, down toward where one is going (A-30). The
+  grounds lie on neither, so the hall could be left but never re-entered from outside. Travel
+  now also steps down toward any opening that leads onto that line, found from the index of
+  where openings lead.
+- **Pits blew away.** A pit (A-42) has a footprint and no height, so it weighs nothing, and the
+  wind carried it off (A-33). The quarrywoman followed hers across the Hill. A pit is a hole in
+  the ground: neither wind nor a push moves it.
+- **The forge stood where one comes in.** One entering a place with no size stands at its middle,
+  and the cabin's forge, a solid, stood there. The forge is moved. Travel still sets a body down
+  in a sizeless place without looking for solids there; this is open.
+- **A gallery colder than the hill flipped a miner every tick.** In the deep gallery at 11 °C,
+  Jory felt cold enough that warmth outside outweighed work. Outside, warmth was met at once and
+  work won; back inside, he was cold again. Minds have no hysteresis between warmth and work, and
+  most of Ashford in spring leaves a body just below the cold line. This is open. Ashford's
+  gallery is now as warm as the rock keeps it, 15 °C.
+
+**Not done.** Minds count their patience in ticks, and a go of work is one go a tick (A-41). At
+ten-minute ticks, ore that takes a dozen blows takes hours: a week at ten-minute ticks mines a
+handful of lumps where minute ticks mine a dozen a day. Law 14 holds for the world and not for
+labour. The trades are tested at minute ticks; the week checks that each is worked.
+
+**In Ashford** (`tests/reference/tests/labour.rs`, `week.rs`):
+- No deposit of anything made renews.
+- In a working day at minute ticks: Jory mines about fourteen lumps and Kit burns seven
+  batches of charcoal. The smith makes bars, Nell brings granite to the mill, and the woodcutter
+  stacks logs on the woodpile.
+- Over two days the steward brings bread to the hall. With the ship's stores and the barrel bare,
+  the guard and the Heron's crew eat fish and none goes hungry.
+- After a gale tears 30% off Carol's crate, she mends it whole from the woodpile.
+- A week, nobody directed: nobody starves; every trade is worked; the iron seam is smaller at the
+  week's end and never regrows; the millstone wears.
+
+**Rationale.** `docs/audits/resources.md` §9, F3 and F4.

@@ -183,7 +183,7 @@ fn millside_lies_in_regions_that_overlap_without_nesting() {
     assert!(!overlaps(s, e(FOX_RUN), e(FARMHOUSE)));
     // The frost hollow is the field and the mill, which do not touch — and what is in the mill:
     // its millstone and oven, the inside of its door (Amendment A-43), the miller, his daughter
-    // the baker (Amendment A-45), his loaves.
+    // the baker (Amendment A-45), his loaves, and his pick (Amendment A-47).
     assert_eq!(
         ids(members_of(s, e(FROST_HOLLOW))),
         vec![
@@ -194,7 +194,8 @@ fn millside_lies_in_regions_that_overlap_without_nesting() {
             1402,
             MILLER,
             2063,
-            MILLERS_LOAVES
+            MILLERS_LOAVES,
+            3134
         ]
     );
     // The farmer and the miller live on different holdings but drink from one river.

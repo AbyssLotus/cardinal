@@ -17,10 +17,12 @@ use society::schema::{BOND, LOVERS};
 const HOUR: u64 = 6; // ten-minute ticks
 const DAY: u64 = 24 * HOUR;
 
-/// Ashford on a still day, and well fed: love, not hunger, moves them here.
+/// Ashford on a still day, and well fed: love, not hunger, moves them here — and Gwen has the
+/// week off from laying apples by in the cellar (Amendment A-47).
 fn still(change: impl FnOnce(&mut packages::WorldPackage)) -> City {
     let mut pkg = well_fed(with_tick_seconds(600));
     pkg.physical_rules.temperature_variability_centi_c = 0;
+    pkg.roles.retain(|(who, _)| *who != GWEN);
     change(&mut pkg);
     City::from(pkg)
 }

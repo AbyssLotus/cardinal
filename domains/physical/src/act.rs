@@ -1240,7 +1240,11 @@ impl System for Act {
             let Some(place) = container_of(view, thing) else {
                 continue;
             };
-            if view.read(FactKey::new(thing, MOTION_TARGET)).is_some() || !handled.insert(thing) {
+            // A pit is a hole in the ground: there is nothing to push (Amendment A-47).
+            if view.read(FactKey::new(thing, MOTION_TARGET)).is_some()
+                || is_true(view, thing, crate::schema::PIT)
+                || !handled.insert(thing)
+            {
                 continue;
             }
             let [x, y, z] = local_position(view, thing);
