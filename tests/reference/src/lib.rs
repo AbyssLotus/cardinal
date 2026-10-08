@@ -547,6 +547,26 @@ pub fn without_minds(mut package: WorldPackage) -> WorldPackage {
     package
 }
 
+/// Shut `openings` in `package` before the world begins, whether or not they declare flags.
+pub fn shut(package: &mut WorldPackage, openings: &[u64]) {
+    for &id in openings {
+        match package.flags.iter_mut().find(|f| f.entity_id == id) {
+            Some(f) if !f.flags.contains(&packages::model::Flag::Closed) => {
+                f.flags.push(packages::model::Flag::Closed)
+            }
+            Some(_) => {}
+            None => package.flags.push(packages::model::FlagSpec {
+                entity_id: id,
+                flags: vec![packages::model::Flag::Closed],
+            }),
+        }
+    }
+}
+
+/// Every way between Alice's house and her yard: the front door, the low window, and the
+/// cellar bulkhead, both faces of each (the bedroom window is shut already).
+pub const ALICE_OUTER: [u64; 6] = [1001, 1002, 1003, 1004, 1005, 1006];
+
 /// `package` in which nobody grows hungry: for tests of other drives — warmth, love, a habit —
 /// that run past the hours when hunger would send people to the orchard (Amendment A-16).
 pub fn well_fed(mut package: WorldPackage) -> WorldPackage {

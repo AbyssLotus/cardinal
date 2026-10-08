@@ -305,7 +305,9 @@ fn the_cold_gets_erin_up_and_indoors() {
     };
     assert_eq!(*why, Cause::new("called_away"));
     assert!(up < 6 * HOUR, "the cold woke her at hour {}", up / HOUR);
-    assert_eq!(city.room_of(ERIN), KITCHEN);
+    // Indoors: the kitchen, or the bedroom above it if the open front door has let the kitchen
+    // go cold (Amendment A-37).
+    assert!([KITCHEN, BEDROOM].contains(&city.room_of(ERIN)));
 }
 
 #[test]

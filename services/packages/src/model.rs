@@ -465,6 +465,12 @@ pub struct PhysicalRules {
     /// How far the wind carries weather between neighbouring climates' middles, centimetres; zero,
     /// it carries none.
     pub front_distance_cm: i64,
+    /// How fast air moves through an open opening of itself, each way, cm/s (Amendment A-37).
+    pub opening_air_speed_cm_s: i64,
+    /// What share of the wind outside, hundredths of a percent, blows through an opening onto open air.
+    pub draught_percent: i64,
+    /// How high over open ground smoke mixes before it is carried off, centimetres.
+    pub open_air_height_cm: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).

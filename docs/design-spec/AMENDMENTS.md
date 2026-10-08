@@ -1352,3 +1352,58 @@ with perception and is left to it.
 
 **Rationale.** `docs/audits/environment.md` §4, slice 3; and the wind's old flaw, found in the
 building.
+
+---
+
+## A-37 — Air between places: warmth and smoke through openings (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 ("smoke diffuses": built between places; air quality outdoors)
+- Vol. IV Ch. 2 §2.2 (world rules: `opening_air_speed_cm_s`, `draught_percent`,
+  `open_air_height_cm`)
+
+**Change.**
+- **Air through openings.** Air passes both ways through every opening that stands open (a
+  broken door stands open), as fast as the opening's area times the speed air moves through it:
+  the world's natural draught (`opening_air_speed_cm_s`), and, where the opening gives onto open
+  air, `draught_percent` of the wind outside. An opening's two faces are one way.
+- **What holds air.** A walled place holds its floor area times its height. Open ground with a
+  size (a yard, a ruin) holds its area to the world's mixing height (`open_air_height_cm`). Anything
+  else is open air: too much to change, and it gives back only its own air.
+- **Warmth.** A walled room's air follows the outside through its walls, as before (A-5). It now
+  also trades with whatever lies beyond each open opening: the next room's air, or the open air's.
+  This is solved as a weighted mean in the room's own air, stable at any step length. An open
+  door lets the night in; a hearth's warmth climbs an open stair.
+- **Smoke.**
+  - It rises from what burns, except a kept fire (A-32), into the walled place around it, or into
+    the open ground the fire stands on if that holds air.
+  - It leaks away at `smoke_clear_per_hour`, now through walls and roof only. Over open ground the
+    wind also carries it off, at the wind's speed across the place.
+  - It trades through every open opening: the difference in smoke, times the air that passes,
+    shared out by how much air each side holds. So it drifts up a stair, out of a door, and in at
+    one from a smoky yard.
+  - Open ground's smoke shortens sight and harms breath, as a room's does (A-32, A-35).
+- Before this, an open opening only cleared a room's smoke faster, as if onto clean air, and
+  carried no warmth at all.
+
+**In Ashford** (5 cm/s draught; a tenth of the wind; smoke over open ground mixing ten metres
+up; the yard now declares its size, 40 m × 30 m; `tests/reference/tests/air.rs`):
+- Alice's kitchen begins the night at 20 °C. With its front door and window open, two hours on it
+  is much nearer the yard's air than when shut up behind its timber walls.
+- The house shut up, a kept fire in the hearth warms the bedroom up the stair and the cellar down
+  it.
+- The burning table's smoke drifts up the stair to the bedroom, thinner than in the kitchen.
+- The packing crate burning in the still yard smokes the air over it, and the smoke drifts in at
+  the kitchen's open door. Shut up, the house keeps it out. A 5 m/s wind carries most of it off.
+- Erin, making for the kitchen she remembers warm, finds its door has let the night in, and
+  climbs to the bedroom, where the warmth went.
+- With the doors shut, the kitchen's and the hall's swing is smaller than before, and later: each
+  also trades air with heavier rooms up and down its stairs.
+
+**Not yet:**
+- smoke production by how much is burning, not only how fiercely: a burning house smokes no more
+  than a torch at the same fierceness;
+- a plume: smoke over open ground is well mixed across the place, not thick downwind of the fire
+  and thin upwind.
+
+**Rationale.** `docs/audits/environment.md` §4, slice 4; A-32's "not yet".

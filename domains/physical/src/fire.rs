@@ -64,8 +64,9 @@ pub struct FireRules {
     pub warmth_per_hour: i64,
     /// How much smoke a full fire raises in a hundred cubic metres of walled place, per hour.
     pub smoke_per_hour: i64,
-    /// How much of a walled place's smoke clears per hour, in hundredths of a percent — again as
-    /// much for each opening that stands open.
+    /// How much of a place's smoke leaks away per hour, in hundredths of a percent: through its
+    /// walls and roof. What passes through open openings is traded with the air beyond
+    /// (Amendment A-37).
     pub smoke_clear_per_hour: i64,
     /// The wind, in centimetres a second, that fans a fire in the open to twice what its fuel
     /// alone allows, and carries its heat twice as far.
@@ -104,6 +105,7 @@ const FIRE_READS: &[FactType] = &[
     SMOKE,
     TEMPERATURE,
     WIND_SPEED,
+    crate::schema::PLACE,
 ];
 const FIRE_WRITES: &[FactType] = &[BURNING, INTEGRITY, HEAT_EXPOSURE, SMOKE, TEMPERATURE];
 
@@ -111,12 +113,14 @@ const FIRE_WRITES: &[FactType] = &[BURNING, INTEGRITY, HEAT_EXPOSURE, SMOKE, TEM
 pub struct Fire {
     step: Step,
     rules: FireRules,
+    air: crate::air::AirRules,
 }
 
 impl Fire {
-    /// Fire by `rules`, stepping as `step` says.
-    pub const fn new(step: Step, rules: FireRules) -> Self {
-        Self { step, rules }
+    /// Fire by `rules`, stepping as `step` says; its smoke moving through openings as `air` says
+    /// (Amendment A-37).
+    pub const fn new(step: Step, rules: FireRules, air: crate::air::AirRules) -> Self {
+        Self { step, rules, air }
     }
 
     /// `per_hour` over one step, dithered so nothing is lost to rounding over many.
@@ -172,11 +176,21 @@ fn walled_air(view: &dyn CommittedView, thing: EntityId) -> Option<EntityId> {
         .find(|p| is_true(view, *p, ENCLOSED))
 }
 
-/// How many hundreds of cubic metres of air a walled place holds — at least one.
-fn hundreds_m3(view: &dyn CommittedView, place: EntityId) -> i64 {
-    size_of(view, place).map_or(1, |[hw, hd, h]| {
-        let cm3 = 2 * hw as i128 * 2 * hd as i128 * h as i128;
-        ((cm3 / 100_000_000) as i64).max(1)
+/// How many hundreds of cubic metres of air a place holds — at least one.
+fn hundreds_m3(view: &dyn CommittedView, place: EntityId, air: &crate::air::AirRules) -> i64 {
+    crate::air::volume_cm3(view, place, air).map_or(1, |cm3| ((cm3 / 100_000_000) as i64).max(1))
+}
+
+/// Where the smoke of a fire at `thing` goes (Amendment A-37): the walled place whose air it
+/// fills, or else the open ground it stands on, if that holds air of its own. A fire in open air
+/// smokes nothing anyone stands in.
+fn smoke_place(
+    view: &dyn CommittedView,
+    thing: EntityId,
+    air: &crate::air::AirRules,
+) -> Option<EntityId> {
+    walled_air(view, thing).or_else(|| {
+        container_of(view, thing).filter(|p| crate::air::volume_cm3(view, *p, air).is_some())
     })
 }
 
@@ -358,28 +372,32 @@ impl System for Fire {
             }
         }
 
-        // 5. The air of walled places: warmed by what burns in them, and filled with its smoke,
-        //    which clears through the openings that stand open (Amendment A-32). A kept fire —
-        //    a hearth, with its chimney — warms the room and sends its smoke up and away.
+        // 5. The air of places (Amendments A-32, A-37). A walled place is warmed by what burns in
+        //    it. Smoke rises from what burns, unless it is a kept fire — a hearth, with its
+        //    chimney — into the walled place around it, or the open ground it stands on. It leaks
+        //    away at the world's rate, is carried off open ground by the wind, and trades through
+        //    every open opening with the air beyond: it drifts into the next room, out of the
+        //    door, and in at it from a smoky yard.
+        let air = &self.air;
         let mut fires_in: BTreeMap<EntityId, i64> = BTreeMap::new();
         let mut smoking_in: BTreeMap<EntityId, i64> = BTreeMap::new();
         for &(b, i) in &burning {
             if let Some(room) = walled_air(view, b) {
                 *fires_in.entry(room).or_insert(0) += i;
+            }
+            if let Some(place) = smoke_place(view, b, air) {
                 if !is_true(view, b, KEPT_FIRE) {
-                    *smoking_in.entry(room).or_insert(0) += i;
+                    *smoking_in.entry(place).or_insert(0) += i;
                 }
             }
         }
-        let mut rooms: std::collections::BTreeSet<EntityId> = fires_in.keys().copied().collect();
-        rooms.extend(view.entities_with(SMOKE));
-        for room in rooms {
-            let mut rng = ctx.rng(room.raw() ^ 0x5eed);
-            let fire = fires_in.get(&room).copied().unwrap_or(0);
-            let smoking = smoking_in.get(&room).copied().unwrap_or(0);
-            let air = hundreds_m3(view, room);
+        for (&room, &fire) in &fires_in {
+            let mut rng = ctx.rng(room.raw() ^ 0x3a7);
             if fire > 0 && view.read(FactKey::new(room, TEMPERATURE)).is_some() {
-                let warmed = self.over(fire * r.warmth_per_hour / PERCENT_FULL / air, &mut rng);
+                let warmed = self.over(
+                    fire * r.warmth_per_hour / PERCENT_FULL / hundreds_m3(view, room, air),
+                    &mut rng,
+                );
                 if warmed > 0 {
                     push(
                         FactKey::new(room, TEMPERATURE),
@@ -388,32 +406,70 @@ impl System for Fire {
                     );
                 }
             }
-            let smoke = int(view, FactKey::new(room, SMOKE)).unwrap_or(0);
-            if !is_true(view, room, ENCLOSED) {
-                if smoke > 0 {
-                    push(FactKey::new(room, SMOKE), Change::Tombstone, "cleared");
-                }
+        }
+        let mut places: std::collections::BTreeSet<EntityId> = smoking_in.keys().copied().collect();
+        places.extend(view.entities_with(SMOKE));
+        let smoke_of = |p: EntityId| int(view, FactKey::new(p, SMOKE)).unwrap_or(0);
+        // What passes through each open opening this step: the difference in smoke, times the
+        // air that passes, shared out by how much air each side holds.
+        let mut traded: BTreeMap<EntityId, i128> = BTreeMap::new();
+        for way in crate::air::ways(view, &places, air) {
+            let (va, vb) = (
+                crate::air::volume_cm3(view, way.a, air),
+                crate::air::volume_cm3(view, way.b, air),
+            );
+            let (sa, sb) = (
+                va.map_or(0, |_| smoke_of(way.a)),
+                vb.map_or(0, |_| smoke_of(way.b)),
+            );
+            if sa == sb {
                 continue;
             }
-            let open = crate::space::portals_in(view, room)
-                .into_iter()
-                .filter(|p| {
-                    view.read(FactKey::new(*p, PORTAL_OPEN)).map(|f| f.value)
-                        != Some(Value::Bool(false))
-                })
-                .count() as i64;
-            let rises = self.over(smoking * r.smoke_per_hour / PERCENT_FULL / air, &mut rng);
-            let clears = self.over(
-                smoke * r.smoke_clear_per_hour / PERCENT_FULL * (1 + open),
+            let least = [va, vb].into_iter().flatten().min().unwrap_or(1);
+            let passed = (way.flow * self.step.dt_ms as i128 / 1000).min(least / 2);
+            let moved = (sa - sb) as i128 * passed;
+            if let Some(va) = va {
+                *traded.entry(way.a).or_insert(0) -= kernel::fixed::div_round(moved, va);
+            }
+            if let Some(vb) = vb {
+                *traded.entry(way.b).or_insert(0) += kernel::fixed::div_round(moved, vb);
+            }
+        }
+        places.extend(traded.keys().copied());
+        for place in places {
+            let smoke = smoke_of(place);
+            let Some(volume) = crate::air::volume_cm3(view, place, air) else {
+                // Open air: smoke is lost in it.
+                if smoke > 0 {
+                    push(FactKey::new(place, SMOKE), Change::Tombstone, "cleared");
+                }
+                continue;
+            };
+            let mut rng = ctx.rng(place.raw() ^ 0x5eed);
+            let smoking = smoking_in.get(&place).copied().unwrap_or(0);
+            let hundreds = ((volume / 100_000_000) as i64).max(1);
+            let rises = self.over(
+                smoking * r.smoke_per_hour / PERCENT_FULL / hundreds,
                 &mut rng,
             );
-            let next = (smoke + rises - clears).clamp(0, PERCENT_FULL);
+            let mut clears = self.over(smoke * r.smoke_clear_per_hour / PERCENT_FULL, &mut rng);
+            // Over open ground, the wind carries it off across the place.
+            if !is_true(view, place, ENCLOSED) {
+                let wind =
+                    crate::climate::ambient(view, place, WIND_SPEED).map_or(0, |(_, w)| w.max(0));
+                let across = size_of(view, place)
+                    .map_or(1, |[hw, hd, _]| 2 * hw.max(hd))
+                    .max(1);
+                clears += self.over(smoke * wind * 3_600 / across, &mut rng);
+            }
+            let trade = traded.get(&place).copied().unwrap_or(0) as i64;
+            let next = (smoke + rises - clears + trade).clamp(0, PERCENT_FULL);
             if next != smoke {
                 if next == 0 {
-                    push(FactKey::new(room, SMOKE), Change::Tombstone, "cleared");
+                    push(FactKey::new(place, SMOKE), Change::Tombstone, "cleared");
                 } else {
                     push(
-                        FactKey::new(room, SMOKE),
+                        FactKey::new(place, SMOKE),
                         Change::Set(Value::Int(next)),
                         "smoke",
                     );

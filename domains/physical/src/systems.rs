@@ -123,6 +123,13 @@ const SHELTER_READS: &[FactType] = &[
     MADE_OF,
     MATERIAL_DENSITY,
     MATERIAL_THERMAL_CAPACITY,
+    HAS_PORTAL,
+    LEADS_TO,
+    PORTAL_OPEN,
+    PORTAL_FAR_SIDE,
+    BODY_SIZE,
+    WIND_SPEED,
+    crate::schema::PLACE,
 ];
 const DANGER_READS: &[FactType] = &[
     PORTAL_DANGER,
@@ -1241,29 +1248,41 @@ impl System for WindSystem {
     }
 }
 
-/// Indoor air (Amendment A-5): every walled region's temperature follows the air outside it —
-/// the nearest enclosing climate — with the lag the world declares (`indoor_coupling_seconds`),
-/// lengthened by the thermal mass of what the room is built of, so a stone cottage holds the
-/// day's warmth longer than a timber shed. A walled region with no temperature yet is given the
-/// outside air's on its first step, and from then on is an indoor climate of its own — what
-/// stands in it inherits *its* temperature, not the sky's.
+/// Indoor air (Amendments A-5, A-37): every walled region's temperature follows the air outside
+/// it — the nearest enclosing climate — through its walls, with the lag the world declares
+/// (`indoor_coupling_seconds`), lengthened by the thermal mass of what the room is built of, so a
+/// stone cottage holds the day's warmth longer than a timber shed. And it trades air through
+/// every opening that stands open with whatever lies beyond — the next room's air, or the open
+/// air's — as fast as the opening's size and the draught through it allow ([`crate::air`]): an
+/// open door lets the cold in, and warmth climbs an open stair. A walled region with no
+/// temperature yet is given the outside air's on its first step, and from then on is an indoor
+/// climate of its own — what stands in it inherits *its* temperature, not the sky's.
 ///
-/// Solved implicitly over the step, so it is stable at any step length, and rounded without
-/// bias so a slow lag at fine ticks still converges (Amendment A-1).
+/// Solved implicitly in the room's own air over the step — a weighted mean of what it trades
+/// with — so it is stable at any step length, and rounded without bias so a slow lag at fine
+/// ticks still converges (Amendment A-1).
 pub struct Shelter {
     step: Step,
     coupling_ms: u64,
     thermal_mass_reference: i64,
+    air: crate::air::AirRules,
 }
 
 impl Shelter {
     /// Indoor air following outdoor air with time constant `coupling_ms`, stepping as `step`
-    /// says; `thermal_mass_reference` as for the day/night swing.
-    pub const fn new(step: Step, coupling_ms: u64, thermal_mass_reference: i64) -> Self {
+    /// says; `thermal_mass_reference` as for the day/night swing; trading air through openings
+    /// as `air` says.
+    pub const fn new(
+        step: Step,
+        coupling_ms: u64,
+        thermal_mass_reference: i64,
+        air: crate::air::AirRules,
+    ) -> Self {
         Self {
             step,
             coupling_ms,
             thermal_mass_reference,
+            air,
         }
     }
 }
@@ -1306,11 +1325,27 @@ impl System for Shelter {
             let damping = thermal_damping(view, room, self.thermal_mass_reference).max(1) as i128;
             let tau = self.coupling_ms.max(1) as i128 * PERCENT_FULL as i128 / damping;
             let dt = self.step.dt_ms as i128;
-            let next = div_dither(
-                inside as i128 * tau + outside as i128 * dt,
-                tau + dt,
-                &mut ctx.rng(room.raw()),
-            ) as i64;
+            let mut sum = inside as i128 * tau + outside as i128 * dt;
+            let mut weight = tau + dt;
+            // Through its open openings, the air beyond (Amendment A-37): the step's share of
+            // the room's air that passes, in the walls' terms.
+            if let Some(volume) = crate::air::volume_cm3(view, room, &self.air) {
+                for (beyond, flow) in crate::air::openings(view, room, &self.air) {
+                    let air = if crate::terrain::is_true(view, beyond, ENCLOSED) {
+                        view.read(FactKey::new(beyond, TEMPERATURE))
+                            .and_then(|f| f.value.as_int())
+                    } else {
+                        crate::climate::ambient_temperature(view, beyond)
+                    };
+                    let Some(air) = air else {
+                        continue;
+                    };
+                    let w = flow * dt * tau / (1000 * volume);
+                    sum += air as i128 * w;
+                    weight += w;
+                }
+            }
+            let next = div_dither(sum, weight, &mut ctx.rng(room.raw())) as i64;
             if next != inside {
                 out.push(Proposal::new(
                     self.id(),

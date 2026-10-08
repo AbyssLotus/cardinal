@@ -36,6 +36,7 @@
 //! left" are all answerable without a write per tick.
 
 pub mod act;
+pub mod air;
 pub mod calendar;
 pub mod climate;
 pub mod composition;
@@ -162,6 +163,8 @@ pub struct PhysicalConfig {
     pub calendar: calendar::Calendar,
     /// Cloud, rain and snow, and fog (Amendment A-35).
     pub sky: systems::SkyRules,
+    /// How air passes through openings (Amendment A-37).
+    pub air: air::AirRules,
 }
 
 impl PhysicalConfig {
@@ -447,12 +450,14 @@ impl Domain for PhysicalDomain {
             Box::new(fire::Fire::new(
                 c.clock.step(c.fire.step_seconds.saturating_mul(1000)),
                 c.fire,
+                c.air,
             )),
             // Walled rooms' air follows the air outside them (Amendment A-5).
             Box::new(systems::Shelter::new(
                 step,
                 c.indoor_coupling_seconds.saturating_mul(1000),
                 c.thermal_mass_reference,
+                c.air,
             )),
             // What each body with sight could see (Amendment A-8).
             Box::new(sight::Sight::new(

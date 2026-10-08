@@ -5,7 +5,6 @@
 use kernel::fact::FactKey;
 use kernel::system::CommittedView;
 use kernel::value::Value;
-use packages::model::Flag;
 use packages::WorldPackage;
 use physical::schema::{BURNING, IN_VIEW, SMOKE, TEMPERATURE};
 use reference::id::*;
@@ -22,17 +21,16 @@ fn ashford(seconds: u64) -> WorldPackage {
 
 /// Shut the kitchen's front door and its low window.
 fn shut_up(pkg: &mut WorldPackage) {
-    for f in &mut pkg.flags {
-        if [1001, 1002, 1003, 1004].contains(&f.entity_id) {
-            f.flags.push(Flag::Closed);
-        }
-    }
+    reference::shut(pkg, &[1001, 1002, 1003, 1004]);
 }
 
 #[test]
 fn a_kept_hearth_warms_the_kitchen_without_smoke() {
+    // The house shut up for the night: with its door open, the hearth's warmth would go out into
+    // the yard (Amendment A-37).
     let kitchen_after_six_hours = |kept: bool| {
         let mut pkg = ashford(60);
+        reference::shut(&mut pkg, &reference::ALICE_OUTER);
         if kept {
             pkg.fires.push((HEARTH, 3_000, true));
         }

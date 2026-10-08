@@ -70,9 +70,8 @@ fn watch(city: &mut City, who: u64, ticks: u64) -> Vec<Decision> {
 fn erin_comes_in_from_the_cold() {
     let mut city = City::from(still());
     let choices = watch(&mut city, ERIN, 36 * HOUR);
-    // One choice in a day and a half: toward dawn, as the coldest of the night sets in (the air is
-    // coldest at five: Amendment A-35), she makes for the kitchen she remembers warm.
-    assert_eq!(choices.len(), 1, "{choices:?}");
+    // Toward dawn, as the coldest of the night sets in (the air is coldest at five: Amendment
+    // A-35), she makes for the kitchen she remembers warm.
     let choice = &choices[0];
     assert_eq!((choice.goal, choice.reason), (KITCHEN, REASON_WARMTH));
     assert!(choice.score > 0);
@@ -81,8 +80,15 @@ fn erin_comes_in_from_the_cold() {
         "decided at hour {}",
         choice.tick / HOUR
     );
-    // She went in, and having arrived, let the goal go — and stayed, warmer inside.
-    assert_eq!(city.room_of(ERIN), KITCHEN);
+    // But its front door has stood open to the night, and the kitchen's warmth has gone out of
+    // it, and up the stair (Amendment A-37). Finding it so, she climbs to the bedroom, whose
+    // window is shut — and there she stays, warmer.
+    assert!(choices.len() <= 2, "{choices:?}");
+    if let Some(next) = choices.get(1) {
+        assert_eq!((next.goal, next.reason), (BEDROOM, REASON_WARMTH));
+    }
+    let last = choices.last().unwrap().goal;
+    assert_eq!(city.room_of(ERIN), last);
     assert_eq!(own(&city, ERIN, GOAL), None);
 }
 
@@ -119,7 +125,8 @@ fn erin_opens_the_shut_door_that_stands_in_her_way() {
     }
     assert!(approached, "she went to the door");
     assert_eq!(city.read(DOOR_OUT, PORTAL_OPEN), Some(Value::Bool(true)));
-    assert_eq!(city.room_of(ERIN), KITCHEN);
+    // In, and up to the bedroom if the kitchen has grown cold with the door she opened.
+    assert!([KITCHEN, BEDROOM].contains(&city.room_of(ERIN)));
 }
 
 #[test]

@@ -708,6 +708,8 @@ Instead it provides the shared context upon which specialized systems operate.
 
 *As built (Amendment A-36):* the wind blows down the difference in neighbouring climates' pressure brought to sea level, so it follows the weather, not the lie of the land. Each climate's weather mixes slowly with its neighbours' and rides the wind into the climate it blows toward, so a cold spell on the moor is felt in the valley downwind.
 
+*As built (Amendment A-37):* air trades through every open opening, by its size and the draught through it. An open door lets the night into a room; a hearth's warmth climbs an open stair; smoke drifts from room to room, and from a fire in a still yard in at an open door, until the wind carries it off.
+
 ---
 
 # 1.11 Physical Constraints

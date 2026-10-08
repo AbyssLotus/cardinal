@@ -219,13 +219,17 @@ fn indoors_is_lit_only_through_its_openings() {
 #[test]
 fn indoor_air_follows_the_outdoors_slowly_and_stone_slowest() {
     // The day and night alone, with walls between the yard and two rooms: Alice's timber
-    // kitchen and the manor's granite hall. Measured on the third day, once both have settled
+    // kitchen and the manor's granite hall, each house shut up — an open door would let the
+    // yard's air straight in (Amendment A-37). Measured on the third day, once both have settled
     // into the rhythm. Each lags the yard by the world's four-hour coupling, stretched by the
     // heat its walls store per cubic metre (Amendment A-6) — granite's nearly twice timber's.
     let rooms = [VALE, KITCHEN, HALL];
     let mut days: [Vec<i64>; 3] = Default::default();
+    let mut pkg = with_tick_seconds(600);
+    reference::shut(&mut pkg, &reference::ALICE_OUTER);
+    reference::shut(&mut pkg, &[1101, 1102, 1107]);
     isolated(
-        with_tick_seconds(600),
+        pkg,
         &["physical.diurnal_cycle", "physical.shelter"],
         3 * 144,
         |t, s| {
@@ -240,12 +244,13 @@ fn indoor_air_follows_the_outdoors_slowly_and_stone_slowest() {
     let peak = |v: &[i64]| v.iter().enumerate().max_by_key(|(_, t)| **t).unwrap().0 as i64;
     let [vale, kitchen, hall] = &days;
     // The yard swings the full 5 °C, coldest at five and warmest at three (Amendment A-35). The
-    // kitchen follows with 2.07 °C, peaking 4 h 40 min after the yard; the granite hall with
-    // 1.64 °C, 5 h 30 min after.
-    assert_eq!([swing(vale), swing(kitchen), swing(hall)], [500, 207, 164]);
+    // kitchen follows with 1.53 °C, peaking 5 h 10 min after the yard; the granite hall with
+    // 1.19 °C, 6 h 30 min after — each also trading air up and down its stairs with the rooms
+    // above and below, the kitchen with a granite cellar.
+    assert_eq!([swing(vale), swing(kitchen), swing(hall)], [500, 153, 119]);
     assert_eq!(
         [peak(kitchen) - peak(vale), peak(hall) - peak(vale)],
-        [28, 33]
+        [31, 39]
     );
 }
 

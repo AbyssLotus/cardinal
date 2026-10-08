@@ -102,6 +102,9 @@ diurnal_coldest_seconds = 18000     # coldest about dawn, at five
 diurnal_warmest_seconds = 54000     # warmest at three in the afternoon
 climate_mixing_seconds = 172800     # neighbouring climates' weather mixes over a couple of days (A-36)
 front_distance_cm = 2000000         # and the wind carries it the 20 km from one to the next
+opening_air_speed_cm_s = 5          # air trades through an open doorway at 5 cm/s each way (A-37)
+draught_percent = 1000              # and a tenth of the wind outside blows through it
+open_air_height_cm = 1000           # smoke over open ground fills the air ten metres up
 
 [rules.living]
 metabolism_step_seconds = 60
@@ -474,6 +477,7 @@ part_below = 3000                   # both this cool: they part
 # ---- Bodies ------------------------------------------------------------------------------
 [bodies]
 # entity = half_width, half_depth, height
+100 = 2000, 1500, 0     # Alice's yard: 40 m x 30 m of open ground, the house standing in it (A-37)
 102 = 500, 500, 280     # Alice's rooms: 10 m x 10 m, 2.8 m high
 103 = 500, 500, 280
 104 = 500, 500, 280

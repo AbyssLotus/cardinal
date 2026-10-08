@@ -409,6 +409,11 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             fog_wind_below_cm_s: r.fog_wind_below_cm_s,
             humidity_per_degree: r.humidity_per_degree,
         },
+        air: physical::air::AirRules {
+            opening_speed_cm_s: r.opening_air_speed_cm_s,
+            draught: r.draught_percent,
+            open_air_height_cm: r.open_air_height_cm,
+        },
         calendar: physical::calendar::Calendar {
             day_ms: package.clock.day_seconds.saturating_mul(1000),
             year_days: r.year_days,

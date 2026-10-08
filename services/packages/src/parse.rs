@@ -133,6 +133,9 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut diurnal_warmest_seconds: Option<u64> = None;
     let mut climate_mixing_seconds: Option<u64> = None;
     let mut front_distance_cm: Option<i64> = None;
+    let mut opening_air_speed_cm_s: Option<i64> = None;
+    let mut draught_percent: Option<i64> = None;
+    let mut open_air_height_cm: Option<i64> = None;
     let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
     let mut latitudes: Vec<(u64, i64)> = Vec::new();
     let mut humidities: Vec<(u64, i64)> = Vec::new();
@@ -407,6 +410,11 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     climate_mixing_seconds = Some(parse_num(value, line_no)?)
                 }
                 "front_distance_cm" => front_distance_cm = Some(parse_num(value, line_no)?),
+                "opening_air_speed_cm_s" => {
+                    opening_air_speed_cm_s = Some(parse_num(value, line_no)?)
+                }
+                "draught_percent" => draught_percent = Some(parse_num(value, line_no)?),
+                "open_air_height_cm" => open_air_height_cm = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -1068,6 +1076,12 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "rules.physical.climate_mixing_seconds",
         )?,
         front_distance_cm: require(front_distance_cm, "rules.physical.front_distance_cm")?,
+        opening_air_speed_cm_s: require(
+            opening_air_speed_cm_s,
+            "rules.physical.opening_air_speed_cm_s",
+        )?,
+        draught_percent: require(draught_percent, "rules.physical.draught_percent")?,
+        open_air_height_cm: require(open_air_height_cm, "rules.physical.open_air_height_cm")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -1805,6 +1819,9 @@ diurnal_coldest_seconds = 0
 diurnal_warmest_seconds = 43200
 climate_mixing_seconds = 0
 front_distance_cm = 0
+opening_air_speed_cm_s = 5
+draught_percent = 1000
+open_air_height_cm = 1000
 [regions]
 1 = 1500
 ";
