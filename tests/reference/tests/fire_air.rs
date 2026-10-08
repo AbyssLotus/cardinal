@@ -98,6 +98,8 @@ fn smoke_blinds_and_chokes() {
 fn the_wind_fans_a_fire_in_the_open() {
     let fiercest = |wind: i64| {
         let mut pkg = ashford(60);
+        // Steady weather: still air, but for the storm (Amendment A-36).
+        pkg.physical_rules.pressure_variability = 0;
         if wind > 0 {
             pkg.storms.push((VALE, 0, 2, wind));
         }
@@ -110,10 +112,9 @@ fn the_wind_fans_a_fire_in_the_open() {
         }
         most
     };
-    // Straw burns to 95% of full; the Vale's own breeze fans it a little past that, a 10 m/s
-    // wind all the way.
-    let breeze = fiercest(0);
+    // Straw burns to 95% of full in still air; a 10 m/s wind fans it to full.
+    let still = fiercest(0);
     let windy = fiercest(1_000);
-    assert!(breeze < 10_000, "in a breeze, {breeze}");
+    assert_eq!(still, 9_500, "in still air");
     assert_eq!(windy, 10_000, "fanned, it burns at full");
 }

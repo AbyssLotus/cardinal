@@ -21,12 +21,13 @@ const SOUTHFEN: u64 = 3;
 /// Ten-minute ticks: six to the hour.
 const HOUR: u64 = 6;
 
-/// Ashford without minds at ten-minute ticks, with steady weather and the Vale's air at
-/// `humidity`.
+/// Ashford without minds at ten-minute ticks, with steady weather — and so still air (Amendment
+/// A-36) — and the Vale's air at `humidity`.
 fn ashford(humidity: i64) -> WorldPackage {
     let mut pkg = without_minds(with_tick_seconds(600));
     pkg.physical_rules.temperature_variability_centi_c = 0;
     pkg.physical_rules.humidity_variability = 0;
+    pkg.physical_rules.pressure_variability = 0;
     pkg.physical_rules.humidity_baseline = humidity;
     pkg
 }

@@ -706,6 +706,8 @@ Instead it provides the shared context upon which specialized systems operate.
 
 *As built (Amendment A-35):* the air is coldest about dawn and warmest in the afternoon, as the world declares. Each climate has its own normal humidity. Cloud gathers in humid air, dims the day, and holds back the day's swing. Saturated air rains, and below the snow line it snows. The air near the ground is damper as it cools, and in still air near saturation fog lies, shortening sight as smoke does.
 
+*As built (Amendment A-36):* the wind blows down the difference in neighbouring climates' pressure brought to sea level, so it follows the weather, not the lie of the land. Each climate's weather mixes slowly with its neighbours' and rides the wind into the climate it blows toward, so a cold spell on the moor is felt in the valley downwind.
+
 ---
 
 # 1.11 Physical Constraints

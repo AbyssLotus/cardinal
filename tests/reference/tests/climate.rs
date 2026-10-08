@@ -11,7 +11,8 @@ use kernel::system::{CommittedView, System};
 use kernel::tick::run_tick;
 use physical::climate::ambient_temperature;
 use physical::schema::{
-    ANOMALY_SCALE, HUMIDITY, ILLUMINATION, PRESSURE, TEMPERATURE, TEMPERATURE_ANOMALY, WIND_TOWARD,
+    ANOMALY_SCALE, HUMIDITY, ILLUMINATION, PRESSURE, TEMPERATURE, TEMPERATURE_ANOMALY, WIND_SPEED,
+    WIND_TOWARD,
 };
 use physical::PhysicalDomain;
 use reference::id::*;
@@ -249,21 +250,21 @@ fn indoor_air_follows_the_outdoors_slowly_and_stone_slowest() {
 }
 
 #[test]
-fn pressure_falls_with_height_and_the_wind_blows_toward_the_moor() {
-    let mut city = City::from(without_minds(with_tick_seconds(600)));
+fn pressure_falls_with_height_but_height_alone_moves_no_air() {
+    // Steady weather: no climate's pressure departs from its normal.
+    let mut pkg = without_minds(with_tick_seconds(600));
+    pkg.physical_rules.pressure_variability = 0;
+    let mut city = City::from(pkg);
     city.run(3);
     let p = |id| city.int(id, PRESSURE).unwrap();
     // 1 decapascal per metre: Southfen (5 m) > the Vale (50 m) > Highmoor (400 m).
     assert!(p(SOUTHFEN) > p(VALE) && p(VALE) > p(HIGHMOOR));
-    // Wind runs down the gradient: out of the Vale toward Highmoor; out of Southfen into the Vale.
-    assert_eq!(
-        city.read(VALE, WIND_TOWARD),
-        Some(kernel::value::Value::Entity(e(HIGHMOOR)))
-    );
-    assert_eq!(
-        city.read(SOUTHFEN, WIND_TOWARD),
-        Some(kernel::value::Value::Entity(e(VALE)))
-    );
+    // But brought to sea level they are the same, and the air is still (Amendment A-36): the
+    // wind follows the weather, not the lie of the land.
+    for id in OUTDOOR {
+        assert_eq!(city.int(id, WIND_SPEED), Some(0), "{id}");
+        assert_eq!(city.read(id, WIND_TOWARD), None, "{id}");
+    }
     // And humidity stays within its range.
     for id in OUTDOOR {
         let h = city.int(id, HUMIDITY).unwrap();

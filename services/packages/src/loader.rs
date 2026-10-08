@@ -349,7 +349,11 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
         pressure_sea_level: r.pressure_sea_level,
         pressure_elevation_factor: r.pressure_elevation_factor,
         pressure_variability: r.pressure_variability,
-        wind_gradient_divisor: r.wind_gradient_divisor,
+        wind_per_decapascal: r.wind_per_decapascal,
+        fronts: physical::systems::Fronts {
+            mixing_ms: r.climate_mixing_seconds.saturating_mul(1000),
+            distance_cm: r.front_distance_cm,
+        },
         fall_danger_per_meter: r.fall_danger_per_meter,
         thermal_mass_reference: r.thermal_mass_reference,
         gravity_cm_s2: r.gravity_cm_s2,

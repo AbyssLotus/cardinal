@@ -67,6 +67,9 @@ const TEMPERATURE_W: &[FactType] = &[TEMPERATURE];
 const WEATHER_READS: &[FactType] = &[
     TEMPERATURE,
     TEMPERATURE_ANOMALY,
+    ADJACENT_TO,
+    WIND_TOWARD,
+    WIND_SPEED,
     EXPOSURE,
     ENCLOSED,
     MADE_OF,
@@ -88,12 +91,22 @@ const ILLUMINATION_READS: &[FactType] = &[
     BODY_SIZE,
 ];
 const ILLUMINATION_W: &[FactType] = &[ILLUMINATION];
-const PRESSURE_READS: &[FactType] = &[TEMPERATURE, PRESSURE_ANOMALY, ELEVATION, EXPOSURE, ENCLOSED];
+const PRESSURE_READS: &[FactType] = &[
+    TEMPERATURE,
+    PRESSURE_ANOMALY,
+    ELEVATION,
+    EXPOSURE,
+    ENCLOSED,
+    ADJACENT_TO,
+    WIND_TOWARD,
+    WIND_SPEED,
+];
 const PRESSURE_WRITES: &[FactType] = &[PRESSURE, PRESSURE_ANOMALY];
 const WIND_READS: &[FactType] = &[
     TEMPERATURE,
     ADJACENT_TO,
     PRESSURE,
+    ELEVATION,
     EXPOSURE,
     ENCLOSED,
     crate::schema::STORM,
@@ -293,6 +306,70 @@ fn anomaly_of(view: &dyn CommittedView, region: EntityId, fact: FactType) -> i64
         .unwrap_or(0)
 }
 
+/// How weather passes between neighbouring climates (Amendment A-36), world rules: each
+/// climate's weather — its departures from normal temperature, humidity, and pressure — mixes
+/// with its neighbours' with a time constant of `mixing_ms`, and the wind blowing into it from a
+/// neighbour carries that neighbour's weather across `distance_cm`, the distance between their
+/// middles. Zero turns either off.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Fronts {
+    /// The time constant of mixing between neighbours, in milliseconds.
+    pub mixing_ms: u64,
+    /// How far the wind carries weather from a neighbour's middle to this climate's, in
+    /// centimetres.
+    pub distance_cm: i64,
+}
+
+/// Fixed-point scale of [`Fronts::mix`]'s weights.
+const MIX_ONE: i128 = 1 << 30;
+
+impl Fronts {
+    /// `region`'s committed anomaly of `fact`, mixed over a step of `dt_ms` with its neighbours'
+    /// (Amendment A-36): a weighted mean, its own at weight one, each neighbouring climate's at
+    /// the share of the step's mixing and of the wind it blows this way. Implicit in its own value
+    /// — a mean always lies between what it averages — so stable at any step length.
+    fn mix(&self, view: &dyn CommittedView, region: EntityId, fact: FactType, dt_ms: u64) -> i64 {
+        let own = anomaly_of(view, region, fact);
+        if self.mixing_ms == 0 && self.distance_cm <= 0 {
+            return own;
+        }
+        let dt = dt_ms as i128;
+        let mut sum = own as i128 * MIX_ONE;
+        let mut weight = MIX_ONE;
+        let mut neighbours: Vec<EntityId> = view
+            .read_all(FactKey::new(region, ADJACENT_TO))
+            .into_iter()
+            .filter_map(|f| match f.value {
+                Value::Entity(n) => Some(n),
+                _ => None,
+            })
+            .filter(|n| {
+                view.read(FactKey::new(*n, TEMPERATURE)).is_some() && !is_sheltered(view, *n)
+            })
+            .collect();
+        neighbours.sort_unstable();
+        neighbours.dedup();
+        for n in neighbours {
+            let mut w: i128 = 0;
+            if self.mixing_ms > 0 {
+                w += dt * MIX_ONE / self.mixing_ms as i128;
+            }
+            let toward = view.read(FactKey::new(n, WIND_TOWARD)).map(|f| f.value);
+            if self.distance_cm > 0 && toward == Some(Value::Entity(region)) {
+                let wind = view
+                    .read(FactKey::new(n, WIND_SPEED))
+                    .and_then(|f| f.value.as_int())
+                    .unwrap_or(0)
+                    .max(0) as i128;
+                w += wind * dt * MIX_ONE / (1000 * self.distance_cm as i128);
+            }
+            sum += w * anomaly_of(view, n, fact) as i128;
+            weight += w;
+        }
+        div_round(sum, weight) as i64
+    }
+}
+
 /// A deterministic day/night temperature swing (Vol. III Ch. 1 §1.10) for every region —
 /// damped by the region's exposure and its thermal mass (§1.9).
 ///
@@ -379,6 +456,7 @@ pub struct TemperatureWeather {
     step: Step,
     weather: Weather,
     thermal_mass_reference: i64,
+    fronts: Fronts,
 }
 
 impl TemperatureWeather {
@@ -390,11 +468,13 @@ impl TemperatureWeather {
         spread_centi_c: i64,
         memory_ms: u64,
         thermal_mass_reference: i64,
+        fronts: Fronts,
     ) -> Self {
         Self {
             step,
             weather: Weather::new(spread_centi_c, memory_ms, step.dt_ms),
             thermal_mass_reference,
+            fronts,
         }
     }
 }
@@ -416,7 +496,11 @@ impl System for TemperatureWeather {
         let mut out = Vec::new();
         for region in regions(view) {
             let before = anomaly_of(view, region, TEMPERATURE_ANOMALY);
-            let after = self.weather.step(before, &mut ctx.rng(region.raw()));
+            // Mixed with the neighbours' weather first (Amendment A-36).
+            let mixed = self
+                .fronts
+                .mix(view, region, TEMPERATURE_ANOMALY, self.step.dt_ms);
+            let after = self.weather.step(mixed, &mut ctx.rng(region.raw()));
             let exposure = exposure_of(view, region);
             let mass = thermal_damping(view, region, self.thermal_mass_reference);
             let felt = |anomaly| attenuate(attenuate(anomaly_level(anomaly), exposure), mass);
@@ -680,6 +764,7 @@ pub struct Precipitation {
     sky: SkyRules,
     curve: DayCurve,
     thermal_mass_reference: i64,
+    fronts: Fronts,
 }
 
 impl Precipitation {
@@ -697,6 +782,7 @@ impl Precipitation {
         sky: SkyRules,
         curve: DayCurve,
         thermal_mass_reference: i64,
+        fronts: Fronts,
     ) -> Self {
         Self {
             clock,
@@ -706,6 +792,7 @@ impl Precipitation {
             sky,
             curve,
             thermal_mass_reference,
+            fronts,
         }
     }
 
@@ -741,6 +828,8 @@ impl Precipitation {
 const SKY_READS: &[FactType] = &[
     TEMPERATURE,
     HUMIDITY_ANOMALY,
+    ADJACENT_TO,
+    WIND_TOWARD,
     EXPOSURE,
     ENCLOSED,
     MADE_OF,
@@ -788,8 +877,11 @@ impl System for Precipitation {
         let mut out = Vec::new();
         for region in regions(view) {
             let exposure = exposure_of(view, region);
-            let before = anomaly_of(view, region, HUMIDITY_ANOMALY);
-            let after = self.weather.step(before, &mut ctx.rng(region.raw()));
+            // Mixed with the neighbours' weather first (Amendment A-36).
+            let mixed = self
+                .fronts
+                .mix(view, region, HUMIDITY_ANOMALY, self.step.dt_ms);
+            let after = self.weather.step(mixed, &mut ctx.rng(region.raw()));
             out.push(Proposal::new(
                 self.id(),
                 FactKey::new(region, HUMIDITY_ANOMALY),
@@ -903,6 +995,7 @@ pub struct PressureSystem {
     sea_level: i64,
     elevation_factor: i64,
     weather: Weather,
+    fronts: Fronts,
 }
 
 impl PressureSystem {
@@ -915,12 +1008,14 @@ impl PressureSystem {
         elevation_factor: i64,
         spread: i64,
         memory_ms: u64,
+        fronts: Fronts,
     ) -> Self {
         Self {
             step,
             sea_level,
             elevation_factor,
             weather: Weather::new(spread, memory_ms, step.dt_ms),
+            fronts,
         }
     }
 
@@ -950,8 +1045,11 @@ impl System for PressureSystem {
                 .read(FactKey::new(region, ELEVATION))
                 .and_then(|f| f.value.as_int())
                 .unwrap_or(0);
-            let before = anomaly_of(view, region, PRESSURE_ANOMALY);
-            let after = self.weather.step(before, &mut ctx.rng(region.raw()));
+            // Mixed with the neighbours' weather first (Amendment A-36).
+            let mixed = self
+                .fronts
+                .mix(view, region, PRESSURE_ANOMALY, self.step.dt_ms);
+            let after = self.weather.step(mixed, &mut ctx.rng(region.raw()));
             let level = self.baseline(elevation)
                 + attenuate(anomaly_level(after), exposure_of(view, region));
             out.push(Proposal::new(
@@ -983,7 +1081,8 @@ impl System for PressureSystem {
 pub struct WindSystem {
     clock: SimClock,
     step: Step,
-    gradient_divisor: i64,
+    per_decapascal: i64,
+    elevation_factor: i64,
     max_wind: i64,
     gale: Gale,
 }
@@ -999,23 +1098,41 @@ pub struct Gale {
 }
 
 impl WindSystem {
-    /// Configure wind. `gradient_divisor` scales speed per unit pressure difference (larger =
-    /// gentler); `max_wind` clamps the speed (world-package rules). Wind is a function of the
-    /// current pressure field, not a rate, so it simply steps with the rest of the environment.
+    /// Configure wind: `per_decapascal` cm/s for each decapascal of difference between
+    /// neighbours' pressure brought to the datum — `elevation_factor` decapascals for each metre
+    /// of height, as pressure falls (Amendment A-36) — clamped at `max_wind` (world-package rules).
+    /// Wind is a function of the current pressure field, not a rate, so it simply steps with the
+    /// rest of the environment.
     pub const fn new(
         clock: SimClock,
         step: Step,
-        gradient_divisor: i64,
+        per_decapascal: i64,
+        elevation_factor: i64,
         max_wind: i64,
         gale: Gale,
     ) -> Self {
         Self {
             clock,
             step,
-            gradient_divisor,
+            per_decapascal,
+            elevation_factor,
             max_wind,
             gale,
         }
+    }
+
+    /// `region`'s pressure brought down to the datum: what it would be at sea level. Height alone
+    /// lowers pressure without moving air; only a difference of this drives the wind
+    /// (Amendment A-36).
+    fn at_datum(&self, view: &dyn CommittedView, region: EntityId) -> Option<i64> {
+        let pressure = view
+            .read(FactKey::new(region, PRESSURE))
+            .and_then(|f| f.value.as_int())?;
+        let elevation = view
+            .read(FactKey::new(region, ELEVATION))
+            .and_then(|f| f.value.as_int())
+            .unwrap_or(0);
+        Some(pressure + elevation / 100 * self.elevation_factor)
     }
 }
 
@@ -1035,10 +1152,7 @@ impl System for WindSystem {
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let mut out = Vec::new();
         for region in regions(view) {
-            let my_pressure = match view
-                .read(FactKey::new(region, PRESSURE))
-                .and_then(|f| f.value.as_int())
-            {
+            let my_pressure = match self.at_datum(view, region) {
                 Some(p) => p,
                 // No committed pressure yet (e.g. the first tick): calm, and nothing to write.
                 None => continue,
@@ -1049,10 +1163,7 @@ impl System for WindSystem {
             let mut best: Option<(EntityId, i64)> = None;
             for f in view.read_all(FactKey::new(region, ADJACENT_TO)) {
                 if let Value::Entity(neighbour) = f.value {
-                    if let Some(np) = view
-                        .read(FactKey::new(neighbour, PRESSURE))
-                        .and_then(|nf| nf.value.as_int())
-                    {
+                    if let Some(np) = self.at_datum(view, neighbour) {
                         let better = match best {
                             None => true,
                             Some((bn, bp)) => np < bp || (np == bp && neighbour.raw() < bn.raw()),
@@ -1085,7 +1196,7 @@ impl System for WindSystem {
             let storm = storm.max(gale);
             match best {
                 Some((neighbour, np)) if np < my_pressure => {
-                    let speed = ((my_pressure - np) / self.gradient_divisor.max(1))
+                    let speed = ((my_pressure - np).saturating_mul(self.per_decapascal))
                         .clamp(0, self.max_wind)
                         .max(storm);
                     out.push(Proposal::new(

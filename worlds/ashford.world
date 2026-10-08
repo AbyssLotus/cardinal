@@ -45,7 +45,7 @@ humidity_variability = 800
 pressure_sea_level = 10130
 pressure_elevation_factor = 1
 pressure_variability = 60
-wind_gradient_divisor = 10
+wind_per_decapascal = 3             # 3 cm/s of wind per decapascal between neighbours at sea level (A-36)
 fall_danger_per_meter = 1500
 thermal_mass_reference = 2000
 gravity_cm_s2 = 981
@@ -100,6 +100,8 @@ fog_wind_below_cm_s = 300           # in air stiller than 3 m/s
 humidity_per_degree = 600           # 6% damper for each degree cooler: damp dawns, dry afternoons
 diurnal_coldest_seconds = 18000     # coldest about dawn, at five
 diurnal_warmest_seconds = 54000     # warmest at three in the afternoon
+climate_mixing_seconds = 172800     # neighbouring climates' weather mixes over a couple of days (A-36)
+front_distance_cm = 2000000         # and the wind carries it the 20 km from one to the next
 
 [rules.living]
 metabolism_step_seconds = 60

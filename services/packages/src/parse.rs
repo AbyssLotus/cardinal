@@ -79,7 +79,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut pressure_sea_level: Option<i64> = None;
     let mut pressure_elevation_factor: Option<i64> = None;
     let mut pressure_variability: Option<i64> = None;
-    let mut wind_gradient_divisor: Option<i64> = None;
+    let mut wind_per_decapascal: Option<i64> = None;
     let mut fall_danger_per_meter: Option<i64> = None;
     let mut thermal_mass_reference: Option<i64> = None;
     let mut gravity_cm_s2: Option<i64> = None;
@@ -131,6 +131,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut humidity_per_degree: Option<i64> = None;
     let mut diurnal_coldest_seconds: Option<u64> = None;
     let mut diurnal_warmest_seconds: Option<u64> = None;
+    let mut climate_mixing_seconds: Option<u64> = None;
+    let mut front_distance_cm: Option<i64> = None;
     let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
     let mut latitudes: Vec<(u64, i64)> = Vec::new();
     let mut humidities: Vec<(u64, i64)> = Vec::new();
@@ -330,7 +332,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     pressure_elevation_factor = Some(parse_num(value, line_no)?)
                 }
                 "pressure_variability" => pressure_variability = Some(parse_num(value, line_no)?),
-                "wind_gradient_divisor" => wind_gradient_divisor = Some(parse_num(value, line_no)?),
+                "wind_per_decapascal" => wind_per_decapascal = Some(parse_num(value, line_no)?),
                 "fall_danger_per_meter" => fall_danger_per_meter = Some(parse_num(value, line_no)?),
                 "thermal_mass_reference" => {
                     thermal_mass_reference = Some(parse_num(value, line_no)?)
@@ -401,6 +403,10 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "diurnal_warmest_seconds" => {
                     diurnal_warmest_seconds = Some(parse_num(value, line_no)?)
                 }
+                "climate_mixing_seconds" => {
+                    climate_mixing_seconds = Some(parse_num(value, line_no)?)
+                }
+                "front_distance_cm" => front_distance_cm = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -975,10 +981,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "rules.physical.pressure_elevation_factor",
         )?,
         pressure_variability: require(pressure_variability, "rules.physical.pressure_variability")?,
-        wind_gradient_divisor: require(
-            wind_gradient_divisor,
-            "rules.physical.wind_gradient_divisor",
-        )?,
+        wind_per_decapascal: require(wind_per_decapascal, "rules.physical.wind_per_decapascal")?,
         fall_danger_per_meter: require(
             fall_danger_per_meter,
             "rules.physical.fall_danger_per_meter",
@@ -1060,6 +1063,11 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             diurnal_warmest_seconds,
             "rules.physical.diurnal_warmest_seconds",
         )?,
+        climate_mixing_seconds: require(
+            climate_mixing_seconds,
+            "rules.physical.climate_mixing_seconds",
+        )?,
+        front_distance_cm: require(front_distance_cm, "rules.physical.front_distance_cm")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -1740,7 +1748,7 @@ humidity_variability = 800
 pressure_sea_level = 10130
 pressure_elevation_factor = 1
 pressure_variability = 60
-wind_gradient_divisor = 10
+wind_per_decapascal = 1
 fall_danger_per_meter = 1500
 thermal_mass_reference = 1000
 gravity_cm_s2 = 981
@@ -1795,6 +1803,8 @@ fog_wind_below_cm_s = 300
 humidity_per_degree = 400
 diurnal_coldest_seconds = 0
 diurnal_warmest_seconds = 43200
+climate_mixing_seconds = 0
+front_distance_cm = 0
 [regions]
 1 = 1500
 ";

@@ -344,7 +344,7 @@ pub struct PhysicalRules {
     /// Typical size of weather's departure from baseline pressure, in decapascals.
     pub pressure_variability: i64,
     /// Divisor scaling wind speed per unit pressure gradient (larger = gentler wind).
-    pub wind_gradient_divisor: i64,
+    pub wind_per_decapascal: i64,
     /// Danger points added per metre of a portal's height above the ground (fall danger).
     pub fall_danger_per_meter: i64,
     /// Thermal mass — heat stored per unit volume, kJ/(m³·K) — at which a region's temperature
@@ -459,6 +459,12 @@ pub struct PhysicalRules {
     pub diurnal_coldest_seconds: u64,
     /// When in the day the air is warmest, seconds after midnight.
     pub diurnal_warmest_seconds: u64,
+    /// How long neighbouring climates' weather takes to mix, the time constant in seconds
+    /// (Amendment A-36); zero, never.
+    pub climate_mixing_seconds: u64,
+    /// How far the wind carries weather between neighbouring climates' middles, centimetres; zero,
+    /// it carries none.
+    pub front_distance_cm: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).

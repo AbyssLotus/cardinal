@@ -103,8 +103,11 @@ pub struct PhysicalConfig {
     pub pressure_elevation_factor: i64,
     /// Typical size of weather's departure from baseline pressure, in decapascals.
     pub pressure_variability: i64,
-    /// Divisor scaling wind speed per unit pressure gradient (larger = gentler wind).
-    pub wind_gradient_divisor: i64,
+    /// Wind, in cm/s, for each decapascal of difference between neighbouring climates' pressure
+    /// brought to the datum (Amendment A-36).
+    pub wind_per_decapascal: i64,
+    /// How weather passes between neighbouring climates (Amendment A-36).
+    pub fronts: systems::Fronts,
     /// Danger points added per metre of a portal's height above the ground (fall danger).
     pub fall_danger_per_meter: i64,
     /// Thermal mass — heat stored per unit volume, kJ/(m³·K) — at which a region's temperature
@@ -378,6 +381,7 @@ impl Domain for PhysicalDomain {
                 c.temperature_variability_centi_c,
                 memory_ms,
                 c.thermal_mass_reference,
+                c.fronts,
             )),
             Box::new(systems::DayNightCycle::new(
                 c.clock,
@@ -402,6 +406,7 @@ impl Domain for PhysicalDomain {
                 c.sky,
                 c.day_curve(),
                 c.thermal_mass_reference,
+                c.fronts,
             )),
             Box::new(systems::PressureSystem::new(
                 step,
@@ -409,11 +414,13 @@ impl Domain for PhysicalDomain {
                 c.pressure_elevation_factor,
                 c.pressure_variability,
                 memory_ms,
+                c.fronts,
             )),
             Box::new(systems::WindSystem::new(
                 c.clock,
                 step,
-                c.wind_gradient_divisor,
+                c.wind_per_decapascal,
+                c.pressure_elevation_factor,
                 schema::MAX_WIND,
                 c.gale,
             )),

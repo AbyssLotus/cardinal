@@ -1307,3 +1307,48 @@ with perception and is left to it.
   and by then it is light enough to see the way in.
 
 **Rationale.** `docs/audits/environment.md` §4, slice 2.
+
+---
+
+## A-36 — Wind and fronts: weather between climates (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 ("wind flows": wind from the weather; weather carried between climates)
+- Vol. IV Ch. 2 §2.2 (world rules: `wind_per_decapascal` replaces `wind_gradient_divisor`;
+  `climate_mixing_seconds`, `front_distance_cm`)
+
+**Change.**
+- **Wind from pressure at sea level.** Before, wind blew down the difference in neighbouring
+  climates' raw pressure. Pressure falls with height, so the wind always blew uphill, toward the
+  moor, however the weather stood. Now each climate's pressure is brought to the datum (its
+  elevation times the world's pressure fall per metre, added back) before neighbours are
+  compared. Height alone moves no air; the wind follows the weather, toward the lowest
+  neighbour. Its speed is the world's `wind_per_decapascal` for each decapascal of difference.
+  Declared storms and brewed gales (A-29, A-33) still set a floor.
+- **Fronts.** Each climate's weather (its departures from normal temperature, humidity, and
+  pressure) is mixed, before each step of its weather, with its neighbouring climates'. Each
+  neighbour weighs in:
+  - by the step's share of `climate_mixing_seconds`: weather everywhere slowly mixes;
+  - and, if the neighbour's wind blows toward this climate, by how far that wind travels in the
+    step, against `front_distance_cm`: weather rides the wind downwind.
+
+  The mix is a weighted mean, the climate's own weather at weight one, so it is stable at any
+  step length. Only departures cross: each climate keeps its own normal, so a moor stays colder
+  than a valley, but a cold spell on the moor is felt downwind.
+
+**In Ashford** (3 cm/s per decapascal; weather mixing over two days; neighbours 20 km apart;
+`tests/reference/tests/fronts.rs`, `climate.rs`):
+- With steady weather, pressure still falls with height, Southfen to the Vale to Highmoor, and
+  the air is still everywhere.
+- A low 200 decapascals deep over Highmoor draws the Vale's air toward it at about 6 m/s, and the
+  moor is calm. A high blows off the moor into the Vale instead.
+- A spell 6 °C cold over the moor under a high rides the wind down into the Vale, taking more than
+  2 °C off its weather within half a day, and reaches the fens beyond, less. Under a low the wind
+  blows the other way, and the Vale feels less than 1 °C of it, by slow mixing alone. With
+  fronts turned off, neither feels any.
+- With Ashford's own weather the wind is now a breeze of a few metres a second that comes and
+  goes, not a steady 35 cm/s up toward the moor. Tests that need still air declare steady
+  weather.
+
+**Rationale.** `docs/audits/environment.md` §4, slice 3; and the wind's old flaw, found in the
+building.
