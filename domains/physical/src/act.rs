@@ -40,6 +40,8 @@ use std::collections::BTreeMap;
 const ARRIVAL_GAP_CM: i64 = 5;
 
 const ACT_READS: &[FactType] = &[
+    crate::schema::ACT_PICK_UP_TO,
+    crate::schema::YIELD_SIZE,
     crate::schema::MEND_MATERIAL,
     crate::schema::ACT_DIG,
     crate::schema::PIT,
@@ -95,6 +97,9 @@ const ACT_READS: &[FactType] = &[
     WHOLE_SHAPE,
 ];
 const ACT_WRITES: &[FactType] = &[
+    crate::schema::PICK_GOES,
+    crate::schema::PICK_ROOM,
+    crate::schema::ACT_PICK_UP_TO,
     crate::schema::MEND_MATERIAL,
     crate::schema::ACT_DIG,
     crate::schema::PIT,
@@ -196,6 +201,9 @@ pub struct StrikeRules {
     /// integrity, when the stuff worked is as hard as the tool (Amendment A-46); less, in
     /// proportion, for softer stuff.
     pub tool_wear: i64,
+    /// How long one go of work takes, in seconds: a blow, a handful, a spadeful (Amendment A-48).
+    /// Work is done for the tick's length, as many goes as fit.
+    pub go_seconds: i64,
 }
 
 /// A tool a go of work is done with, and how hard it is (Amendment A-46); `None`, a bare hand.
@@ -343,6 +351,53 @@ impl Act {
         best.map(Some)
     }
 
+    /// How many goes of work `body` gets through this tick (Amendment A-48): the tick's length
+    /// over a go's, dithered so no fraction is lost over many ticks.
+    fn goes(&self, ctx: &TickContext, body: EntityId) -> i64 {
+        let mut rng = ctx.rng(body.raw() ^ (1 << 62));
+        kernel::fixed::div_dither(
+            self.moves.clock.tick_ms() as i128,
+            self.strike.go_seconds.max(1) as i128 * 1000,
+            &mut rng,
+        ) as i64
+    }
+
+    /// The grams `body` holds (Amendment A-48): what it carries counts toward what it can.
+    fn held_g(view: &dyn CommittedView, body: EntityId) -> i64 {
+        crate::nearby::contents(view, body)
+            .into_iter()
+            .filter_map(|t| crate::materials::weight_g(view, t))
+            .sum()
+    }
+
+    /// How many more units of what `deposit` yields `body`'s hands have room for (Amendment
+    /// A-48), at most as many as its decider asked for.
+    fn room_for(&self, view: &dyn CommittedView, body: EntityId, deposit: EntityId) -> i64 {
+        let asked = view
+            .read(FactKey::new(body, crate::schema::ACT_PICK_UP_TO))
+            .and_then(|f| f.value.as_int())
+            .unwrap_or(i64::MAX);
+        let unit_g = view
+            .read(FactKey::new(deposit, crate::schema::YIELD_SIZE))
+            .and_then(|f| f.value.as_vec3())
+            .zip(
+                match view
+                    .read(FactKey::new(deposit, YIELD_MADE_OF))
+                    .map(|f| f.value)
+                {
+                    Some(Value::Entity(m)) => crate::materials::density(view, m),
+                    _ => None,
+                },
+            )
+            .map(|([hx, hy, h], density)| {
+                (2 * hx as i128 * 2 * hy as i128 * h as i128 * density as i128 / 1000) as i64
+            })
+            .unwrap_or(0);
+        let free = (self.carry_limit_g - Self::held_g(view, body)).max(0);
+        let fits = if unit_g > 0 { free / unit_g } else { i64::MAX };
+        fits.min(asked).max(0)
+    }
+
     /// What a go of work on stuff `worked` hard costs `tool` (Amendment A-46): integrity, by the
     /// world's rule, in proportion to how hard the stuff is against the tool. Worn to nothing, the
     /// tool is used up and gone — what was left of it spent, not left as wreckage.
@@ -352,13 +407,14 @@ impl Act {
         ctx: &TickContext,
         tool: Tool,
         worked: i64,
+        goes: i64,
     ) -> Vec<(EntityId, FactType, Change, &'static str)> {
         let Some((tool, hard)) = tool else {
             return Vec::new();
         };
         let mut rng = ctx.rng(tool.raw() ^ (1 << 63));
         let worn = kernel::fixed::div_dither(
-            self.strike.tool_wear as i128 * worked.max(0) as i128,
+            self.strike.tool_wear as i128 * worked.max(0) as i128 * goes.max(0) as i128,
             hard.max(1) as i128,
             &mut rng,
         ) as i64;
@@ -634,8 +690,9 @@ impl Act {
             || is_true(view, thing, ENCLOSED)
             || view.read(FactKey::new(thing, MOTION_TARGET)).is_some()
             || !self.within_reach(view, body, thing);
-        let bearable =
-            crate::materials::weight_g(view, thing).is_some_and(|g| g <= self.carry_limit_g);
+        // What it already carries counts (Amendment A-48).
+        let bearable = crate::materials::weight_g(view, thing)
+            .is_some_and(|g| g + Self::held_g(view, body) <= self.carry_limit_g);
         (unfit || !bearable).then_some(())
     }
 
@@ -1007,8 +1064,12 @@ impl System for Act {
                     succeeded = true;
                 }
             }
-            if let Some(thing) = entity_at(view, body, ACT_DROP) {
-                push(body, ACT_DROP, Change::Tombstone, "considered");
+            // Putting down: everything asked, in one go (Amendment A-48).
+            for asked in view.read_all(FactKey::new(body, ACT_DROP)) {
+                push(body, ACT_DROP, Change::Remove(asked.value), "considered");
+                let Value::Entity(thing) = asked.value else {
+                    continue;
+                };
                 let held = container_of(view, thing) == Some(body);
                 match container_of(view, body).filter(|_| held && handled.insert(thing)) {
                     Some(place) => {
@@ -1053,8 +1114,10 @@ impl System for Act {
                 if let Some(tool) = self.mend_tool(view, body, target) {
                     let kg = crate::fire::structure_kg(view, target, self.wall_thickness_cm).max(1);
                     let mut rng = ctx.rng(target.raw());
+                    // As many goes as the tick holds (Amendment A-48).
+                    let goes = self.goes(ctx, body);
                     let full = kernel::fixed::div_dither(
-                        self.mend_scale as i128 * 1000,
+                        self.mend_scale as i128 * 1000 * goes as i128,
                         kg as i128,
                         &mut rng,
                     ) as i64;
@@ -1092,7 +1155,7 @@ impl System for Act {
                         // The go wears the tool it was done with (Amendment A-46).
                         let resists =
                             crate::materials::structural_hardness(view, target).unwrap_or(0);
-                        for (e, fact, change, why) in self.wear(view, ctx, tool, resists) {
+                        for (e, fact, change, why) in self.wear(view, ctx, tool, resists, goes) {
                             push(e, fact, change, why);
                         }
                         let left = (stuff - grams_for(restored)).max(0) as i64;
@@ -1159,12 +1222,26 @@ impl System for Act {
                     Some((place, ground)) => match self.pit_at_hand(view, body, place) {
                         Some(pit) => match self.working_effort(view, body, pit) {
                             Some((effort, tool, worked)) => {
-                                push(body, PICKED, Change::Set(Value::Entity(pit)), "dug");
-                                push(body, PICK_EFFORT, Change::Set(Value::Int(effort)), "dug");
-                                for (e, fact, change, why) in self.wear(view, ctx, tool, worked) {
-                                    push(e, fact, change, why);
+                                let room = self.room_for(view, body, pit);
+                                if room == 0 {
+                                    refused = Some(body); // hands full
+                                } else {
+                                    let goes = self.goes(ctx, body);
+                                    for (fact, value) in [
+                                        (PICKED, Value::Entity(pit)),
+                                        (PICK_EFFORT, Value::Int(effort)),
+                                        (crate::schema::PICK_GOES, Value::Int(goes)),
+                                        (crate::schema::PICK_ROOM, Value::Int(room)),
+                                    ] {
+                                        push(body, fact, Change::Set(value), "dug");
+                                    }
+                                    for (e, fact, change, why) in
+                                        self.wear(view, ctx, tool, worked, goes)
+                                    {
+                                        push(e, fact, change, why);
+                                    }
+                                    succeeded = true;
                                 }
-                                succeeded = true;
                             }
                             None => refused = Some(pit),
                         },
@@ -1172,7 +1249,9 @@ impl System for Act {
                             let hard = crate::materials::hardness(view, ground).unwrap_or(0);
                             match self.effort_on(view, body, hard) {
                                 Some((effort, tool)) => {
-                                    for (e, fact, change, why) in self.wear(view, ctx, tool, hard) {
+                                    for (e, fact, change, why) in
+                                        self.wear(view, ctx, tool, hard, 1)
+                                    {
                                         push(e, fact, change, why);
                                     }
                                     let pit = ctx.new_entity();
@@ -1197,21 +1276,48 @@ impl System for Act {
                     },
                 }
             }
-            // Taking from a deposit (Amendments A-15, A-41): within reach, and with a hand or a
-            // tool hard enough for what it yields. The go's effort is reported with it.
+            // Taking from a deposit (Amendments A-15, A-41, A-48): within reach, and with a hand
+            // or a tool hard enough for what it yields. A go's effort, how many goes the tick
+            // held, and how many more units the hands have room for are reported with it.
             if let Some(deposit) = entity_at(view, body, ACT_PICK) {
                 push(body, ACT_PICK, Change::Tombstone, "considered");
                 match self.working_effort(view, body, deposit) {
+                    // As many goes as the tick holds, for no more than the hands have room for
+                    // (Amendment A-48); with no room, refused: the hands are full.
                     Some((effort, tool, worked)) if self.within_reach(view, body, deposit) => {
-                        push(body, PICKED, Change::Set(Value::Entity(deposit)), "picked");
-                        push(body, PICK_EFFORT, Change::Set(Value::Int(effort)), "picked");
-                        for (e, fact, change, why) in self.wear(view, ctx, tool, worked) {
-                            push(e, fact, change, why);
+                        let room = self.room_for(view, body, deposit);
+                        if room == 0 {
+                            refused = Some(body);
+                        } else {
+                            let goes = self.goes(ctx, body);
+                            for (fact, value) in [
+                                (PICKED, Value::Entity(deposit)),
+                                (PICK_EFFORT, Value::Int(effort)),
+                                (crate::schema::PICK_GOES, Value::Int(goes)),
+                                (crate::schema::PICK_ROOM, Value::Int(room)),
+                            ] {
+                                push(body, fact, Change::Set(value), "picked");
+                            }
+                            for (e, fact, change, why) in self.wear(view, ctx, tool, worked, goes) {
+                                push(e, fact, change, why);
+                            }
+                            succeeded = true;
                         }
-                        succeeded = true;
                     }
                     _ => refused = Some(deposit),
                 }
+            }
+            // A limit asked with the work lasts the go it was asked with (Amendment A-48).
+            if view
+                .read(FactKey::new(body, crate::schema::ACT_PICK_UP_TO))
+                .is_some()
+            {
+                push(
+                    body,
+                    crate::schema::ACT_PICK_UP_TO,
+                    Change::Tombstone,
+                    "considered",
+                );
             }
             match refused {
                 Some(what) => push(

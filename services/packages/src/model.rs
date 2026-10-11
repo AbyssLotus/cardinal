@@ -522,6 +522,8 @@ pub struct PhysicalRules {
     /// What a go of work costs the tool that does it, hundredths of a percent of its integrity,
     /// working stuff as hard as itself (Amendment A-46).
     pub tool_wear: i64,
+    /// How long one go of work takes, seconds: a blow, a handful, a spadeful (Amendment A-48).
+    pub go_seconds: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).

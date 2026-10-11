@@ -211,15 +211,23 @@ pub fn compose_intent(
     current: Option<Value>,
     changes: &[Change],
 ) -> Result<Resolved, ResolveError> {
+    compose_entity_ref(current, &fresh_wins(changes))
+}
+
+/// The changes to an intent that count this tick: a fresh wish asked in the very tick Physical
+/// Reality clears the old one stands, and the clearing gives way (Amendment A-9; for any intent,
+/// whatever it holds — a number, a yes — Amendment A-48).
+pub fn fresh_wins(changes: &[Change]) -> Vec<Change> {
     let wishes: Vec<Change> = changes
         .iter()
         .copied()
         .filter(|c| !matches!(c, Change::Tombstone))
         .collect();
-    if wishes.is_empty() || wishes.len() == changes.len() {
-        return compose_entity_ref(current, changes);
+    if wishes.is_empty() {
+        changes.to_vec()
+    } else {
+        wishes
     }
-    compose_entity_ref(current, &wishes)
 }
 
 /// Resolve a three-component fact — a position, a size, a motion target (Amendment A-3): at

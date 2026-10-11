@@ -140,24 +140,22 @@ fn worn(city: &City, thing: u64) -> i64 {
 
 #[test]
 fn a_tool_wears_with_each_go_and_faster_on_harder_stuff() {
-    // Ten goes of the hammer at the iron seam, and ten at the stand of timber. Ore is twice as
-    // hard as timber against iron: twice the wear.
-    let goes = |place: u64, at: [i64; 2], deposit: u64| {
+    // A minute of the hammer at the iron seam — twelve five-second blows (Amendment A-48) — and a
+    // minute at the stand of timber. Ore is twice as hard as timber against iron: twice the wear.
+    let a_minute = |place: u64, at: [i64; 2], deposit: u64| {
         let mut pkg = ashford();
         stand(&mut pkg, CAROL, place, at, true);
         let mut city = City::from(pkg);
-        for _ in 0..10 {
-            city.pick(CAROL, deposit);
-            city.run(2);
-        }
+        city.pick(CAROL, deposit);
+        city.run(3);
         worn(&city, HAMMER)
     };
-    let ore = goes(GALLERY, [300, 80], IRON_SEAM);
-    let timber = goes(WOOD, [500, 640], TIMBER_STAND);
+    let ore = a_minute(GALLERY, [300, 80], IRON_SEAM);
+    let timber = a_minute(WOOD, [500, 640], TIMBER_STAND);
     // The world's rule: 0.3% a go on stuff as hard as iron; ore is two-thirds as hard, timber a
     // third.
-    assert_eq!(ore, 10 * 30 * 6_000 / 9_000, "ore");
-    assert_eq!(timber, 10 * 30 * 3_000 / 9_000, "timber");
+    assert_eq!(ore, 12 * 30 * 6_000 / 9_000, "ore");
+    assert_eq!(timber, 12 * 30 * 3_000 / 9_000, "timber");
 }
 
 #[test]
@@ -278,8 +276,9 @@ fn a_millstone_worn_through_grinds_nothing() {
 #[test]
 fn bare_hands_mend_clay() {
     // The oven cracked, 3% of it; three lumps of clay beside it, fourteen kilos each. The baker,
-    // holding nothing, works them in by hand: a go restores about 1% of a three-tonne oven, the
-    // second what the clay left over allows, and the third is refused — the clay is gone.
+    // holding nothing, works them in by hand: a minute's mending — twelve goes (Amendment A-48) —
+    // would restore it all, and uses all the clay there is for what it allows; the next minute is
+    // refused, the clay gone.
     let mut pkg = ashford();
     stand(&mut pkg, BAKER, MILL, [-160, -160], false);
     lay(&mut pkg, 9_100, 3, CLAY, [10, 10, 20], MILL, [-150, -120]);
@@ -290,11 +289,9 @@ fn bare_hands_mend_clay() {
     }));
     city.run(2);
     assert_eq!(worn(&city, OVEN), 300);
-    for _ in 0..2 {
-        city.mend(BAKER, OVEN);
-        city.run(2);
-        assert_eq!(city.refused(BAKER), None, "by hand");
-    }
+    city.mend(BAKER, OVEN);
+    city.run(2);
+    assert_eq!(city.refused(BAKER), None, "by hand");
     // 43 kilos of clay in a 3,110-kilo oven: 1.39% of it.
     assert!(
         (159..=163).contains(&worn(&city, OVEN)),

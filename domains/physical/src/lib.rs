@@ -223,6 +223,8 @@ pub const RESTRICTED: &[FactType] = &[
     schema::CONSUMED,
     schema::PICKED,
     schema::PICK_EFFORT,
+    schema::PICK_GOES,
+    schema::PICK_ROOM,
     schema::PIT,
     schema::MEND_MATERIAL,
     schema::BROKEN,
@@ -355,6 +357,9 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_PICK
             || fact_type == schema::PICKED
             || fact_type == schema::PICK_EFFORT
+            || fact_type == schema::PICK_GOES
+            || fact_type == schema::PICK_ROOM
+            || fact_type == schema::ACT_PICK_UP_TO
             || fact_type == schema::MEND_MATERIAL
             || fact_type == schema::WEAR_PER_HOUR
             || fact_type == schema::GROUND
@@ -399,6 +404,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::IN_VIEW
             || fact_type == schema::STORM
             || fact_type == schema::FLOODS
+            || fact_type == schema::ACT_DROP
         {
             Cardinality::Many
         } else {
@@ -567,14 +573,20 @@ impl Domain for PhysicalDomain {
             composition::compose_segment_field(current, changes)
         } else if fact_type == schema::POSITION || fact_type == schema::WHOLE_SHAPE {
             composition::compose_vec3(current, changes, None)
-        } else if fact_type == schema::PAVED
-            || fact_type == schema::PIT
-            || fact_type == schema::ACT_DIG
-        {
+        } else if fact_type == schema::ACT_DIG {
+            composition::compose_bool(current, &composition::fresh_wins(changes))
+        } else if fact_type == schema::ACT_PICK_UP_TO {
+            let changes = composition::fresh_wins(changes);
+            composition::compose_bounded(current, &changes, 0, schema::MAX_SIZE)
+        } else if fact_type == schema::PAVED || fact_type == schema::PIT {
             composition::compose_bool(current, changes)
         } else if fact_type == schema::GROUND {
             composition::compose_entity_ref(current, changes)
-        } else if fact_type == schema::PICK_EFFORT || fact_type == schema::MEND_MATERIAL {
+        } else if fact_type == schema::PICK_EFFORT
+            || fact_type == schema::PICK_GOES
+            || fact_type == schema::PICK_ROOM
+            || fact_type == schema::MEND_MATERIAL
+        {
             composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
         } else if fact_type == schema::IMPACT {
             composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
@@ -653,7 +665,6 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_OPEN
             || fact_type == schema::ACT_CLOSE
             || fact_type == schema::ACT_TAKE
-            || fact_type == schema::ACT_DROP
             || fact_type == schema::ACT_CONSUME
             || fact_type == schema::ACT_ARRIVE
             || fact_type == schema::ACT_PICK
@@ -738,6 +749,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::IN_REGION
             || fact_type == schema::MADE_OF
             || fact_type == schema::IN_VIEW
+            || fact_type == schema::ACT_DROP
         {
             for v in values {
                 if !matches!(v, Value::Entity(_)) {

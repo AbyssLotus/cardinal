@@ -220,6 +220,9 @@ pub const ACT_TAKE: FactType = FactType::new("physical.act.take");
 pub const ACT_CONSUME: FactType = FactType::new("physical.act.consume");
 /// What to pick from (Amendment A-15).
 pub const ACT_PICK: FactType = FactType::new("physical.act.pick");
+/// How many units to bring to hand from a deposit, at most — **Physical Reality's** intent
+/// (Amendment A-48).
+pub const ACT_PICK_UP_TO: FactType = FactType::new("physical.act.pick_up_to");
 /// What to put down (Appendix A, Ruling 16).
 pub const ACT_DROP: FactType = FactType::new("physical.act.drop");
 /// What recipe to make — **Economy's** intent (Appendix A, Ruling 17).

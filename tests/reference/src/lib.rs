@@ -211,6 +211,7 @@ const FRONT_DOOR_WRITES: &[FactType] = &[
     physical::schema::ACT_DROP,
     physical::schema::ACT_CONSUME,
     physical::schema::ACT_PICK,
+    physical::schema::ACT_PICK_UP_TO,
     physical::schema::ACT_STRIKE,
     physical::schema::ACT_IGNITE,
     physical::schema::ACT_MEND,
@@ -428,21 +429,35 @@ impl City {
         self
     }
 
-    /// Ask `who` to put down `thing` where it stands.
+    /// Ask `who` to put down `thing` where it stands — one of the things it may put down in one
+    /// go (Amendment A-48).
     pub fn drop_(&mut self, who: u64, thing: u64) -> &mut Self {
-        self.order(who, physical::schema::ACT_DROP, Value::Entity(e(thing)));
+        self.orders.borrow_mut().push((
+            e(who),
+            physical::schema::ACT_DROP,
+            Change::Add(Value::Entity(e(thing))),
+        ));
         self
     }
 
     /// Ask `who` to dig the ground where they stand (Amendment A-42).
     pub fn dig(&mut self, who: u64) -> &mut Self {
         self.order(who, physical::schema::ACT_DIG, Value::Bool(true));
+        // A tick's digging, for one unit at most (Amendment A-48).
+        self.order(who, physical::schema::ACT_PICK_UP_TO, Value::Int(1));
         self
     }
 
-    /// Ask `who` to pick from `deposit` — a fruit tree (Amendment A-15).
+    /// Ask `who` to work at `deposit` — pick a fruit tree (Amendment A-15), work a seam — for a
+    /// tick, for one unit at most (Amendment A-48).
     pub fn pick(&mut self, who: u64, deposit: u64) -> &mut Self {
+        self.pick_up_to(who, deposit, 1)
+    }
+
+    /// Ask `who` to work at `deposit` for a tick, for at most `units` (Amendment A-48).
+    pub fn pick_up_to(&mut self, who: u64, deposit: u64, units: i64) -> &mut Self {
         self.order(who, physical::schema::ACT_PICK, Value::Entity(e(deposit)));
+        self.order(who, physical::schema::ACT_PICK_UP_TO, Value::Int(units));
         self
     }
 

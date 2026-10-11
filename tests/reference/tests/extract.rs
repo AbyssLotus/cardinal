@@ -8,7 +8,7 @@ use kernel::system::CommittedView;
 use kernel::value::Value;
 use packages::model::PositionSpec;
 use packages::WorldPackage;
-use physical::schema::{CONTAINED_IN, MADE_OF};
+use physical::schema::CONTAINED_IN;
 use reference::id::*;
 use reference::{e, with_tick_seconds, without_minds, City};
 use resources::schema::{COLLAPSED, STOCK, UNIT};
@@ -19,7 +19,6 @@ const WHEAT: u64 = 3123;
 const BRAMBLES: u64 = 3110;
 const GALLERY: u64 = 401;
 const WOOD: u64 = 603;
-const IRON_ORE: u64 = 715;
 const VALE: u64 = 1;
 
 /// Ashford without minds at minute ticks, in steady weather.
@@ -64,32 +63,14 @@ fn stock(city: &City, deposit: u64) -> i64 {
     city.int(deposit, STOCK).unwrap_or(0) / UNIT
 }
 
-/// What `who` holds that is made of `material`.
-fn holding(city: &City, who: u64, material: u64) -> usize {
-    city.store()
-        .entities_with(CONTAINED_IN)
-        .into_iter()
-        .filter(|t| {
-            city.store()
-                .read(FactKey::new(*t, CONTAINED_IN))
-                .map(|f| f.value)
-                == Some(Value::Entity(e(who)))
-        })
-        .filter(|t| {
-            city.store()
-                .read_all(FactKey::new(*t, MADE_OF))
-                .iter()
-                .any(|m| m.value == Value::Entity(e(material)))
-        })
-        .count()
-}
-
-/// How many goes `who` takes at `deposit` before a unit of `material` comes away (at most 50).
-fn goes_for_one(city: &mut City, who: u64, deposit: u64, material: u64) -> u32 {
+/// How many picks `who` takes at `deposit` before a unit comes away (at most 50), each judged
+/// before the next. A pick is a tick's work (Amendment A-48): at five-second ticks, one blow.
+fn goes_for_one(city: &mut City, who: u64, deposit: u64) -> u32 {
+    let before = stock(city, deposit);
     for go in 1..=50 {
         city.pick(who, deposit);
-        city.run(2);
-        if holding(city, who, material) > 0 {
+        city.run(4);
+        if stock(city, deposit) < before {
             return go;
         }
     }
@@ -109,18 +90,19 @@ fn bare_hands_cannot_work_iron_ore_and_a_hammer_can() {
         "ore is too hard for a hand"
     );
     // With the hammer — iron, harder than the ore — a few blows bring a lump away.
-    let mut pkg = ashford();
+    let mut pkg = at_ticks(5);
     stand(&mut pkg, CAROL, GALLERY, [300, 80], true);
     let mut city = City::from(pkg);
-    let goes = goes_for_one(&mut city, CAROL, IRON_SEAM, IRON_ORE);
+    let goes = goes_for_one(&mut city, CAROL, IRON_SEAM);
     assert!((2..=20).contains(&goes), "{goes} blows");
     assert_eq!(stock(&city, IRON_SEAM), 1_999);
 }
 
 #[test]
 fn a_stronger_arm_works_faster_and_a_richer_seam_too() {
+    // At five-second ticks, a pick is a blow (Amendment A-48).
     let goes = |who: u64, grade: i64| {
-        let mut pkg = ashford();
+        let mut pkg = at_ticks(5);
         stand(&mut pkg, who, GALLERY, [300, 80], true);
         pkg.deposits
             .iter_mut()
@@ -128,7 +110,7 @@ fn a_stronger_arm_works_faster_and_a_richer_seam_too() {
             .unwrap()
             .grade = Some(grade);
         let mut city = City::from(pkg);
-        goes_for_one(&mut city, who, IRON_SEAM, IRON_ORE)
+        goes_for_one(&mut city, who, IRON_SEAM)
     };
     let carol = goes(CAROL, 6_000);
     let erin = goes(ERIN, 6_000);
@@ -145,7 +127,7 @@ fn ore_never_regrows() {
     let mut pkg = at_ticks(600);
     stand(&mut pkg, CAROL, GALLERY, [300, 80], true);
     let mut city = City::from(pkg);
-    goes_for_one(&mut city, CAROL, IRON_SEAM, IRON_ORE);
+    goes_for_one(&mut city, CAROL, IRON_SEAM);
     city.run(3 * 144);
     assert_eq!(stock(&city, IRON_SEAM), 1_999, "three days on");
 }
@@ -164,7 +146,7 @@ fn timber_felled_below_its_floor_never_regrows() {
             .stock = 11;
         let mut city = City::from(pkg);
         for _ in 0..logs {
-            assert!(goes_for_one(&mut city, CAROL, TIMBER, 700) <= 50);
+            assert!(goes_for_one(&mut city, CAROL, TIMBER) <= 50);
             // Put the log down, so the next one is counted afresh.
             let log = city
                 .store()

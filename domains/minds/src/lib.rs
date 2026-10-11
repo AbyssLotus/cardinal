@@ -160,6 +160,7 @@ mod tests {
             "physical.act.take",
             "physical.act.consume",
             "physical.act.pick",
+            "physical.act.pick_up_to",
             "physical.act.drop",
             "economy.act.make",
             "economy.act.claim",

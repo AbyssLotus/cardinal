@@ -150,6 +150,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut bare_hand_hardness: Option<i64> = None;
     let mut pit_half_width_cm: Option<i64> = None;
     let mut tool_wear: Option<i64> = None;
+    let mut go_seconds: Option<i64> = None;
     let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
     let mut latitudes: Vec<(u64, i64)> = Vec::new();
     let mut humidities: Vec<(u64, i64)> = Vec::new();
@@ -460,6 +461,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "bare_hand_hardness" => bare_hand_hardness = Some(parse_num(value, line_no)?),
                 "pit_half_width_cm" => pit_half_width_cm = Some(parse_num(value, line_no)?),
                 "tool_wear" => tool_wear = Some(parse_num(value, line_no)?),
+                "go_seconds" => go_seconds = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -1246,6 +1248,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         bare_hand_hardness: require(bare_hand_hardness, "rules.physical.bare_hand_hardness")?,
         pit_half_width_cm: require(pit_half_width_cm, "rules.physical.pit_half_width_cm")?,
         tool_wear: require(tool_wear, "rules.physical.tool_wear")?,
+        go_seconds: require(go_seconds, "rules.physical.go_seconds")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -2057,6 +2060,7 @@ ice_bears_mm = 80
 bare_hand_hardness = 1000
 pit_half_width_cm = 100
 tool_wear = 0
+go_seconds = 5
 [regions]
 1 = 1500
 ";

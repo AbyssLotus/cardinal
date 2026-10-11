@@ -162,6 +162,9 @@ reference engine is being built here, from the specification, in roadmap order
       cross open ground, and mend what is theirs, and Millside's farmer, miller, and baker
       feeding the mill with nothing filling itself (A-45); tools and workplaces worn by use
       (A-46); every store filled by someone: the Hill's trades, fish, and the manor's bread (A-47)
+- [ ] Two towns ([plan](docs/audits/two-towns.md)): work that keeps time — a go lasts the tick,
+      a whole load carried and set down at once, the carry limit counting all one holds (A-48);
+      next, settlements that own their nodes, farms agents sow, and a second town
 - [ ] Minds that flee fire and break a way through; fire and storm at the city tier
 - [ ] Carrying things across the seam; city generation at scale; the hot store; parallel shards
 - [ ] Hardening, from the hostile audit: a sealed mutation path, multi-cause provenance,

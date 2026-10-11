@@ -107,6 +107,11 @@ pub mod schema {
     pub const PICKED: FactType = FactType::new("physical.body.picked");
     /// How hard that go was, as a blow's strength — **Physical Reality's** report (A-41).
     pub const PICK_EFFORT: FactType = FactType::new("physical.body.pick_effort");
+    /// How many goes of work a body's last report at a deposit covers — **Physical Reality's**
+    /// (Amendment A-48).
+    pub const PICK_GOES: FactType = FactType::new("physical.body.pick_goes");
+    /// How many more units the body's hands have room for — **Physical Reality's** (A-48).
+    pub const PICK_ROOM: FactType = FactType::new("physical.body.pick_room");
     /// A place's air temperature — **Physical Reality's**.
     pub const TEMPERATURE: FactType = FactType::new("physical.environment.temperature");
     /// How wet a climate's ground is — **Physical Reality's** (A-38).
@@ -136,8 +141,9 @@ pub mod systems {
     use crate::schema::{
         ACT_ARRIVE, BODY_SIZE, COLLAPSED, CONTAINED_IN, DIFFICULTY, FLOOR, FLOW, GRADE,
         GROUND_WATER, GROWS, LARDER, MADE_OF, NONRENEWABLE, PANTRY_CROSSING, PANTRY_LEAVING,
-        PICKED, PICK_EFFORT, PICK_JUDGED, RENEWAL, RESTOCK, STOCK, TEMPERATURE, THRESHOLD, UNIT,
-        WORK_DONE, YIELD_CAP, YIELD_MADE_OF, YIELD_PER_DAY, YIELD_SIZE,
+        PICKED, PICK_EFFORT, PICK_GOES, PICK_JUDGED, PICK_ROOM, RENEWAL, RESTOCK, STOCK,
+        TEMPERATURE, THRESHOLD, UNIT, WORK_DONE, YIELD_CAP, YIELD_MADE_OF, YIELD_PER_DAY,
+        YIELD_SIZE,
     };
     use kernel::fact::{Cause, FactKey, FactType, SystemId};
     use kernel::fixed::div_dither;
@@ -157,6 +163,8 @@ pub mod systems {
         PICK_JUDGED,
         RESTOCK,
         PICK_EFFORT,
+        PICK_GOES,
+        PICK_ROOM,
         RENEWAL,
         FLOOR,
         GRADE,
@@ -306,41 +314,54 @@ pub mod systems {
                     );
                 }
                 for picker in picks.remove(&deposit).unwrap_or_default() {
-                    if stock < UNIT {
-                        continue; // bare: the hand comes away empty
+                    // The tick's goes, each putting its effort toward the next unit (Amendment
+                    // A-48): every unit the work completes, but a unit takes a go at least, and
+                    // no more come than the hands have room for, or the stock holds. Work beyond
+                    // a unit's worth is not banked.
+                    let goes = int(view, FactKey::new(picker, PICK_GOES))
+                        .unwrap_or(1)
+                        .max(0);
+                    let room = int(view, FactKey::new(picker, PICK_ROOM))
+                        .unwrap_or(1)
+                        .max(0);
+                    let most = goes.min(room).min(stock / UNIT);
+                    if most == 0 {
+                        continue; // bare, or nothing done: the hand comes away empty
                     }
-                    // The go's effort, toward the next unit: one go yields one unit at most.
-                    if per_unit > 0 {
+                    let units = if per_unit > 0 {
                         let effort = int(view, FactKey::new(picker, PICK_EFFORT)).unwrap_or(0);
-                        work = (work + effort.max(0)).min(per_unit);
-                        if work < per_unit {
-                            continue;
+                        work = work.saturating_add(effort.max(0).saturating_mul(goes));
+                        let units = (work / per_unit).min(most);
+                        work = (work - units * per_unit).min(per_unit - 1);
+                        units
+                    } else {
+                        most
+                    };
+                    for _ in 0..units {
+                        stock -= UNIT;
+                        let item = ctx.new_entity();
+                        if let Some(Value::Entity(m)) = view
+                            .read(FactKey::new(deposit, YIELD_MADE_OF))
+                            .map(|f| f.value)
+                        {
+                            push(
+                                FactKey::new(item, MADE_OF),
+                                Change::Add(Value::Entity(m)),
+                                "grown",
+                            );
                         }
-                        work = 0;
-                    }
-                    stock -= UNIT;
-                    let item = ctx.new_entity();
-                    if let Some(Value::Entity(m)) = view
-                        .read(FactKey::new(deposit, YIELD_MADE_OF))
-                        .map(|f| f.value)
-                    {
+                        if let Some(size) = view
+                            .read(FactKey::new(deposit, YIELD_SIZE))
+                            .map(|f| f.value)
+                        {
+                            push(FactKey::new(item, BODY_SIZE), Change::Set(size), "grown");
+                        }
                         push(
-                            FactKey::new(item, MADE_OF),
-                            Change::Add(Value::Entity(m)),
-                            "grown",
+                            FactKey::new(item, ACT_ARRIVE),
+                            Change::Set(Value::Entity(picker)),
+                            "picked",
                         );
                     }
-                    if let Some(size) = view
-                        .read(FactKey::new(deposit, YIELD_SIZE))
-                        .map(|f| f.value)
-                    {
-                        push(FactKey::new(item, BODY_SIZE), Change::Set(size), "grown");
-                    }
-                    push(
-                        FactKey::new(item, ACT_ARRIVE),
-                        Change::Set(Value::Entity(picker)),
-                        "picked",
-                    );
                 }
                 if work != worked {
                     let change = if work == 0 {

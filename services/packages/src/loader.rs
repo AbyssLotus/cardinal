@@ -380,6 +380,7 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
             scale: r.strike_scale,
             bare_hand_hardness: r.bare_hand_hardness,
             tool_wear: r.tool_wear,
+            go_seconds: r.go_seconds,
         },
         pit_half_width_cm: r.pit_half_width_cm,
         wreckage_height_cm: r.wreckage_height_cm,

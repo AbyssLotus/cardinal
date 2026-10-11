@@ -500,7 +500,8 @@ pub const STRENGTH: FactType = FactType::new("living.capability.strength");
 /// cleared either way.
 pub const ACT_TAKE: FactType = FactType::new("physical.act.take");
 
-/// A decider's intent that a body put down a thing it holds, where it stands.
+/// A decider's intent that a body put down things it holds, where it stands: a set of entity
+/// references, all put down in one go (Amendment A-48).
 pub const ACT_DROP: FactType = FactType::new("physical.act.drop");
 
 /// A decider's intent that a body consume a thing it holds — eat it, drink it.
@@ -526,6 +527,22 @@ pub const PICKED: FactType = FactType::new("physical.body.picked");
 /// How hard a body's last go at a deposit was, as a blow's strength (Amendment A-41): reported
 /// with [`PICKED`], for Resources to put toward the deposit's next unit.
 pub const PICK_EFFORT: FactType = FactType::new("physical.body.pick_effort");
+
+/// How many goes of work a body's last report at a deposit covers (Amendment A-48): a go lasts
+/// the world's `go_seconds`, and a tick holds as many as fit. Reported with [`PICKED`].
+pub const PICK_GOES: FactType = FactType::new("physical.body.pick_goes");
+
+/// How many more units of what a deposit yields the body's hands have room for (Amendment A-48),
+/// at most as many as its decider asked for: reported with [`PICKED`].
+pub const PICK_ROOM: FactType = FactType::new("physical.body.pick_room");
+
+/// A decider's limit on how many units a body's work at a deposit is to bring to hand (Amendment
+/// A-48): absent, as many as the work and the hands allow.
+pub const ACT_PICK_UP_TO: FactType = FactType::new("physical.act.pick_up_to");
+
+/// The size of each unit a deposit yields — **Resources'** fact, read by id (Amendment A-48): the
+/// room it takes in the hand.
+pub const YIELD_SIZE: FactType = FactType::new("resources.yield.size");
 
 /// What a deposit yields — **Resources'** fact, read by id (Amendment A-41): what a go at it
 /// must be hard enough to work.

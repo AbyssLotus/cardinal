@@ -119,6 +119,7 @@ ice_bears_mm = 80                   # ice 8 cm thick bears a walker
 bare_hand_hardness = 1000           # bare hands pick fruit and dig soil; stone, ore, and timber need a tool (A-41)
 pit_half_width_cm = 100             # a pit is broken two metres across (A-42)
 tool_wear = 30                      # a go on stuff as hard as the tool costs it 0.3% (A-46)
+go_seconds = 5                      # a go of work — a blow, a handful, a spadeful — takes five seconds (A-48)
 
 [rules.living]
 metabolism_step_seconds = 60
@@ -1066,8 +1067,8 @@ part_below = 3000                   # both this cool: they part
 3116 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush by the boulder
 123 = made_of:706, size:5x5x5, per_day:0, cap:20, stock:20     # the flour bin: twenty scoops, no longer filling themselves (A-45)
 # Worked with effort and a tool fit for them, renewing by their kind (Amendment A-41):
-3120 = made_of:715, size:10x10x8, per_day:0, cap:2000, stock:2000, renewal:nonrenewable, grade:6000, difficulty:30000    # an iron seam in the deep gallery
-3121 = made_of:716, size:10x10x8, per_day:0, cap:1000, stock:1000, renewal:nonrenewable, grade:4000, difficulty:20000    # a copper seam beside it, poorer
+3120 = made_of:715, size:6x6x5, per_day:0, cap:2000, stock:2000, renewal:nonrenewable, grade:6000, difficulty:30000    # an iron seam in the deep gallery
+3121 = made_of:716, size:6x6x5, per_day:0, cap:1000, stock:1000, renewal:nonrenewable, grade:4000, difficulty:20000    # a copper seam beside it, poorer
 3122 = made_of:700, size:50x8x8, per_day:1, cap:40, stock:30, renewal:threshold, floor:10, difficulty:15000, grows:400/1500/1000    # a stand of timber in the wood
 3123 = made_of:717, size:10x10x10, per_day:40, cap:200, stock:60, grows:500/2000/2000    # the wheat on the farm
 # Living stocks of fish (Amendment A-47): taken by hand, a net's worth at a time.
@@ -1082,7 +1083,7 @@ part_below = 3000                   # both this cool: they part
 951 = needs:717x2, makes:706, size:5x5x5, at:620, takes:600, power:605    # flour, ground from two sheaves while the Brack turns the mill
 952 = needs:706x1, makes:709, size:8x8x6, at:621, takes:1800, heat:yes   # a loaf from a scoop of flour, in the burning oven
 953 = needs:700x1, makes:700, size:50x10x2, at:622, takes:900, tool:3000, count:4    # planks, sawn from a log
-954 = needs:700x2, makes:719, size:10x10x10, at:623, takes:3600, heat:yes, count:2   # charcoal, from the kiln
+954 = needs:700x1, makes:719, size:10x10x10, at:623, takes:3600, heat:yes, count:2   # charcoal, two lumps from a log in the kiln
 955 = needs:715x2 719x1, makes:702, size:10x5x5, at:624, takes:3600, heat:yes        # an iron bar, at the forge
 956 = needs:716x2 719x1, makes:718, size:10x5x5, at:624, takes:3600, heat:yes        # a copper bar
 

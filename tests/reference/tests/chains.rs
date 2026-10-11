@@ -1,6 +1,6 @@
 //! The chains (Vol. III Ch. 4 §4.4; Amendment A-43): bread is baked only while the oven burns;
 //! flour is ground only while the Brack turns the mill, and not once it freezes; planks are sawn
-//! only with an edge to hand, four from a log; charcoal comes from logs in the burning kiln, and
+//! only with an edge to hand, four from a log; charcoal comes from a log in the burning kiln, and
 //! an iron bar from ore and charcoal at the forge.
 
 use kernel::fact::FactKey;
@@ -215,11 +215,12 @@ fn planks_are_sawn_only_with_an_edge_to_hand() {
 
 #[test]
 fn charcoal_comes_from_the_burning_kiln() {
-    // Two logs in the kiln, an hour: two lumps of charcoal.
+    // A log in the kiln, an hour: two lumps of charcoal. (Two logs are more than anyone carries:
+    // Amendment A-48.)
     let mut pkg = ashford();
     stand(&mut pkg, CAROL, WOOD, [500, 640], true);
     let mut city = City::from(pkg);
-    gather(&mut city, CAROL, TIMBER, TIMBER_M, 2);
+    gather(&mut city, CAROL, TIMBER, TIMBER_M, 1);
     make(&mut city, CAROL, BURN_CHARCOAL, 60);
     assert_eq!(holding(&city, CAROL, CHARCOAL), 2);
     assert_eq!(holding(&city, CAROL, TIMBER_M), 0, "the logs went into it");

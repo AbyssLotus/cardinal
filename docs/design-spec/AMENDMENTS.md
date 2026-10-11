@@ -1979,3 +1979,65 @@ labour. The trades are tested at minute ticks; the week checks that each is work
   week's end and never regrows; the millstone wears.
 
 **Rationale.** `docs/audits/resources.md` §9, F3 and F4.
+
+## A-48 — Work that keeps time (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (acts of work: how long a go is; the carry limit)
+- Vol. III Ch. 3 (taking from deposits: every unit the work completes)
+- Vol. II Ch. 5 (minds: what a step of work asks for)
+- Law 14 (tick-length invariance), for labour
+
+**Change.**
+- **A go of work lasts the tick** (Physical, Act). Taking from a deposit, digging, and mending are
+  each done for the tick's length: as many goes as fit, each `rules.physical.go_seconds` long,
+  dithered so no fraction is lost over many ticks. At one-minute ticks a go is twelve blows; at
+  ten-minute ticks, a hundred and twenty; at one-second ticks, a fifth of one. Act reports the
+  goes (`physical.body.pick_goes`) with a go's effort. Tools wear by the go (A-46). Mending
+  restores what that many goes restore, with stuff for all of it (A-44).
+- **A deposit yields every unit the work completes** (Resources), not one at most. A unit takes
+  at least one go: fruit is a handful a go, not a tree a tick. Work beyond a unit's worth is not
+  banked.
+- **No more than the hands have room for.** The carry limit (A-12) counts everything held
+  together, not each thing alone. Act reports how many more units of a deposit's yield the hands
+  have room for (`physical.body.pick_room`), and the deposit yields no more. With no room, the go
+  is refused, and the refusal names the body itself: its hands are full.
+- **No more than asked.** A decider may limit what a go brings (`physical.act.pick_up_to`); the
+  limit lasts the go it was asked with.
+- **A load is set down in one go.** `physical.act.drop` holds a set: everything asked is put down
+  in the one tick.
+- **Minds ask for a tick's work at a time.**
+  - A mind asks for as many units as it wants: one to eat, what the store lacks for a job.
+  - It takes its work up again once it has seen the last go's yield, so no more is fetched than
+    wanted.
+  - With its hands full, it takes the load to the store.
+  - It sets down a whole load at once: everything carried made of the same stuff, held on the
+    same terms.
+- **A fresh intent outlives the clearing of the old one, whatever it holds.** A number or a yes
+  composes as an entity intent does (A-9).
+- **Ashford:**
+  - a go is five seconds;
+  - lumps of ore are 3.6 kilos, not 16, so a smith can carry the two a bar needs;
+  - charcoal burns from one log, not two (two logs are more than anyone carries).
+
+**What it does not do.** A decision still takes a few ticks: act, perceive, decide. At coarse
+ticks each step of a plan costs those ticks, so a cycle of fetch, work, carry, and set down still
+takes longer in game time at ten-minute ticks than at one-minute ticks. Each step now commands a
+tick's work and a whole load, so the gap is a few steps' delay, not every blow and every thing set
+down.
+
+**In Ashford** (`tests/reference/tests/work_time.rs`; restated: `extract.rs`, `things.rs`,
+`wear.rs`, `chains.rs`):
+- A minute's picking brings twelve apples, at five-second ticks or at one-minute ticks.
+- Ten minutes at the iron seam bring the same ore at one-minute and at ten-minute ticks.
+- With the hammer, six lumps of ore fill Carol's 25-kilo carry; the next go is refused, her hands
+  full.
+- Six lumps are set down in one tick.
+- A minute of the hammer at the seam wears it twice what a minute at the timber does.
+
+**Found along the way.** "Keep at it every tick" over-fetched. A mind that re-asked before the
+last yield arrived got several meals for one breakfast. A city resident carrying the spare could
+not cross back to the city tier, since carrying things across the seam is not built. Minds wait
+to see each go's yield.
+
+**Rationale.** `docs/audits/two-towns.md`, T1.
