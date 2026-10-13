@@ -286,3 +286,120 @@ So the city tier does not wait on the hot store or parallelism. It waits only on
 4. **The hot store and parallel shards** (old phases 2 and 3), sized by what step 3 measures.
 5. **Incremental sight and perception** for a larger scene, using change memory (A-21).
 6. **The world** (old phase 6): many regions on the residency ladder.
+
+---
+
+## 9. The city tier, measured (2026-10-06)
+
+Residents (A-23; Appendix A, Ruling 19) are built.
+
+- A person at the city tier is a Society resident record of seven facts: home, work, what they
+  are doing, where, until when, hunger, and fatigue.
+- A rhythm system attends to them only when what they are doing ends, found through the agenda
+  (A-22).
+- Each keeps the settlement's hours shifted by a personal offset, so a city does not all wake in
+  one minute.
+
+`tests/reference/examples/city.rs` generates districts of homes and workshops on top of Ashford
+and runs a simulated day at one-minute ticks:
+
+| Residents | Load | Mean tick | Worst tick | Segments per second | Facts | Peak memory |
+|---|---|---|---|---|---|---|
+| 100,000 | 0.2 s | 4.2 ms | 12.5 ms | 8.9 | 0.8 M | — |
+| 1,000,000 | 2.2 s | 27 ms | 116 ms | 89 | 7.9 M | 3.0 GB |
+
+**A city of a million fits the target machine:**
+- about a tenth of its memory;
+- 27 ms of work for each simulated minute, so it runs about two thousand times faster than real
+  time;
+- at the scene's one-second ticks, about a third of a millisecond per tick.
+
+**Two fixes the measurements forced:**
+- **Single values inline in the store.** Every fact had a little map of its own; a single value
+  now sits inline (`Values::One`), and only set-valued facts keep a map. Memory per fact fell
+  about half, with no change in behaviour.
+- **Personal hours.** With everyone keeping identical hours, 400,000 residents all woke in one
+  tick: 1.2 s of work, and a large temporary allocation. A fixed per-resident offset (here ±45
+  minutes) spreads the rush, as people are.
+
+**Next:**
+- promotion of a district's residents into the scene and demotion back, with Law 14's round trip
+  tested;
+- generating a city's streets and buildings;
+- harm and death at the city tier;
+- the hot store, to bring 3 KB per resident down further.
+
+---
+
+## 10. Crossing into the scene, measured (2026-10-06)
+
+Promotion (A-24; Appendix A, Ruling 19) is built.
+- Each place is at the city tier or in the scene.
+- A resident who is somewhere in the scene, because attention arrived or because they walked in,
+  becomes an organism in one tick. Each of five domains creates its own facts from the same
+  committed record.
+
+In Ashford, attention on the Lanes at three in the morning finds its twelve residents asleep.
+They cross with their hunger and fatigue unchanged to the bit, lying down. By eleven the workers
+have got up at their own hours, gone out of their doors and along the street into the workshop.
+By nine they are home again (`tests/reference/tests/crossing.rs`).
+
+`examples/city.rs` now ends its day by turning attention on one district of 3,000 residents:
+
+| City | Crossing a district | Mean tick |
+|---|---|---|
+| 100,000 | 50 ms | 4.3 ms |
+| 1,000,000 | 52 ms | 28 ms |
+
+Crossing costs what the district costs, not what the city costs. Finding who is at a place is now an
+index walk: the agenda indexes entity values too (`holding`).
+
+**One cost the meters caught.** The first cut had the crossing system re-examine every resident
+whose segment ended, the same ones the rhythm examines, for 5 ms a tick at a million. A resident's
+place changes only by walking. So only someone arriving can find themselves newly in the scene,
+unless attention moved, and the rhythm already holds those arrivals. The rhythm now marks them,
+and the crossing system acts only on ticks when attention moves. The steady cost is back to
+nothing.
+
+**Where a million spends its tick now:** commit 18 ms, rhythm 7 ms, everything else under 3 ms.
+Commit is the next target: about 20,000 writes a tick, near a microsecond each, through the
+chronicle, digest, change memory, and indexes.
+
+**Next:**
+- demotion (the way back), and Law 14's round trip tested;
+- households' larders as food in the scene;
+- generating streets and buildings, so every district has doors as the Lanes do;
+- a cheaper commit.
+
+---
+
+## 11. Both ways across the seam, with people eating, measured (2026-10-07)
+
+Demotion (A-25) and pantries (A-26) are built. `examples/city.rs` now builds its city with the
+test's generator: every district has a gate onto the city's ground, and only scene districts have
+doors on every home. Attention is on the first district from the start, and people cross all day as
+they commute. One day at minute ticks, a 600-person scene district (`SCENE=1 HOMES=200`):
+
+| City | Mean tick | Sight | Perception | Minds | Commit | Travel | Crossed in / out | Hungriest | Peak memory |
+|---|---|---|---|---|---|---|---|---|---|
+| 100,000 | 211 ms | 74 ms | 54 ms | 50 ms | 22 ms | 2.3 ms | 1,400 / 800 | 53% | — |
+| 1,000,000 | 297 ms | 119 ms | 56 ms | 55 ms | 43 ms | 4.1 ms | 1,400 / 800 | 73% | 2.7 GB |
+
+**What the generated city exposed, and what was fixed** (every fix exact; see A-25):
+- nobody could leave the scene for a district without doors: every district now has its gate;
+- sight scanned every bare place in a frame for every line: they are now found by one indexed
+  search, and frames that could block nothing are known once per evaluation;
+- travel searched the whole city's gates for every walker: routes are now shared per tick (37 ms
+  down to 4 ms at a million);
+- "what is within 30 m" on the city's ground looked at every district: the index now answers which
+  branches to enter (`subframes_meeting`);
+- minds checked every belief against every opening: now gathered once per decision.
+
+**Still open:**
+- At a million, sight costs about 45 ms a tick more than at 100,000 for the same scene. A profile is
+  the next step. It may be one more city-sized walk, or simply slower lookups in an 8-million-fact
+  store; the hot store would answer the second.
+- A 600-person district costs about 200 ms a tick: within the scene's one-second budget, on one
+  thread. A 3,000-person district would not fit yet. Incremental sight and perception — skipping
+  people and places where nothing changed — and parallel evaluation are the levers.
+- Commit grows with the city (22 ms to 43 ms).

@@ -70,19 +70,25 @@ fn watch(city: &mut City, who: u64, ticks: u64) -> Vec<Decision> {
 fn erin_comes_in_from_the_cold() {
     let mut city = City::from(still());
     let choices = watch(&mut city, ERIN, 36 * HOUR);
-    // One choice in a day and a half: in the late evening, cold, she makes for the kitchen she
-    // remembers warm.
-    assert_eq!(choices.len(), 1, "{choices:?}");
+    // Toward dawn, as the coldest of the night sets in (the air is coldest at five: Amendment
+    // A-35), she makes for the kitchen she remembers warm.
     let choice = &choices[0];
     assert_eq!((choice.goal, choice.reason), (KITCHEN, REASON_WARMTH));
     assert!(choice.score > 0);
     assert!(
-        (19 * HOUR..30 * HOUR).contains(&choice.tick),
+        (4 * HOUR..9 * HOUR).contains(&choice.tick),
         "decided at hour {}",
         choice.tick / HOUR
     );
-    // She went in, and having arrived, let the goal go — and stayed, warmer inside.
-    assert_eq!(city.room_of(ERIN), KITCHEN);
+    // But its front door has stood open to the night, and the kitchen's warmth has gone out of
+    // it, and up the stair (Amendment A-37). Finding it so, she climbs to the bedroom, whose
+    // window is shut — and there she stays, warmer.
+    assert!(choices.len() <= 2, "{choices:?}");
+    if let Some(next) = choices.get(1) {
+        assert_eq!((next.goal, next.reason), (BEDROOM, REASON_WARMTH));
+    }
+    let last = choices.last().unwrap().goal;
+    assert_eq!(city.room_of(ERIN), last);
     assert_eq!(own(&city, ERIN, GOAL), None);
 }
 
@@ -112,14 +118,17 @@ fn erin_opens_the_shut_door_that_stands_in_her_way() {
     city.close(BOB, DOOR_IN);
     city.run(3); // directed, then commanded, then the door swings to
     assert_eq!(city.read(DOOR_OUT, PORTAL_OPEN), Some(Value::Bool(false)));
-    let mut approached = false;
+    let (mut approached, mut went_in) = (false, false);
     for _ in 0..36 * HOUR {
         city.run(1);
         approached |= own(&city, ERIN, STEP) == Some(Value::Int(STEP_APPROACH));
+        went_in |= city.room_of(ERIN) == KITCHEN;
     }
     assert!(approached, "she went to the door");
     assert_eq!(city.read(DOOR_OUT, PORTAL_OPEN), Some(Value::Bool(true)));
-    assert_eq!(city.room_of(ERIN), KITCHEN);
+    // And in. (Where she is a day later is the weather's business: with the door she opened
+    // letting the night in, she may find the morning yard warmer than the house — Amendment A-37.)
+    assert!(went_in, "she went in");
 }
 
 #[test]
@@ -146,12 +155,17 @@ fn the_guard_keeps_his_hours() {
 
 #[test]
 fn a_mind_never_heads_for_what_it_does_not_know() {
-    // Ashford as before, except that Erin was never told of the kitchen or its door: as cold as
-    // ever, she has nowhere to go.
+    // Ashford as before, except that Erin was never told of the kitchen or its door, and is too
+    // short-sighted for the dawn to show them to her: as cold as ever, she has nowhere to go.
     let mut pkg = still();
     for (mind, things) in &mut pkg.knows {
         if *mind == ERIN {
             things.retain(|t| *t != KITCHEN && *t != DOOR_OUT && *t != DOOR_IN);
+        }
+    }
+    for (who, range) in &mut pkg.senses {
+        if *who == ERIN {
+            *range = 100;
         }
     }
     let mut city = City::from(pkg);

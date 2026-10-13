@@ -1,7 +1,7 @@
 //! Things that come into being (Vol. V Ch. 2 §2.1; Vol. III Ch. 3; Appendix A, Ruling 16;
 //! Amendment A-15): the apple tree ripens fruit at its rate, up to what it can hold; picking it
-//! brings a new apple — a new thing, with a new id — into the picker's hand; a bare tree yields
-//! nothing; and the same world makes the same things.
+//! brings a new apple — a new thing, with a new id — into the picker's hand, a go of five seconds
+//! for each (Amendment A-48); a bare tree yields nothing; and the same world makes the same things.
 
 use kernel::fact::FactKey;
 use kernel::system::{CommittedView, RUNTIME_ID_FLOOR};
@@ -33,6 +33,18 @@ fn new_things_held(city: &City, who: u64) -> Vec<u64> {
         .collect()
 }
 
+/// Carol picks at the tree a second at a time, looking after each, until an apple comes: at
+/// one-second ticks a second's picking is a fifth of a go (Amendment A-48).
+fn pick_an_apple(city: &mut City) {
+    for _ in 0..40 {
+        city.pick(CAROL, TREE);
+        city.run(4);
+        if !new_things_held(city, CAROL).is_empty() {
+            return;
+        }
+    }
+}
+
 #[test]
 fn the_tree_ripens_up_to_what_it_can_hold() {
     // Six apples at dawn of the world, twenty more a day, never more than thirty.
@@ -50,8 +62,7 @@ fn picking_brings_a_new_apple_into_the_hand() {
     let mut city = City::quiet();
     city.go(CAROL, TREE, 140);
     city.run_until(60, |c| !c.travelling(CAROL));
-    city.pick(CAROL, TREE);
-    city.run(4);
+    pick_an_apple(&mut city);
     let held = new_things_held(&city, CAROL);
     assert_eq!(held.len(), 1, "one new apple in her hand");
     let apple = held[0];
@@ -76,8 +87,7 @@ fn a_bare_tree_yields_nothing() {
     let mut city = City::from(pkg);
     city.go(CAROL, TREE, 140);
     city.run_until(60, |c| !c.travelling(CAROL));
-    city.pick(CAROL, TREE);
-    city.run(4);
+    pick_an_apple(&mut city);
     assert!(
         new_things_held(&city, CAROL).is_empty(),
         "the hand comes away empty"
@@ -91,8 +101,7 @@ fn the_same_world_makes_the_same_things() {
         let mut city = City::quiet();
         city.go(CAROL, TREE, 140);
         city.run_until(60, |c| !c.travelling(CAROL));
-        city.pick(CAROL, TREE);
-        city.run(4);
+        pick_an_apple(&mut city);
         new_things_held(&city, CAROL)
     };
     let (a, b) = (run(), run());

@@ -46,12 +46,23 @@ fn settled(tick_seconds: u64, days: u64, who: &[u64]) -> Vec<i64> {
 #[test]
 fn a_body_settles_where_its_air_puts_it_at_any_tick_length() {
     // Pulled toward 37 °C over six hours and toward the air over three, a body settles a third
-    // of the way from the air to 37 °C: Hal on Highmoor (6 °C) at 16.33 °C, Erin in the Vale
-    // (14 °C) at 21.67 °C, Ida in Southfen (18 °C) at 24.33 °C. Alice upstairs feels the Vale's
-    // air too, inherited through her house. The same, ticking by the hour or by the minute.
+    // of the way from the air to 37 °C: Hal on Highmoor, Erin in the Vale, Ida in Southfen, each
+    // in the air the world begins with — its declared coldest, and the day's swing at midnight
+    // above it (Amendment A-35). Alice upstairs feels the Vale's air too, inherited through her
+    // house. The same, ticking by the hour or by the minute.
+    let city = City::from(without_minds(with_tick_seconds(60)));
+    let air = |region: u64| city.int(region, TEMPERATURE).unwrap();
+    let [moor, vale, fen] = [air(HIGHMOOR), air(VALE), air(SOUTHFEN)];
+    assert_eq!(
+        [moor, vale, fen],
+        [686, 1_578, 1_978],
+        "6, 14, and 18 °C at their coldest"
+    );
+    let settles = |air: i64| (2 * air + 3_700) / 3;
     for tick_seconds in [3_600, 60] {
         let got = settled(tick_seconds, 10, &[HAL, ERIN, IDA, ALICE]);
-        for (g, want) in got.iter().zip([1_633, 2_167, 2_433, 2_167]) {
+        let want = [settles(moor), settles(vale), settles(fen), settles(vale)];
+        for (g, want) in got.iter().zip(want) {
             assert!((g - want).abs() <= 2, "ticks of {tick_seconds} s: {got:?}");
         }
     }

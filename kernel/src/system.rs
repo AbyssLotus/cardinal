@@ -101,6 +101,31 @@ pub trait CommittedView {
     fn due(&self, fact_type: FactType, upto: u64) -> Vec<EntityId> {
         due_by_scan(self, fact_type, upto)
     }
+
+    /// The entities holding `value` as a fact of `fact_type` — the residents *at* a place — in
+    /// ascending order of id (Amendment A-24). A store that indexes `fact_type` by value (an
+    /// agenda fact, Amendment A-22, whose values are numbers or entities) answers in proportion
+    /// to the answer; without one, by scanning; the same either way.
+    fn holding(&self, fact_type: FactType, value: Value) -> Vec<EntityId> {
+        holding_by_scan(self, fact_type, value)
+    }
+}
+
+/// Who holds `value` as a fact of `fact_type`, found by reading every holder (Amendment A-24):
+/// the answer every value index must agree with.
+pub fn holding_by_scan<V: CommittedView + ?Sized>(
+    view: &V,
+    fact_type: FactType,
+    value: Value,
+) -> Vec<EntityId> {
+    view.entities_with(fact_type)
+        .into_iter()
+        .filter(|e| {
+            view.read_all(FactKey::new(*e, fact_type))
+                .iter()
+                .any(|f| f.value == value)
+        })
+        .collect()
 }
 
 /// Who is due by `fact_type` at or before `upto`, found by reading every holder (Amendment A-22):
@@ -231,6 +256,14 @@ impl CommittedView for ScopedView<'_> {
             self.inner.changed_since(fact_type, since)
         } else {
             None
+        }
+    }
+
+    fn holding(&self, fact_type: FactType, value: Value) -> Vec<EntityId> {
+        if self.check(fact_type) {
+            self.inner.holding(fact_type, value)
+        } else {
+            Vec::new()
         }
     }
 }

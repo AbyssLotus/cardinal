@@ -67,6 +67,9 @@ const TEMPERATURE_W: &[FactType] = &[TEMPERATURE];
 const WEATHER_READS: &[FactType] = &[
     TEMPERATURE,
     TEMPERATURE_ANOMALY,
+    ADJACENT_TO,
+    WIND_TOWARD,
+    WIND_SPEED,
     EXPOSURE,
     ENCLOSED,
     MADE_OF,
@@ -76,6 +79,9 @@ const WEATHER_READS: &[FactType] = &[
 const WEATHER_WRITES: &[FactType] = &[TEMPERATURE, TEMPERATURE_ANOMALY];
 const ILLUMINATION_READS: &[FactType] = &[
     TEMPERATURE,
+    crate::schema::LATITUDE,
+    crate::schema::CLOUD,
+    CONTAINED_IN,
     EXPOSURE,
     ENCLOSED,
     HAS_PORTAL,
@@ -85,11 +91,27 @@ const ILLUMINATION_READS: &[FactType] = &[
     BODY_SIZE,
 ];
 const ILLUMINATION_W: &[FactType] = &[ILLUMINATION];
-const HUMIDITY_READS: &[FactType] = &[TEMPERATURE, HUMIDITY_ANOMALY, EXPOSURE, ENCLOSED];
-const HUMIDITY_WRITES: &[FactType] = &[HUMIDITY, HUMIDITY_ANOMALY];
-const PRESSURE_READS: &[FactType] = &[TEMPERATURE, PRESSURE_ANOMALY, ELEVATION, EXPOSURE, ENCLOSED];
+const PRESSURE_READS: &[FactType] = &[
+    TEMPERATURE,
+    PRESSURE_ANOMALY,
+    ELEVATION,
+    EXPOSURE,
+    ENCLOSED,
+    ADJACENT_TO,
+    WIND_TOWARD,
+    WIND_SPEED,
+];
 const PRESSURE_WRITES: &[FactType] = &[PRESSURE, PRESSURE_ANOMALY];
-const WIND_READS: &[FactType] = &[TEMPERATURE, ADJACENT_TO, PRESSURE, EXPOSURE, ENCLOSED];
+const WIND_READS: &[FactType] = &[
+    TEMPERATURE,
+    ADJACENT_TO,
+    PRESSURE,
+    ELEVATION,
+    EXPOSURE,
+    ENCLOSED,
+    crate::schema::STORM,
+    PRESSURE_ANOMALY,
+];
 const WIND_WRITES: &[FactType] = &[WIND_SPEED, WIND_TOWARD];
 // Danger reads a portal's height above the ground, composed up its containers — their
 // positions (live, so their motion facts too) and headings.
@@ -101,6 +123,13 @@ const SHELTER_READS: &[FactType] = &[
     MADE_OF,
     MATERIAL_DENSITY,
     MATERIAL_THERMAL_CAPACITY,
+    HAS_PORTAL,
+    LEADS_TO,
+    PORTAL_OPEN,
+    PORTAL_FAR_SIDE,
+    BODY_SIZE,
+    WIND_SPEED,
+    crate::schema::PLACE,
 ];
 const DANGER_READS: &[FactType] = &[
     PORTAL_DANGER,
@@ -119,33 +148,43 @@ const DANGER_READS: &[FactType] = &[
 ];
 const DANGER_WRITES: &[FactType] = &[PORTAL_DANGER];
 
-/// An integer triangle wave in `0..=amp` over a period of `period_ms`, evaluated at simulated
-/// time `at_ms`: zero at the start of the period, peaking at its middle.
+/// The day's temperature curve (Vol. III Ch. 1 §1.10; Amendments A-1, A-35): an integer
+/// triangle in `0..=amplitude` over a day, coldest at `coldest_ms` into the day, rising straight
+/// to its warmest at `warmest_ms`, and falling straight back — coldest about dawn and warmest in
+/// the afternoon, as air is, if the world says so; at midnight and noon if it does not.
 ///
-/// The argument is simulated time, not a tick count, so the wave has the same shape at any
-/// tick length (Amendment A-1). Systems that add to a field propose the *difference* between
-/// the wave at the two ends of their step, so summed deltas telescope back to the wave itself;
-/// systems that set an absolute level (the sun) use the level directly.
-/// The sun's light at simulated time `at_ms`, in `0..=peak`: its height in the sky — a cosine
-/// over the day, lowest at midnight and highest at noon — wherever it is above the horizon, and
-/// nothing between sunset (a quarter-day before midnight) and sunrise (a quarter-day after).
-/// Simulated time, not ticks, so the same at any tick length (Amendment A-1); fixed-point, so
-/// the same on every platform.
-fn daylight(at_ms: u64, day_ms: u64, peak: i64) -> i64 {
-    let day = day_ms.max(1) as i128;
-    let phase = (at_ms as i128).rem_euclid(day);
-    let angle = (phase * kernel::fixed::FULL_TURN as i128 / day) as i64;
-    let (_, cos) = kernel::fixed::sin_cos(angle);
-    let height = (-cos).max(0) as i128;
-    (peak as i128 * height / kernel::fixed::TRIG_ONE as i128) as i64
+/// Its argument is simulated time, not a tick count, so it has the same shape at any tick
+/// length (Amendment A-1). Systems that add to a field propose the *difference* between the
+/// curve at the two ends of their step, so summed deltas telescope back to the curve itself.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct DayCurve {
+    /// The length of a day, in milliseconds.
+    pub day_ms: u64,
+    /// The swing from coldest to warmest, in centidegrees.
+    pub amplitude_centi_c: i64,
+    /// When in the day it is coldest, in milliseconds after midnight.
+    pub coldest_ms: u64,
+    /// When in the day it is warmest.
+    pub warmest_ms: u64,
 }
 
-fn wave(at_ms: u64, period_ms: u64, amp: i64) -> i64 {
-    let period = period_ms.max(2) as i128;
-    let phase = (at_ms as i128).rem_euclid(period);
-    let half = period / 2;
-    let up = if phase <= half { phase } else { period - phase };
-    ((amp as i128 * up) / half) as i64
+impl DayCurve {
+    /// Where the curve stands at `at_ms`, in `0..=amplitude`.
+    pub fn level(&self, at_ms: u64) -> i64 {
+        let day = self.day_ms.max(2) as i128;
+        let phase = (at_ms as i128 - self.coldest_ms as i128).rem_euclid(day);
+        let mut rise = (self.warmest_ms as i128 - self.coldest_ms as i128).rem_euclid(day);
+        if rise == 0 {
+            rise = day / 2;
+        }
+        let amp = self.amplitude_centi_c as i128;
+        let up = if phase <= rise {
+            amp * phase / rise
+        } else {
+            amp * (day - phase) / (day - rise)
+        };
+        up as i64
+    }
 }
 
 /// Scale `value` by `exposure` (0..=10000): full exposure passes it unchanged, a sealed
@@ -171,6 +210,21 @@ fn thermal_damping(view: &dyn CommittedView, region: EntityId, reference: i64) -
         return PERCENT_FULL;
     }
     (reference.saturating_mul(PERCENT_FULL) / denom).clamp(0, PERCENT_FULL)
+}
+
+/// How far above its coldest the day's swing stands in `region` at `at_ms`, in centidegrees
+/// (Amendment A-35): `curve`, damped by the region's exposure and by its thermal mass against
+/// `thermal_mass_reference` — what [`DiurnalCycle`] adds to the region's declared coldest.
+pub fn day_share(
+    view: &dyn CommittedView,
+    region: EntityId,
+    curve: &DayCurve,
+    thermal_mass_reference: i64,
+    at_ms: u64,
+) -> i64 {
+    let exposure = exposure_of(view, region);
+    let mass = thermal_damping(view, region, thermal_mass_reference);
+    attenuate(attenuate(curve.level(at_ms), exposure), mass)
 }
 
 /// The regions the sky's weather runs on this tick: every climate region — an entity carrying a
@@ -259,6 +313,70 @@ fn anomaly_of(view: &dyn CommittedView, region: EntityId, fact: FactType) -> i64
         .unwrap_or(0)
 }
 
+/// How weather passes between neighbouring climates (Amendment A-36), world rules: each
+/// climate's weather — its departures from normal temperature, humidity, and pressure — mixes
+/// with its neighbours' with a time constant of `mixing_ms`, and the wind blowing into it from a
+/// neighbour carries that neighbour's weather across `distance_cm`, the distance between their
+/// middles. Zero turns either off.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Fronts {
+    /// The time constant of mixing between neighbours, in milliseconds.
+    pub mixing_ms: u64,
+    /// How far the wind carries weather from a neighbour's middle to this climate's, in
+    /// centimetres.
+    pub distance_cm: i64,
+}
+
+/// Fixed-point scale of [`Fronts::mix`]'s weights.
+const MIX_ONE: i128 = 1 << 30;
+
+impl Fronts {
+    /// `region`'s committed anomaly of `fact`, mixed over a step of `dt_ms` with its neighbours'
+    /// (Amendment A-36): a weighted mean, its own at weight one, each neighbouring climate's at
+    /// the share of the step's mixing and of the wind it blows this way. Implicit in its own value
+    /// — a mean always lies between what it averages — so stable at any step length.
+    fn mix(&self, view: &dyn CommittedView, region: EntityId, fact: FactType, dt_ms: u64) -> i64 {
+        let own = anomaly_of(view, region, fact);
+        if self.mixing_ms == 0 && self.distance_cm <= 0 {
+            return own;
+        }
+        let dt = dt_ms as i128;
+        let mut sum = own as i128 * MIX_ONE;
+        let mut weight = MIX_ONE;
+        let mut neighbours: Vec<EntityId> = view
+            .read_all(FactKey::new(region, ADJACENT_TO))
+            .into_iter()
+            .filter_map(|f| match f.value {
+                Value::Entity(n) => Some(n),
+                _ => None,
+            })
+            .filter(|n| {
+                view.read(FactKey::new(*n, TEMPERATURE)).is_some() && !is_sheltered(view, *n)
+            })
+            .collect();
+        neighbours.sort_unstable();
+        neighbours.dedup();
+        for n in neighbours {
+            let mut w: i128 = 0;
+            if self.mixing_ms > 0 {
+                w += dt * MIX_ONE / self.mixing_ms as i128;
+            }
+            let toward = view.read(FactKey::new(n, WIND_TOWARD)).map(|f| f.value);
+            if self.distance_cm > 0 && toward == Some(Value::Entity(region)) {
+                let wind = view
+                    .read(FactKey::new(n, WIND_SPEED))
+                    .and_then(|f| f.value.as_int())
+                    .unwrap_or(0)
+                    .max(0) as i128;
+                w += wind * dt * MIX_ONE / (1000 * self.distance_cm as i128);
+            }
+            sum += w * anomaly_of(view, n, fact) as i128;
+            weight += w;
+        }
+        div_round(sum, weight) as i64
+    }
+}
+
 /// A deterministic day/night temperature swing (Vol. III Ch. 1 §1.10) for every region —
 /// damped by the region's exposure and its thermal mass (§1.9).
 ///
@@ -271,27 +389,24 @@ fn anomaly_of(view: &dyn CommittedView, region: EntityId, fact: FactType) -> i64
 pub struct DiurnalCycle {
     clock: SimClock,
     step: Step,
-    day_ms: u64,
-    amplitude_centi_c: i64,
+    curve: DayCurve,
     thermal_mass_reference: i64,
 }
 
 impl DiurnalCycle {
-    /// Swing every region by `amplitude_centi_c` over a day of `day_ms` simulated time, stepping
-    /// as `step` says. `thermal_mass_reference` is the thermal mass (kJ/(m³·K)) at which a
-    /// region's swing is halved (Vol. III Ch. 1 §1.9; Amendment A-6); larger means thermal mass matters less.
+    /// Swing every region along `curve`, stepping as `step` says. `thermal_mass_reference` is the
+    /// thermal mass (kJ/(m³·K)) at which a region's swing is halved (Vol. III Ch. 1 §1.9;
+    /// Amendment A-6); larger means thermal mass matters less.
     pub const fn new(
         clock: SimClock,
         step: Step,
-        day_ms: u64,
-        amplitude_centi_c: i64,
+        curve: DayCurve,
         thermal_mass_reference: i64,
     ) -> Self {
         Self {
             clock,
             step,
-            day_ms,
-            amplitude_centi_c,
+            curve,
             thermal_mass_reference,
         }
     }
@@ -311,16 +426,10 @@ impl System for DiurnalCycle {
         self.step.cadence()
     }
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
-        let now = wave(
-            self.clock.ms_at(ctx.tick()),
-            self.day_ms,
-            self.amplitude_centi_c,
-        );
-        let then = wave(
-            self.clock.ms_at(self.step.start_of(ctx.tick())),
-            self.day_ms,
-            self.amplitude_centi_c,
-        );
+        let now = self.curve.level(self.clock.ms_at(ctx.tick()));
+        let then = self
+            .curve
+            .level(self.clock.ms_at(self.step.start_of(ctx.tick())));
         regions(view)
             .into_iter()
             .map(|region| {
@@ -354,6 +463,7 @@ pub struct TemperatureWeather {
     step: Step,
     weather: Weather,
     thermal_mass_reference: i64,
+    fronts: Fronts,
 }
 
 impl TemperatureWeather {
@@ -365,11 +475,13 @@ impl TemperatureWeather {
         spread_centi_c: i64,
         memory_ms: u64,
         thermal_mass_reference: i64,
+        fronts: Fronts,
     ) -> Self {
         Self {
             step,
             weather: Weather::new(spread_centi_c, memory_ms, step.dt_ms),
             thermal_mass_reference,
+            fronts,
         }
     }
 }
@@ -391,7 +503,11 @@ impl System for TemperatureWeather {
         let mut out = Vec::new();
         for region in regions(view) {
             let before = anomaly_of(view, region, TEMPERATURE_ANOMALY);
-            let after = self.weather.step(before, &mut ctx.rng(region.raw()));
+            // Mixed with the neighbours' weather first (Amendment A-36).
+            let mixed = self
+                .fronts
+                .mix(view, region, TEMPERATURE_ANOMALY, self.step.dt_ms);
+            let after = self.weather.step(mixed, &mut ctx.rng(region.raw()));
             let exposure = exposure_of(view, region);
             let mass = thermal_damping(view, region, self.thermal_mass_reference);
             let felt = |anomaly| attenuate(attenuate(anomaly_level(anomaly), exposure), mass);
@@ -414,26 +530,124 @@ impl System for TemperatureWeather {
     }
 }
 
-/// The sun crossing the sky: illumination set to its absolute level for the moment, following
-/// the sun's height — full at midday, falling to nothing at sunset, and dark all night until
-/// sunrise (Vol. III Ch. 1 §1.10, Time and Change; Amendment A-8), for every region.
-/// The sun's position is a pure function of simulated time; exposure scales it so a sealed cave
-/// stays dark even at noon.
-pub struct DayNightCycle {
+/// The seasons' share of temperature (Vol. III Ch. 1 §1.10, *Time and Change*; Amendment A-34):
+/// every climate open to the sky warms toward midsummer and cools toward midwinter, a lag
+/// behind the sun, by the world's declared swing — damped, like the day's, by exposure and
+/// thermal mass. Each step proposes the change in the damped seasonal level between its start
+/// and end, so the steps telescope to exactly the season's level at any tick length (as for
+/// [`DiurnalCycle`]). A region's declared temperature is its air on the world's first day; the
+/// seasons move it from there. A world with no year has no seasons, and this proposes nothing.
+pub struct Seasons {
     clock: SimClock,
     step: Step,
-    day_ms: u64,
-    peak_illumination: i64,
+    calendar: crate::calendar::Calendar,
+    thermal_mass_reference: i64,
 }
 
-impl DayNightCycle {
-    /// Light each region up to `peak_illumination` at midday, over a day of `day_ms`.
-    pub const fn new(clock: SimClock, step: Step, day_ms: u64, peak_illumination: i64) -> Self {
+impl Seasons {
+    /// The seasons `calendar` gives, stepping as `step` says; `thermal_mass_reference` as for the
+    /// day/night swing.
+    pub const fn new(
+        clock: SimClock,
+        step: Step,
+        calendar: crate::calendar::Calendar,
+        thermal_mass_reference: i64,
+    ) -> Self {
         Self {
             clock,
             step,
-            day_ms,
+            calendar,
+            thermal_mass_reference,
+        }
+    }
+}
+
+const SEASONS_READS: &[FactType] = &[
+    TEMPERATURE,
+    EXPOSURE,
+    ENCLOSED,
+    MADE_OF,
+    MATERIAL_DENSITY,
+    MATERIAL_THERMAL_CAPACITY,
+    crate::schema::LATITUDE,
+    CONTAINED_IN,
+];
+
+impl System for Seasons {
+    fn id(&self) -> SystemId {
+        SystemId::new("physical.seasons")
+    }
+    fn reads(&self) -> &'static [FactType] {
+        SEASONS_READS
+    }
+    fn writes(&self) -> &'static [FactType] {
+        TEMPERATURE_W
+    }
+    fn cadence(&self) -> Cadence {
+        self.step.cadence()
+    }
+    fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+        if self.calendar.year_days == 0 {
+            return Vec::new();
+        }
+        let now = self.clock.ms_at(ctx.tick());
+        let then = self.clock.ms_at(self.step.start_of(ctx.tick()));
+        let mut out = Vec::new();
+        for region in regions(view) {
+            let latitude = crate::climate::latitude_of(view, region, self.calendar.latitude);
+            let exposure = exposure_of(view, region);
+            let mass = thermal_damping(view, region, self.thermal_mass_reference);
+            let damped = |at| {
+                attenuate(
+                    attenuate(self.calendar.seasonal(at, latitude), exposure),
+                    mass,
+                )
+            };
+            let delta = damped(now) - damped(then);
+            if delta != 0 {
+                out.push(Proposal::new(
+                    self.id(),
+                    FactKey::new(region, TEMPERATURE),
+                    ctx.basis_tick(),
+                    Change::Delta(delta),
+                    Cause::new("season"),
+                ));
+            }
+        }
+        out
+    }
+}
+
+/// The sun crossing the sky: illumination set to its absolute level for the moment, following
+/// the sun's height — highest at noon, falling to nothing at sunset, and dark until sunrise but
+/// for the moon (Vol. III Ch. 1 §1.10, Time and Change; Amendments A-8, A-34), for every region.
+/// How high the sun stands, and how long it is up, follow the season and the region's latitude
+/// ([`crate::calendar`]). The sky is a pure function of simulated time; exposure scales it so a
+/// sealed cave stays dark even at noon.
+pub struct DayNightCycle {
+    clock: SimClock,
+    step: Step,
+    calendar: crate::calendar::Calendar,
+    peak_illumination: i64,
+    cloud_shade: i64,
+}
+
+impl DayNightCycle {
+    /// Light each region by the sky `calendar` gives, up to `peak_illumination` with the sun
+    /// overhead, less `cloud_shade` of it under a full overcast (Amendment A-35).
+    pub const fn new(
+        clock: SimClock,
+        step: Step,
+        calendar: crate::calendar::Calendar,
+        peak_illumination: i64,
+        cloud_shade: i64,
+    ) -> Self {
+        Self {
+            clock,
+            step,
+            calendar,
             peak_illumination,
+            cloud_shade,
         }
     }
 }
@@ -453,86 +667,228 @@ impl System for DayNightCycle {
     }
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let at_ms = self.clock.ms_at(ctx.tick());
-        light_by_region(view, at_ms, self.day_ms, self.peak_illumination)
-            .into_iter()
-            .map(|(region, light)| {
-                Proposal::new(
-                    self.id(),
-                    FactKey::new(region, ILLUMINATION),
-                    ctx.basis_tick(),
-                    Change::Set(Value::Int(light)),
-                    Cause::new("solar_position"),
-                )
-            })
-            .collect()
+        light_by_region(
+            view,
+            at_ms,
+            &self.calendar,
+            self.peak_illumination,
+            self.cloud_shade,
+        )
+        .into_iter()
+        .map(|(region, light)| {
+            Proposal::new(
+                self.id(),
+                FactKey::new(region, ILLUMINATION),
+                ctx.basis_tick(),
+                Change::Set(Value::Int(light)),
+                Cause::new("solar_position"),
+            )
+        })
+        .collect()
     }
 }
 
-/// The daylight every region has at `at_ms` of simulated time, over a day of `day_ms` with
-/// `peak` at midday: what [`DayNightCycle`] sets each step, and what a world begins with, so the
-/// first tick of a night is dark (Amendment A-16). Open ground takes the sun as its exposure
-/// allows; a sheltered room takes only what its openings let in (Amendment A-5).
+/// The light every region has at `at_ms` of simulated time under the sky `calendar` gives,
+/// `peak` with the sun overhead: what [`DayNightCycle`] sets each step, and what a world begins
+/// with, so the first tick of a night is dark (Amendment A-16). Open ground takes the sky as its
+/// exposure allows; a sheltered room takes only what its openings let in (Amendment A-5). Each
+/// region sees the sky from its own latitude (Amendment A-34), through its cloud (A-35).
 pub fn light_by_region(
     view: &dyn CommittedView,
     at_ms: u64,
-    day_ms: u64,
+    calendar: &crate::calendar::Calendar,
     peak: i64,
+    cloud_shade: i64,
 ) -> Vec<(EntityId, i64)> {
-    let sun = daylight(at_ms, day_ms, peak);
     all_climates(view)
         .into_iter()
         .map(|region| {
+            let latitude = crate::climate::latitude_of(view, region, calendar.latitude);
+            // Cloud keeps out its share of the light (Amendment A-35): the cloud over the region,
+            // or over the climate around it.
+            let cloud = crate::climate::ambient(view, region, crate::schema::CLOUD)
+                .map_or(0, |(_, c)| c.clamp(0, PERCENT_FULL));
+            let sky = calendar.sky_light(at_ms, latitude, peak);
+            let sky = sky - attenuate(attenuate(sky, cloud), cloud_shade);
             let share = if is_sheltered(view, region) {
                 daylight_fraction(view, region)
             } else {
                 exposure_of(view, region)
             };
-            (region, attenuate(sun, share))
+            (region, attenuate(sky, share))
         })
         .collect()
 }
 
-/// Weather driving humidity: each region's humidity is its baseline plus a mean-reverting
-/// weather anomaly (`Weather`), the anomaly's effect scaled by exposure (a sealed chamber
-/// keeps its baseline air), for every region. Sets the absolute level each step, so humidity
-/// can never drift from its rule.
+/// The sky's rules (Amendment A-35), all from the world package.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SkyRules {
+    /// The air's humidity, in hundredths of a percent, past which cloud begins to form.
+    pub cloud_above: i64,
+    /// The air's humidity at and past which rain falls (or snow): the sky is overcast by then.
+    pub rain_above: i64,
+    /// How much of the day's light a full overcast keeps out, in hundredths of a percent.
+    pub cloud_shade: i64,
+    /// How much of the day/night swing a full overcast holds back, in hundredths of a percent.
+    pub cloud_damp: i64,
+    /// How hard it rains with the air saturated, in hundredths of a millimetre an hour; less,
+    /// in proportion, between the rain line and saturation.
+    pub rain_per_hour: i64,
+    /// The air temperature, in centidegrees, at and below which what falls is snow.
+    pub snow_below_centi_c: i64,
+    /// The relative humidity near the ground past which fog forms.
+    pub fog_above: i64,
+    /// The wind, in cm/s, at and above which fog cannot settle; it thins toward it.
+    pub fog_wind_below_cm_s: i64,
+    /// How much the relative humidity near the ground rises for each degree the air cools below
+    /// its day's mean, and falls for each degree it warms above, in hundredths of a percent.
+    pub humidity_per_degree: i64,
+}
+
+/// The sky over every climate open to it (Vol. III Ch. 1 §1.10; Amendments A-1, A-35):
+///
+/// - **The air's humidity** is the climate's normal — its own, or the world's baseline — plus a
+///   mean-reverting weather anomaly (`Weather`), scaled by exposure.
+/// - **Cloud** forms as that air grows humid past the world's cloud line, and the sky is overcast
+///   by the rain line. It holds back the day's swing — cooler afternoons, warmer nights — by the
+///   world's `cloud_damp`: the system proposes the change in that share of the temperature
+///   between its step's start and end, read from the cloud it committed last, so the shares
+///   telescope exactly as the day's swing does. (Its dimming of the light is the sun's system's.)
+/// - **Rain** falls from air at the rain line or past it, harder toward saturation; below the
+///   world's snow line, it falls as **snow**.
+/// - **The humidity near the ground** — the fact [`HUMIDITY`] — is the air's, raised as the air
+///   cools below its day's mean and lowered as it warms above it: damp dawns, dry afternoons.
+/// - **Fog** forms when that humidity passes the world's fog line in still air: thicker toward
+///   saturation, thinner as the wind rises toward the world's fog wind.
+///
+/// Humidity is set to its level each step, so it can never drift from its rule. Cloud, rain,
+/// snow, and fog are written only when they change, and are absent when there is none.
 pub struct Precipitation {
+    clock: SimClock,
     step: Step,
     baseline: i64,
     weather: Weather,
+    sky: SkyRules,
+    curve: DayCurve,
+    thermal_mass_reference: i64,
+    fronts: Fronts,
 }
 
 impl Precipitation {
     /// Humidity about `baseline` (hundredths of a percent) with weather departures of typical
-    /// size `spread` lasting about `memory_ms`, stepping as `step` says.
-    pub fn new(step: Step, baseline: i64, spread: i64, memory_ms: u64) -> Self {
+    /// size `spread` lasting about `memory_ms`, stepping as `step` says, under the `sky`'s rules.
+    /// The day's swing — `curve`, damped by thermal mass against `thermal_mass_reference` — is
+    /// the one [`DiurnalCycle`] makes, which cloud holds back and the ground's humidity answers.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        clock: SimClock,
+        step: Step,
+        baseline: i64,
+        spread: i64,
+        memory_ms: u64,
+        sky: SkyRules,
+        curve: DayCurve,
+        thermal_mass_reference: i64,
+        fronts: Fronts,
+    ) -> Self {
         Self {
+            clock,
             step,
             baseline,
             weather: Weather::new(spread, memory_ms, step.dt_ms),
+            sky,
+            curve,
+            thermal_mass_reference,
+            fronts,
         }
     }
+
+    /// Write `now` at `key` if it differs from what is held: absent when zero.
+    fn mirror(
+        &self,
+        view: &dyn CommittedView,
+        ctx: &TickContext,
+        out: &mut Vec<Proposal>,
+        key: FactKey,
+        now: i64,
+        why: &'static str,
+    ) {
+        let held = view.read(key).and_then(|f| f.value.as_int()).unwrap_or(0);
+        if held == now {
+            return;
+        }
+        let change = if now == 0 {
+            Change::Tombstone
+        } else {
+            Change::Set(Value::Int(now))
+        };
+        out.push(Proposal::new(
+            self.id(),
+            key,
+            ctx.basis_tick(),
+            change,
+            Cause::new(why),
+        ));
+    }
 }
+
+const SKY_READS: &[FactType] = &[
+    TEMPERATURE,
+    HUMIDITY_ANOMALY,
+    ADJACENT_TO,
+    WIND_TOWARD,
+    EXPOSURE,
+    ENCLOSED,
+    MADE_OF,
+    MATERIAL_DENSITY,
+    MATERIAL_THERMAL_CAPACITY,
+    WIND_SPEED,
+    crate::schema::HUMIDITY_NORMAL,
+    crate::schema::CLOUD,
+    crate::schema::RAIN,
+    crate::schema::SNOW,
+    crate::schema::FOG,
+];
+const SKY_WRITES: &[FactType] = &[
+    HUMIDITY,
+    HUMIDITY_ANOMALY,
+    TEMPERATURE,
+    crate::schema::CLOUD,
+    crate::schema::RAIN,
+    crate::schema::SNOW,
+    crate::schema::FOG,
+];
 
 impl System for Precipitation {
     fn id(&self) -> SystemId {
         SystemId::new("physical.precipitation")
     }
     fn reads(&self) -> &'static [FactType] {
-        HUMIDITY_READS
+        SKY_READS
     }
     fn writes(&self) -> &'static [FactType] {
-        HUMIDITY_WRITES
+        SKY_WRITES
     }
     fn cadence(&self) -> Cadence {
         self.step.cadence()
     }
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
+        use crate::schema::{CLOUD, FOG, HUMIDITY_NORMAL, RAIN, SNOW};
+        let sky = &self.sky;
+        let int = |region: EntityId, fact: FactType| {
+            view.read(FactKey::new(region, fact))
+                .and_then(|f| f.value.as_int())
+        };
+        let now = self.clock.ms_at(ctx.tick());
+        let then = self.clock.ms_at(self.step.start_of(ctx.tick()));
         let mut out = Vec::new();
         for region in regions(view) {
-            let before = anomaly_of(view, region, HUMIDITY_ANOMALY);
-            let after = self.weather.step(before, &mut ctx.rng(region.raw()));
-            let level = self.baseline + attenuate(anomaly_level(after), exposure_of(view, region));
+            let exposure = exposure_of(view, region);
+            // Mixed with the neighbours' weather first (Amendment A-36).
+            let mixed = self
+                .fronts
+                .mix(view, region, HUMIDITY_ANOMALY, self.step.dt_ms);
+            let after = self.weather.step(mixed, &mut ctx.rng(region.raw()));
             out.push(Proposal::new(
                 self.id(),
                 FactKey::new(region, HUMIDITY_ANOMALY),
@@ -540,13 +896,99 @@ impl System for Precipitation {
                 Change::Set(Value::Int(after)),
                 Cause::new("precipitation"),
             ));
+            // The air's humidity, and the cloud it makes.
+            let normal = int(region, HUMIDITY_NORMAL).unwrap_or(self.baseline);
+            let air = (normal + attenuate(anomaly_level(after), exposure)).clamp(0, PERCENT_FULL);
+            let cloud = if air <= sky.cloud_above {
+                0
+            } else {
+                ((air - sky.cloud_above) * PERCENT_FULL / (sky.rain_above - sky.cloud_above).max(1))
+                    .min(PERCENT_FULL)
+            };
+            let cloud = attenuate(cloud, exposure);
+            // The day's swing about its mean, as the day/night cycle gives it, and the share of
+            // it the cloud holds back — at the step's end under this cloud, at its start under
+            // the cloud committed then.
+            let mass = thermal_damping(view, region, self.thermal_mass_reference);
+            let swing = |at| {
+                let level = attenuate(attenuate(self.curve.level(at), exposure), mass);
+                let mean = attenuate(attenuate(self.curve.amplitude_centi_c / 2, exposure), mass);
+                level - mean
+            };
+            let held = |c: i64, at| -swing(at) * c / PERCENT_FULL * sky.cloud_damp / PERCENT_FULL;
+            let cloud_before = int(region, CLOUD).unwrap_or(0);
+            let shift = held(cloud, now) - held(cloud_before, then);
+            if shift != 0 {
+                out.push(Proposal::new(
+                    self.id(),
+                    FactKey::new(region, TEMPERATURE),
+                    ctx.basis_tick(),
+                    Change::Delta(shift),
+                    Cause::new("cloud"),
+                ));
+            }
+            self.mirror(
+                view,
+                ctx,
+                &mut out,
+                FactKey::new(region, CLOUD),
+                cloud,
+                "cloud",
+            );
+            // Rain, or snow below the snow line.
+            let falling = if air < sky.rain_above {
+                0
+            } else {
+                (sky.rain_per_hour * (air - sky.rain_above + 1)
+                    / (PERCENT_FULL - sky.rain_above + 1))
+                    .max(1)
+            };
+            let falling = attenuate(falling, exposure);
+            let cold = int(region, TEMPERATURE).is_some_and(|t| t <= sky.snow_below_centi_c);
+            let (rain, snow) = if cold { (0, falling) } else { (falling, 0) };
+            self.mirror(
+                view,
+                ctx,
+                &mut out,
+                FactKey::new(region, RAIN),
+                rain,
+                "rain",
+            );
+            self.mirror(
+                view,
+                ctx,
+                &mut out,
+                FactKey::new(region, SNOW),
+                snow,
+                "snow",
+            );
+            // Near the ground: damp as the air cools below its day's mean, dry as it warms.
+            let cooled = -(swing(now) + held(cloud, now));
+            let ground = (air + sky.humidity_per_degree * cooled / 100).clamp(0, PERCENT_FULL);
             out.push(Proposal::new(
                 self.id(),
                 FactKey::new(region, HUMIDITY),
                 ctx.basis_tick(),
-                Change::Set(Value::Int(level.clamp(0, PERCENT_FULL))),
+                Change::Set(Value::Int(ground)),
                 Cause::new("precipitation"),
             ));
+            // Fog, in still air near saturation.
+            let wind = int(region, WIND_SPEED).unwrap_or(0).max(0);
+            let fog = if ground <= sky.fog_above || wind >= sky.fog_wind_below_cm_s {
+                0
+            } else {
+                let thick =
+                    (ground - sky.fog_above) * PERCENT_FULL / (PERCENT_FULL - sky.fog_above).max(1);
+                thick * (sky.fog_wind_below_cm_s - wind) / sky.fog_wind_below_cm_s.max(1)
+            };
+            self.mirror(
+                view,
+                ctx,
+                &mut out,
+                FactKey::new(region, FOG),
+                attenuate(fog, exposure),
+                "fog",
+            );
         }
         out
     }
@@ -560,6 +1002,7 @@ pub struct PressureSystem {
     sea_level: i64,
     elevation_factor: i64,
     weather: Weather,
+    fronts: Fronts,
 }
 
 impl PressureSystem {
@@ -572,12 +1015,14 @@ impl PressureSystem {
         elevation_factor: i64,
         spread: i64,
         memory_ms: u64,
+        fronts: Fronts,
     ) -> Self {
         Self {
             step,
             sea_level,
             elevation_factor,
             weather: Weather::new(spread, memory_ms, step.dt_ms),
+            fronts,
         }
     }
 
@@ -607,8 +1052,11 @@ impl System for PressureSystem {
                 .read(FactKey::new(region, ELEVATION))
                 .and_then(|f| f.value.as_int())
                 .unwrap_or(0);
-            let before = anomaly_of(view, region, PRESSURE_ANOMALY);
-            let after = self.weather.step(before, &mut ctx.rng(region.raw()));
+            // Mixed with the neighbours' weather first (Amendment A-36).
+            let mixed = self
+                .fronts
+                .mix(view, region, PRESSURE_ANOMALY, self.step.dt_ms);
+            let after = self.weather.step(mixed, &mut ctx.rng(region.raw()));
             let level = self.baseline(elevation)
                 + attenuate(anomaly_level(after), exposure_of(view, region));
             out.push(Proposal::new(
@@ -638,21 +1086,60 @@ impl System for PressureSystem {
 /// therefore lags pressure by one environment step, as effects chain across commits
 /// (Vol. III Ch. 12 §12.2).
 pub struct WindSystem {
+    clock: SimClock,
     step: Step,
-    gradient_divisor: i64,
+    per_decapascal: i64,
+    elevation_factor: i64,
     max_wind: i64,
+    gale: Gale,
+}
+
+/// How a deep low brews a gale (Amendment A-33), world rules: below `below` decapascals under its
+/// normal pressure, a region's wind rises by `per_decapascal` cm/s for every decapascal deeper.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Gale {
+    /// How far under normal, in decapascals, the pressure must fall before a gale brews.
+    pub below: i64,
+    /// How much wind, in cm/s, each decapascal deeper brings.
+    pub per_decapascal: i64,
 }
 
 impl WindSystem {
-    /// Configure wind. `gradient_divisor` scales speed per unit pressure difference (larger =
-    /// gentler); `max_wind` clamps the speed (world-package rules). Wind is a function of the
-    /// current pressure field, not a rate, so it simply steps with the rest of the environment.
-    pub const fn new(step: Step, gradient_divisor: i64, max_wind: i64) -> Self {
+    /// Configure wind: `per_decapascal` cm/s for each decapascal of difference between
+    /// neighbours' pressure brought to the datum — `elevation_factor` decapascals for each metre
+    /// of height, as pressure falls (Amendment A-36) — clamped at `max_wind` (world-package rules).
+    /// Wind is a function of the current pressure field, not a rate, so it simply steps with the
+    /// rest of the environment.
+    pub const fn new(
+        clock: SimClock,
+        step: Step,
+        per_decapascal: i64,
+        elevation_factor: i64,
+        max_wind: i64,
+        gale: Gale,
+    ) -> Self {
         Self {
+            clock,
             step,
-            gradient_divisor,
+            per_decapascal,
+            elevation_factor,
             max_wind,
+            gale,
         }
+    }
+
+    /// `region`'s pressure brought down to the datum: what it would be at sea level. Height alone
+    /// lowers pressure without moving air; only a difference of this drives the wind
+    /// (Amendment A-36).
+    fn at_datum(&self, view: &dyn CommittedView, region: EntityId) -> Option<i64> {
+        let pressure = view
+            .read(FactKey::new(region, PRESSURE))
+            .and_then(|f| f.value.as_int())?;
+        let elevation = view
+            .read(FactKey::new(region, ELEVATION))
+            .and_then(|f| f.value.as_int())
+            .unwrap_or(0);
+        Some(pressure + elevation / 100 * self.elevation_factor)
     }
 }
 
@@ -672,10 +1159,7 @@ impl System for WindSystem {
     fn evaluate(&self, view: &dyn CommittedView, ctx: &TickContext) -> Vec<Proposal> {
         let mut out = Vec::new();
         for region in regions(view) {
-            let my_pressure = match view
-                .read(FactKey::new(region, PRESSURE))
-                .and_then(|f| f.value.as_int())
-            {
+            let my_pressure = match self.at_datum(view, region) {
                 Some(p) => p,
                 // No committed pressure yet (e.g. the first tick): calm, and nothing to write.
                 None => continue,
@@ -686,10 +1170,7 @@ impl System for WindSystem {
             let mut best: Option<(EntityId, i64)> = None;
             for f in view.read_all(FactKey::new(region, ADJACENT_TO)) {
                 if let Value::Entity(neighbour) = f.value {
-                    if let Some(np) = view
-                        .read(FactKey::new(neighbour, PRESSURE))
-                        .and_then(|nf| nf.value.as_int())
-                    {
+                    if let Some(np) = self.at_datum(view, neighbour) {
                         let better = match best {
                             None => true,
                             Some((bn, bp)) => np < bp || (np == bp && neighbour.raw() < bn.raw()),
@@ -703,10 +1184,28 @@ impl System for WindSystem {
 
             let speed_key = FactKey::new(region, WIND_SPEED);
             let toward_key = FactKey::new(region, WIND_TOWARD);
+            // A storm the world declares blows at least its own wind while it lasts (Amendment
+            // A-29).
+            let now_s = (self.clock.ms_at(ctx.tick()) / 1000) as i64;
+            let storm = view
+                .read_all(FactKey::new(region, crate::schema::STORM))
+                .into_iter()
+                .filter_map(|f| f.value.as_vec3())
+                .filter(|[from, to, _]| *from <= now_s && now_s < *to)
+                .map(|[_, _, wind]| wind)
+                .max()
+                .unwrap_or(0)
+                .clamp(0, self.max_wind);
+            // A deep low brews its own gale (Amendment A-33).
+            let low = -anomaly_level(anomaly_of(view, region, PRESSURE_ANOMALY));
+            let gale =
+                ((low - self.gale.below).max(0) * self.gale.per_decapascal).clamp(0, self.max_wind);
+            let storm = storm.max(gale);
             match best {
                 Some((neighbour, np)) if np < my_pressure => {
-                    let speed =
-                        ((my_pressure - np) / self.gradient_divisor.max(1)).clamp(0, self.max_wind);
+                    let speed = ((my_pressure - np).saturating_mul(self.per_decapascal))
+                        .clamp(0, self.max_wind)
+                        .max(storm);
                     out.push(Proposal::new(
                         self.id(),
                         speed_key,
@@ -723,12 +1222,17 @@ impl System for WindSystem {
                     ));
                 }
                 _ => {
+                    let (speed, why) = if storm > 0 {
+                        (storm, "storm")
+                    } else {
+                        (0, "calm")
+                    };
                     out.push(Proposal::new(
                         self.id(),
                         speed_key,
                         ctx.basis_tick(),
-                        Change::Set(Value::Int(0)),
-                        Cause::new("calm"),
+                        Change::Set(Value::Int(speed)),
+                        Cause::new(why),
                     ));
                     out.push(Proposal::new(
                         self.id(),
@@ -744,29 +1248,41 @@ impl System for WindSystem {
     }
 }
 
-/// Indoor air (Amendment A-5): every walled region's temperature follows the air outside it —
-/// the nearest enclosing climate — with the lag the world declares (`indoor_coupling_seconds`),
-/// lengthened by the thermal mass of what the room is built of, so a stone cottage holds the
-/// day's warmth longer than a timber shed. A walled region with no temperature yet is given the
-/// outside air's on its first step, and from then on is an indoor climate of its own — what
-/// stands in it inherits *its* temperature, not the sky's.
+/// Indoor air (Amendments A-5, A-37): every walled region's temperature follows the air outside
+/// it — the nearest enclosing climate — through its walls, with the lag the world declares
+/// (`indoor_coupling_seconds`), lengthened by the thermal mass of what the room is built of, so a
+/// stone cottage holds the day's warmth longer than a timber shed. And it trades air through
+/// every opening that stands open with whatever lies beyond — the next room's air, or the open
+/// air's — as fast as the opening's size and the draught through it allow ([`crate::air`]): an
+/// open door lets the cold in, and warmth climbs an open stair. A walled region with no
+/// temperature yet is given the outside air's on its first step, and from then on is an indoor
+/// climate of its own — what stands in it inherits *its* temperature, not the sky's.
 ///
-/// Solved implicitly over the step, so it is stable at any step length, and rounded without
-/// bias so a slow lag at fine ticks still converges (Amendment A-1).
+/// Solved implicitly in the room's own air over the step — a weighted mean of what it trades
+/// with — so it is stable at any step length, and rounded without bias so a slow lag at fine
+/// ticks still converges (Amendment A-1).
 pub struct Shelter {
     step: Step,
     coupling_ms: u64,
     thermal_mass_reference: i64,
+    air: crate::air::AirRules,
 }
 
 impl Shelter {
     /// Indoor air following outdoor air with time constant `coupling_ms`, stepping as `step`
-    /// says; `thermal_mass_reference` as for the day/night swing.
-    pub const fn new(step: Step, coupling_ms: u64, thermal_mass_reference: i64) -> Self {
+    /// says; `thermal_mass_reference` as for the day/night swing; trading air through openings
+    /// as `air` says.
+    pub const fn new(
+        step: Step,
+        coupling_ms: u64,
+        thermal_mass_reference: i64,
+        air: crate::air::AirRules,
+    ) -> Self {
         Self {
             step,
             coupling_ms,
             thermal_mass_reference,
+            air,
         }
     }
 }
@@ -809,11 +1325,27 @@ impl System for Shelter {
             let damping = thermal_damping(view, room, self.thermal_mass_reference).max(1) as i128;
             let tau = self.coupling_ms.max(1) as i128 * PERCENT_FULL as i128 / damping;
             let dt = self.step.dt_ms as i128;
-            let next = div_dither(
-                inside as i128 * tau + outside as i128 * dt,
-                tau + dt,
-                &mut ctx.rng(room.raw()),
-            ) as i64;
+            let mut sum = inside as i128 * tau + outside as i128 * dt;
+            let mut weight = tau + dt;
+            // Through its open openings, the air beyond (Amendment A-37): the step's share of
+            // the room's air that passes, in the walls' terms.
+            if let Some(volume) = crate::air::volume_cm3(view, room, &self.air) {
+                for (beyond, flow) in crate::air::openings(view, room, &self.air) {
+                    let air = if crate::terrain::is_true(view, beyond, ENCLOSED) {
+                        view.read(FactKey::new(beyond, TEMPERATURE))
+                            .and_then(|f| f.value.as_int())
+                    } else {
+                        crate::climate::ambient_temperature(view, beyond)
+                    };
+                    let Some(air) = air else {
+                        continue;
+                    };
+                    let w = flow * dt * tau / (1000 * volume);
+                    sum += air as i128 * w;
+                    weight += w;
+                }
+            }
+            let next = div_dither(sum, weight, &mut ctx.rng(room.raw())) as i64;
             if next != inside {
                 out.push(Proposal::new(
                     self.id(),

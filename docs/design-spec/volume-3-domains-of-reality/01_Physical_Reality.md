@@ -594,6 +594,8 @@ A cave floods because its permeability allows water movement.
 
 Fire spreads because nearby materials satisfy ignition conditions.
 
+*As built (Amendments A-27, A-28):* a structure takes damage until its integrity is gone, and a blow no harder than its weakest material leaves no mark. A fire grows toward what its most flammable material allows, eats what it burns in, and heats what it has a line to. A thing catches when that heat, times its flammability, reaches the world's ignition line. Granite and glass never catch; straw catches first.
+
 This property-oriented approach naturally supports future materials without changing engine behavior.
 
 ## Composite Materials
@@ -700,6 +702,18 @@ The Physical Reality domain should therefore avoid assuming fixed update rates o
 
 Instead it provides the shared context upon which specialized systems operate.
 
+*As built (Amendment A-34):* a world may declare a year, a latitude, and a moon. The sun's height follows the season and the place's latitude, so days lengthen toward midsummer, noon stands lower in winter, and the far north has midnight sun. Every climate open to the sky warms and cools with the seasons, a lag behind the sun. A moon with phases lights the night by the world's measure.
+
+*As built (Amendment A-35):* the air is coldest about dawn and warmest in the afternoon, as the world declares. Each climate has its own normal humidity. Cloud gathers in humid air, dims the day, and holds back the day's swing. Saturated air rains, and below the snow line it snows. The air near the ground is damper as it cools, and in still air near saturation fog lies, shortening sight as smoke does.
+
+*As built (Amendment A-36):* the wind blows down the difference in neighbouring climates' pressure brought to sea level, so it follows the weather, not the lie of the land. Each climate's weather mixes slowly with its neighbours' and rides the wind into the climate it blows toward, so a cold spell on the moor is felt in the valley downwind.
+
+*As built (Amendment A-37):* air trades through every open opening, by its size and the draught through it. An open door lets the night into a room; a hearth's warmth climbs an open stair; smoke drifts from room to room, and from a fire in a still yard in at an open door, until the wind carries it off.
+
+*As built (Amendment A-38):* rain soaks the ground and sun, dry air, and wind dry it; snow lies in frost and melts into the ground in a thaw. Whatever stands in the rain is soaked and dries after; wet things burn less readily, and a fire's heat dries them first. Wind and wet hurry a body toward the air's temperature, but not behind walls.
+
+*As built (Amendment A-39):* a world declares its water — ponds, rivers, and the sea. The sea keeps the tide, highest at springs. Rain on wet land runs into the rivers, which flow on downhill into one another and, over their banks, flood the low ground beside them. Water freezes in frost. No one walks into water or flood deeper than they can wade, unless the ice bears them, and what stands in water is soaked.
+
 ---
 
 # 1.11 Physical Constraints
@@ -765,6 +779,10 @@ Physical Reality's own constraints are facts about bodies and places, and every 
 **Thermal mass** *(Amendment A-6)* is the heat a region's material stores per unit volume — its density times its specific heat. The more it stores, the less the day and the weather move the region's temperature, and the longer an indoor room takes to follow the air outside: a granite hall answers the afternoon later than a timber kitchen, though timber holds more heat per kilogram.
 
 **What is in view** *(Amendment A-8)*. For every body with sight (a sensory capability Living Systems declares), Physical Reality publishes what it could see: everything within its sight range along a clear line (see *What can be seen?*) that stands in light enough to see by. The light is the ambient illumination of the place where the seen thing stands, against a threshold the world declares. The report is refreshed on a cadence the world declares, and written only where it changes. It is a fact about space and light, owned here. What a mind *makes* of it is the information layer's (Vol. II Ch. 4). For light to bound sight, **night is dark**: the sun's light follows its height in the sky, full at noon and nothing from sunset to sunrise.
+
+**Shut eyes** *(Amendment A-40)*. A body at rest has its eyes shut. Physical Reality reads Living Systems' rest intent by its id (Appendix A, Ruling 15). A body asked to rest that is still, neither moving nor setting off, sees nothing: its view holds only what it carries, known by touch. Light reaches no one through shut eyes. When the body gets up or is moved, it sees again.
+
+**A place seen whole** *(Amendment A-40)*. With what is in view, Physical Reality publishes the place a body took in whole at the last sight step, if any. That is the place it stands in, when the place is lit, every corner of its floor is within the body's sight as far as the air allows, and nothing in it (no wall, nothing opaque, no rising ground) could hide anything. A place with no size is never seen whole. The report names the place the view was taken in, so the information layer can tell a view taken here from one taken on the way in.
 
 **Handling things** *(Amendment A-12; Appendix A, Ruling 16)*.
 - **Taking.** A body takes a thing within its reach by holding it: the thing is then contained in

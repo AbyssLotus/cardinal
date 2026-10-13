@@ -192,6 +192,15 @@ rules. Conflict never writes another domain's facts.
 otherwise combat becomes a second authority on bodies and walls. (Ch. 8 §8.3, Ch. 12
 §12.1.)
 
+*Amendments A-27, A-28 (2026-10): built.*
+- A thing's or a walled place's integrity is open to any proposer, and changes add up.
+  Physical Reality alone breaks what reaches nothing: a thing into its wreckage, a walled place
+  into a ruin.
+- A blow is an intent Physical Reality judges by the striker's strength (Living's capability) and
+  the tool in hand, against the target's weakest material.
+- Fire is Physical Reality's. It reports the heat each body is taking, and Living Systems judges
+  the burns.
+
 ## Ruling 10 — Money: Economy circulates, Institutions authorize
 
 **Dispute:** Who owns currency?
@@ -268,6 +277,12 @@ keeps the pipeline whole. A mind that read reality would walk to food it never s
 the omniscient familiar of Vol. V Ch. 9. Reading beliefs only, two minds in one reality can choose
 differently because they know different things.
 
+*Amendment A-24 (2026-10):* one system of decision systems reads something else, because it does
+not decide. When a person crosses from the city tier into the scene, the mind they are given is
+made from the record they cross from: Society's, read by its published ids, and nothing more. It
+writes only what a mind owns (its pace, its home, its routines, whether it is lying down). From
+then on that mind reads beliefs alone.
+
 ## Ruling 15 — Resting: deciders choose when, Living Systems decides whether
 
 *Amendment A-10 (2026-10).*
@@ -282,6 +297,11 @@ organism rests?
   is still. A body that is travelling or falling does not rest, whatever it was asked.
 - **Harm follows the same pattern.** A fall is reported by Physical Reality. The cold is the
   body's own heat. Both become harm to health only under Living Systems' rules (Ruling 9).
+
+*Amendment A-40 (2026-10):* the rest intent is read by Physical Reality too, by its id. A body
+asked to rest that is still has its eyes shut, and sees nothing but what it holds. Stillness is
+Physical's own fact (no motion, no travel), so both owners judge the same rest from the same
+intent, and neither reads the other's judgment.
 
 **Reason:** Ruling 4 keeps biology from deciding; Ruling 13 keeps deciders from writing what
 others own. A mind may want to sleep while walking; its body does not sleep until it stops.
@@ -354,6 +374,47 @@ the thing is.
 **Reason:** Ruling 16's pattern again. Ownership is a holding, and holdings are Economy's
 (§4.4). Keeping where a thing is apart from whose it is lets theft exist without the engine
 pretending it cannot.
+
+## Ruling 19 — Fidelity: one person, one tier at a time
+
+*Amendment A-23 (2026-10).*
+
+**Dispute:** A city of a million cannot keep a body, an organism, and a mind for everyone. When a
+person is simulated at the city tier, as a resident following the rhythm of their settlement,
+who owns their hunger, their whereabouts, their day?
+
+**Decision:** Ruling 12's answer, one rung up.
+- **While at the city tier,** a person exists only as Society's resident record: home, work,
+  what they are doing and where, until when, and how hungry and tired they are.
+- **While in the scene,** they are fully a Physical body, a Living organism, and a mind with
+  beliefs, and Society holds no record of their state.
+
+Promotion and demotion carry the person across the seam exactly, in both directions: the record's
+levels become the organism's, and back.
+
+**Reason:** Double existence (a resident record *and* an organism) double-counts every meal and
+every hour of sleep. As with the deer, the seam is explicit so the books balance, and Law 14 (scale
+must not change truth) has a place to be tested.
+
+*Amendment A-24 (2026-10): how a person crosses into the scene.* Where a person is simulated
+follows where they are. Each place has a rung, *city* or *scene*, its own or the nearest
+declared above it. A resident at a place in the scene, whether attention arrived there or they
+walked in, is marked crossing by Society. On the next tick every domain reads the mark from the
+same committed record and gives the person its own facts, while Society retires the record's
+state, keeping who they are (home and work). One commit: no tick holds both. Each domain creates
+its own facts; none writes another's.
+
+*Amendment A-25 (2026-10): how a person leaves it.* A resident in the scene standing in a place at
+the city tier, alive and carrying nothing, is marked leaving. On the next tick every other domain
+retires them from its keeping (Vol. V Ch. 3, *Retirement*) and Society takes up their record
+again, their hunger and fatigue exactly as their body had them. What the city tier does not keep —
+memory, needs that arose, dependence — ends at the seam. A round trip while nothing happens changes
+nothing: the world's state is the same, to the bit, as if no one had looked.
+
+*Amendment A-26 (2026-10): a household's larder crosses too.* While its home is in the scene, a
+larder is its pantry: a deposit of meals Resources keeps, standing in the home. While the home is at
+the city tier it is Society's count. Never both: the rhythm lets the count go as the pantry crosses
+in, and counts the pantry back in as it leaves.
 
 ---
 

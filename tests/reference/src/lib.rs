@@ -30,6 +30,8 @@ use physical::schema::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+pub mod generate;
+
 /// The world file, as shipped.
 pub const ASHFORD: &str = include_str!("../../../worlds/ashford.world");
 
@@ -64,7 +66,18 @@ pub mod id {
     pub const TREE: u64 = 3100;
     pub const VIALS: [u64; 4] = [3001, 3002, 3003, 3004];
     pub const BOTTLE: u64 = 3005;
+    // Things to break (Amendment A-27).
+    pub const CRATE: u64 = 3006;
+    pub const CRATE_APPLE: u64 = 3007;
+    pub const HAMMER: u64 = 3008;
     pub const BILBERRIES: u64 = 3104;
+    // The Lanes, at the city tier (Amendment A-23).
+    pub const LANES: u64 = 150;
+    pub const WORKSHOP: u64 = 157;
+    pub const RESIDENTS: [u64; 12] = [
+        5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010, 5011, 5012,
+    ];
+    pub const IDLE_RESIDENTS: [u64; 2] = [5006, 5010];
     pub const MILLERS_LOAVES: u64 = 3109;
     pub const WAGON: u64 = 130;
     pub const CART: u64 = 140;
@@ -198,9 +211,15 @@ const FRONT_DOOR_WRITES: &[FactType] = &[
     physical::schema::ACT_DROP,
     physical::schema::ACT_CONSUME,
     physical::schema::ACT_PICK,
+    physical::schema::ACT_PICK_UP_TO,
+    physical::schema::ACT_STRIKE,
+    physical::schema::ACT_IGNITE,
+    physical::schema::ACT_MEND,
+    physical::schema::ACT_DIG,
     economy::schema::ACT_MAKE,
     economy::schema::ACT_CLAIM,
     minds::schema::DIRECTED,
+    society::schema::RESIDENCY,
 ];
 
 impl System for FrontDoor {
@@ -367,6 +386,13 @@ impl City {
         self
     }
 
+    /// Set `place`'s rung on the residency ladder — `society::schema::CITY` or `SCENE` — as a
+    /// frontend directing attention would (Amendment A-24).
+    pub fn attend(&mut self, place: u64, rung: i64) -> &mut Self {
+        self.order(place, society::schema::RESIDENCY, Value::Int(rung));
+        self
+    }
+
     /// Ask `who` to open `door`.
     pub fn open(&mut self, who: u64, door: u64) -> &mut Self {
         self.order(who, ACT_OPEN, Value::Entity(e(door)));
@@ -379,21 +405,59 @@ impl City {
         self
     }
 
+    /// Ask `who` to mend `thing` a little (Amendment A-31).
+    pub fn mend(&mut self, who: u64, thing: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_MEND, Value::Entity(e(thing)));
+        self
+    }
+
+    /// Ask `who` to set `thing` alight (Amendment A-28).
+    pub fn ignite(&mut self, who: u64, thing: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_IGNITE, Value::Entity(e(thing)));
+        self
+    }
+
+    /// Ask `who` to strike `thing` once (Amendment A-27).
+    pub fn strike(&mut self, who: u64, thing: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_STRIKE, Value::Entity(e(thing)));
+        self
+    }
+
     /// Ask `who` to take hold of `thing` (Appendix A, Ruling 16).
     pub fn take(&mut self, who: u64, thing: u64) -> &mut Self {
         self.order(who, physical::schema::ACT_TAKE, Value::Entity(e(thing)));
         self
     }
 
-    /// Ask `who` to put down `thing` where it stands.
+    /// Ask `who` to put down `thing` where it stands — one of the things it may put down in one
+    /// go (Amendment A-48).
     pub fn drop_(&mut self, who: u64, thing: u64) -> &mut Self {
-        self.order(who, physical::schema::ACT_DROP, Value::Entity(e(thing)));
+        self.orders.borrow_mut().push((
+            e(who),
+            physical::schema::ACT_DROP,
+            Change::Add(Value::Entity(e(thing))),
+        ));
         self
     }
 
-    /// Ask `who` to pick from `deposit` — a fruit tree (Amendment A-15).
+    /// Ask `who` to dig the ground where they stand (Amendment A-42).
+    pub fn dig(&mut self, who: u64) -> &mut Self {
+        self.order(who, physical::schema::ACT_DIG, Value::Bool(true));
+        // A tick's digging, for one unit at most (Amendment A-48).
+        self.order(who, physical::schema::ACT_PICK_UP_TO, Value::Int(1));
+        self
+    }
+
+    /// Ask `who` to work at `deposit` — pick a fruit tree (Amendment A-15), work a seam — for a
+    /// tick, for one unit at most (Amendment A-48).
     pub fn pick(&mut self, who: u64, deposit: u64) -> &mut Self {
+        self.pick_up_to(who, deposit, 1)
+    }
+
+    /// Ask `who` to work at `deposit` for a tick, for at most `units` (Amendment A-48).
+    pub fn pick_up_to(&mut self, who: u64, deposit: u64, units: i64) -> &mut Self {
         self.order(who, physical::schema::ACT_PICK, Value::Entity(e(deposit)));
+        self.order(who, physical::schema::ACT_PICK_UP_TO, Value::Int(units));
         self
     }
 
@@ -464,6 +528,8 @@ impl City {
             living::schema::FATIGUE,
             information::schema::FELT_HUNGER,
             information::schema::FELT_FATIGUE,
+            society::schema::RESIDENT_HUNGER,
+            society::schema::RESIDENT_FATIGUE,
         ];
         if levels.contains(&fact) {
             let level = kernel::level::Level::from_value(value)?;
@@ -502,6 +568,26 @@ pub fn without_minds(mut package: WorldPackage) -> WorldPackage {
     package.manifest.domains.retain(|d| d != "minds");
     package
 }
+
+/// Shut `openings` in `package` before the world begins, whether or not they declare flags.
+pub fn shut(package: &mut WorldPackage, openings: &[u64]) {
+    for &id in openings {
+        match package.flags.iter_mut().find(|f| f.entity_id == id) {
+            Some(f) if !f.flags.contains(&packages::model::Flag::Closed) => {
+                f.flags.push(packages::model::Flag::Closed)
+            }
+            Some(_) => {}
+            None => package.flags.push(packages::model::FlagSpec {
+                entity_id: id,
+                flags: vec![packages::model::Flag::Closed],
+            }),
+        }
+    }
+}
+
+/// Every way between Alice's house and her yard: the front door, the low window, and the
+/// cellar bulkhead, both faces of each (the bedroom window is shut already).
+pub const ALICE_OUTER: [u64; 6] = [1001, 1002, 1003, 1004, 1005, 1006];
 
 /// `package` in which nobody grows hungry: for tests of other drives — warmth, love, a habit —
 /// that run past the hours when hunger would send people to the orchard (Amendment A-16).

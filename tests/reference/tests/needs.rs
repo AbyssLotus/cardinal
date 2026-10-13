@@ -2,8 +2,10 @@
 //! Amendment A-10): Ashford's people tire while awake and recover while they rest — but not while
 //! they walk; the cold harms and then kills; a fall hurts beyond a safe drop; wounds heal slowly.
 //! Their minds lie down when tired and get up when rested, when the cold calls, or when a routine
-//! does once they are no longer tired. The dead neither see nor think.
+//! does once they are no longer tired. Lying down, their eyes are shut, and in the sleeping hours
+//! nothing they merely want gets them up (Amendment A-40). The dead neither see nor think.
 
+use economy::schema::OWNER;
 use kernel::domain::Domain;
 use kernel::events::ChronicleEntry;
 use kernel::fact::{Cause, FactKey, FactType};
@@ -13,8 +15,8 @@ use kernel::tick::run_tick;
 use kernel::value::Value;
 use living::schema::{BODY_HEAT, FATIGUE, HEALTH, SIGHT_RANGE};
 use living::LivingDomain;
-use minds::schema::{GOAL, RESTING};
-use physical::schema::{IN_VIEW, TRAVEL_TO};
+use minds::schema::{GOAL, REASON, REASON_WANT, RESTING};
+use physical::schema::{CONTAINED_IN, IN_VIEW, TRAVEL_TO};
 use reference::id::*;
 use reference::{e, with_tick_seconds, City};
 
@@ -238,7 +240,8 @@ fn sleeps(city: &mut City, who: u64, ticks: u64) -> Vec<(u64, bool, Cause)> {
 #[test]
 fn erin_sleeps_the_night_and_gets_up_at_six() {
     // She begins the night rested; within the sleeping hours, once a little tired, she lies down,
-    // and stays down until the hours end, rested.
+    // and stays down until the hours end, rested — though a late-April sun is up an hour before
+    // they end (Amendments A-34, A-40).
     let mut city = ashford(600, |_| {});
     let rests = sleeps(&mut city, ERIN, 18 * HOUR);
     assert!(rests.len() >= 2, "{rests:?}");
@@ -254,6 +257,125 @@ fn erin_sleeps_the_night_and_gets_up_at_six() {
     assert_eq!(up / HOUR, 6, "got up at {}", up);
     // And she is not tired again by evening.
     assert_eq!(rests.len(), 2, "{rests:?}");
+}
+
+/// The tick `who` first set out for `thing`, wanting it, within `ticks`.
+fn goes_for(city: &mut City, who: u64, thing: u64, ticks: u64) -> Option<u64> {
+    for _ in 0..ticks {
+        city.run(1);
+        if city.read(who, GOAL) == Some(Value::Entity(e(thing)))
+            && city.read(who, REASON) == Some(Value::Int(REASON_WANT))
+        {
+            return Some(city.tick);
+        }
+    }
+    None
+}
+
+#[test]
+fn a_sleeper_is_not_woken_by_a_thing_she_would_want() {
+    // The green bottle lies in the yard five metres from where Erin sleeps, glass, which she
+    // likes. The sun is up before five, but her eyes are shut: nothing comes into her view, and
+    // she sleeps on till six (Amendment A-40). Before, it got her up at twenty to six.
+    let mut city = ashford(600, |_| {});
+    let mut down = None;
+    while down.is_none() && city.tick < 6 * HOUR {
+        city.run(1);
+        if city.read(ERIN, RESTING) == Some(Value::Bool(true)) {
+            down = Some(city.tick);
+        }
+    }
+    let down = down.expect("she lay down");
+    let mut up = None;
+    while up.is_none() && city.tick < 8 * HOUR {
+        city.run(1);
+        if city.read(ERIN, RESTING).is_none() {
+            up = Some(city.tick);
+        } else {
+            let seen = city.store().read_all(FactKey::new(e(ERIN), IN_VIEW));
+            assert!(
+                seen.is_empty(),
+                "asleep at {}, she sees {seen:?}",
+                city.tick
+            );
+        }
+    }
+    let up = up.expect("she got up");
+    assert!(down < 5 * HOUR, "lay down at {down}, before the dawn");
+    assert_eq!(up, 6 * HOUR, "got up at {up}, as the sleeping hours end");
+    let why = city
+        .chronicle
+        .iter()
+        .rev()
+        .find(|c| c.subject() == e(ERIN) && c.fact_type() == RESTING)
+        .unwrap()
+        .cause();
+    assert_eq!(why, Cause::new("rested"));
+    // Up, her eyes open. She goes in from the cold, and then out again for the bottle.
+    let went = goes_for(&mut city, ERIN, BOTTLE, 3 * HOUR).expect("she went for it");
+    assert!(went < 8 * HOUR, "went for it at {went}");
+}
+
+#[test]
+fn in_the_sleeping_hours_only_what_presses_gets_a_sleeper_up() {
+    // The bottle is set down beside Erin in the dark, and put into her hand as she sleeps (the
+    // test guides her hand, then lets her be). She knows it by touch: glass, which she likes, and
+    // no one's. That is a want, and in the sleeping hours a want gets no one up: she sleeps on
+    // till six, and then claims it (Amendment A-40).
+    let mut city = ashford(600, |p| {
+        for c in &mut p.positions {
+            if c.entity_id == BOTTLE {
+                (c.x, c.y, c.z) = (150, 0, Some(0));
+            }
+        }
+    });
+    city.run_until(5 * HOUR, |c| {
+        c.read(ERIN, RESTING) == Some(Value::Bool(true))
+    });
+    assert_eq!(city.read(ERIN, RESTING), Some(Value::Bool(true)), "asleep");
+    assert!(city.tick < 4 * HOUR, "asleep at {}", city.tick);
+    city.take(ERIN, BOTTLE);
+    city.run_until(4, |c| {
+        c.read(BOTTLE, CONTAINED_IN) == Some(Value::Entity(e(ERIN)))
+    });
+    assert_eq!(
+        city.read(BOTTLE, CONTAINED_IN),
+        Some(Value::Entity(e(ERIN))),
+        "in her hand"
+    );
+    city.release(ERIN);
+    city.run(2);
+    assert!(!city.directed(ERIN));
+    // She feels it in her hand, and sees nothing else.
+    let seen: Vec<Value> = city
+        .store()
+        .read_all(FactKey::new(e(ERIN), IN_VIEW))
+        .into_iter()
+        .map(|f| f.value)
+        .collect();
+    assert_eq!(seen, vec![Value::Entity(e(BOTTLE))]);
+    let held = city
+        .store()
+        .read(FactKey::pair(
+            e(ERIN),
+            information::schema::PLACE_OF,
+            e(BOTTLE),
+        ))
+        .map(|f| f.value);
+    assert_eq!(held, Some(Value::Entity(e(ERIN))), "she knows she holds it");
+    // Asleep till six, for all she wants it; at six, up for it.
+    let until_six = 6 * HOUR - city.tick;
+    let rests = sleeps(&mut city, ERIN, until_six);
+    assert_eq!(rests, vec![(6 * HOUR, false, Cause::new("called_away"))]);
+    assert_eq!(city.read(ERIN, GOAL), Some(Value::Entity(e(BOTTLE))));
+    city.run_until(HOUR, |c| {
+        c.read(BOTTLE, OWNER) == Some(Value::Entity(e(ERIN)))
+    });
+    assert_eq!(
+        city.read(BOTTLE, OWNER),
+        Some(Value::Entity(e(ERIN))),
+        "claimed"
+    );
 }
 
 #[test]
@@ -303,7 +425,9 @@ fn the_cold_gets_erin_up_and_indoors() {
     };
     assert_eq!(*why, Cause::new("called_away"));
     assert!(up < 6 * HOUR, "the cold woke her at hour {}", up / HOUR);
-    assert_eq!(city.room_of(ERIN), KITCHEN);
+    // Indoors: the kitchen, or the bedroom above it if the open front door has let the kitchen
+    // go cold (Amendment A-37).
+    assert!([KITCHEN, BEDROOM].contains(&city.room_of(ERIN)));
 }
 
 #[test]

@@ -24,7 +24,16 @@ use kernel::time::{SimClock, Step};
 
 /// Reads: the organism's containment (to learn its region) and that region's temperature —
 /// both owned by Physical Reality — plus the organism's own body heat. Writes: body heat.
-const THERMO_READS: &[FactType] = &[CONTAINED_IN, AMBIENT_TEMPERATURE, BODY_HEAT, HEALTH];
+const THERMO_READS: &[FactType] = &[
+    CONTAINED_IN,
+    AMBIENT_TEMPERATURE,
+    BODY_HEAT,
+    HEALTH,
+    crate::schema::WIND_SPEED,
+    crate::schema::ENCLOSED,
+    crate::schema::EXPOSURE,
+    crate::schema::WETNESS,
+];
 const THERMO_WRITES: &[FactType] = &[BODY_HEAT];
 
 /// Homeostasis for every organism: body heat is defended toward a metabolic set point while
@@ -56,19 +65,78 @@ pub struct Thermoregulation {
     set_point_centi_c: i64,
     warm_ms: u64,
     cold_ms: u64,
+    chill: Chill,
+}
+
+/// How wind and wet hurry a body toward the air (Amendment A-38), world rules: the pull toward
+/// ambient grows by one again for every `wind_cm_s` of wind on the body, and by `wet` (hundredths
+/// of a percent) when it is soaked through, in proportion as it is wet.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Chill {
+    /// The wind, in cm/s, that doubles how fast a body takes the air's temperature.
+    pub wind_cm_s: i64,
+    /// How much faster again a soaked body takes it, in hundredths of a percent.
+    pub wet: i64,
 }
 
 impl Thermoregulation {
     /// Configure homeostasis shared by every organism, stepping as `step` says.
     /// `set_point_centi_c` is the metabolic target; `warm_ms`/`cold_ms` are the time constants
-    /// of the pull toward the set point and toward ambient (world-package rules, Vol. IV Ch. 2).
-    pub const fn new(step: Step, set_point_centi_c: i64, warm_ms: u64, cold_ms: u64) -> Self {
+    /// of the pull toward the set point and toward ambient (world-package rules, Vol. IV Ch. 2);
+    /// `chill`, how wind and wet hurry the second (Amendment A-38).
+    pub const fn new(
+        step: Step,
+        set_point_centi_c: i64,
+        warm_ms: u64,
+        cold_ms: u64,
+        chill: Chill,
+    ) -> Self {
         Self {
             step,
             set_point_centi_c,
             warm_ms: if warm_ms == 0 { 1 } else { warm_ms },
             cold_ms: if cold_ms == 0 { 1 } else { cold_ms },
+            chill,
         }
+    }
+
+    /// The wind on `organism`, in cm/s: its climate's, met walking up what encloses it — none
+    /// once a wall stands between (a walled place lets in only the share of the sky it is
+    /// declared open to).
+    fn wind_on(view: &dyn CommittedView, organism: EntityId) -> i128 {
+        let mut share: i128 = 10_000;
+        for place in ancestry(view, organism, CONTAINED_IN).into_iter().skip(1) {
+            if let Some(wind) = int(view, FactKey::new(place, crate::schema::WIND_SPEED)) {
+                return wind.max(0) as i128 * share / 10_000;
+            }
+            let walled = view
+                .read(FactKey::new(place, crate::schema::ENCLOSED))
+                .map(|f| f.value)
+                == Some(kernel::value::Value::Bool(true));
+            if walled {
+                match int(view, FactKey::new(place, crate::schema::EXPOSURE)) {
+                    Some(open) => share = share * open.clamp(0, 10_000) as i128 / 10_000,
+                    None => return 0,
+                }
+            }
+        }
+        0
+    }
+
+    /// The time constant of the pull toward ambient for `organism`, in milliseconds: shortened
+    /// by the wind on it and by how wet it is (Amendment A-38).
+    fn cold_ms_of(&self, view: &dyn CommittedView, organism: EntityId) -> i128 {
+        const FULL: i128 = 10_000;
+        let wind = if self.chill.wind_cm_s > 0 {
+            Self::wind_on(view, organism) * FULL / self.chill.wind_cm_s as i128
+        } else {
+            0
+        };
+        let wetness = int(view, FactKey::new(organism, crate::schema::WETNESS))
+            .unwrap_or(0)
+            .clamp(0, 10_000) as i128;
+        let wet = wetness * self.chill.wet.max(0) as i128 / FULL;
+        (self.cold_ms as i128 * FULL / (FULL + wind + wet)).max(1)
     }
 
     /// The temperature of the air around the organism and its current body heat — or `None` if
@@ -93,18 +161,15 @@ impl Thermoregulation {
         Some((ambient, current))
     }
 
-    /// Body heat after one step from `current`, given `ambient`, rounded without bias.
-    fn settle(&self, ambient: i64, current: i64, rng: &mut Rng) -> i64 {
+    /// Body heat after one step from `current`, given `ambient` and the pull toward it `tc`,
+    /// rounded without bias.
+    fn settle(&self, ambient: i64, current: i64, tc: i128, rng: &mut Rng) -> i64 {
         let (h, s, a) = (
             current as i128,
             self.set_point_centi_c as i128,
             ambient as i128,
         );
-        let (tw, tc, dt) = (
-            self.warm_ms as i128,
-            self.cold_ms as i128,
-            self.step.dt_ms as i128,
-        );
+        let (tw, dt) = (self.warm_ms as i128, self.step.dt_ms as i128);
         let numerator = h * tw * tc + dt * tc * s + dt * tw * a;
         let denominator = tw * tc + dt * tc + dt * tw;
         div_dither(numerator, denominator, rng) as i64
@@ -131,7 +196,8 @@ impl System for Thermoregulation {
             .filter(|organism| alive(view, *organism))
             .filter_map(|organism| {
                 let (ambient, current) = self.state_of(view, organism)?;
-                let next = self.settle(ambient, current, &mut ctx.rng(organism.raw()));
+                let tc = self.cold_ms_of(view, organism);
+                let next = self.settle(ambient, current, tc, &mut ctx.rng(organism.raw()));
                 Some(Proposal::new(
                     self.id(),
                     FactKey::new(organism, BODY_HEAT),
@@ -255,9 +321,18 @@ pub struct HarmRules {
     pub starving_above: i64,
     /// Health lost per hour while starving.
     pub starving_harm_per_hour: i64,
+    /// Health lost per hour in the full heat of a fire (Amendment A-28); less in less.
+    pub burn_harm_per_hour: i64,
+    /// Health lost per hour breathing thick smoke (Amendment A-32); less in thinner.
+    pub smoke_harm_per_hour: i64,
 }
 
 const HEALTH_READS: &[FactType] = &[
+    crate::schema::SMOKE,
+    CONTAINED_IN,
+    crate::schema::HEAT_EXPOSURE,
+    crate::schema::IMPACT,
+    crate::schema::IMPACT_JUDGED,
     HUNGER,
     BODY_HEAT,
     HEALTH,
@@ -268,7 +343,13 @@ const HEALTH_READS: &[FactType] = &[
     KIND_HARM,
 ];
 // At death the organism stops: its senses go, and its body no longer walks where it was going.
-const HEALTH_WRITES: &[FactType] = &[HEALTH, FALL_JUDGED, SIGHT_RANGE, TRAVEL_TO];
+const HEALTH_WRITES: &[FactType] = &[
+    HEALTH,
+    FALL_JUDGED,
+    crate::schema::IMPACT_JUDGED,
+    SIGHT_RANGE,
+    TRAVEL_TO,
+];
 
 /// Harm and healing (Vol. III Ch. 2 §2.4; Appendix A, Rulings 9 and 15; Amendment A-10). Every
 /// living organism's health falls while its body is colder than the world's line, and once for
@@ -334,6 +415,23 @@ impl System for Health {
                     ));
                 }
             }
+            // Struck by something falling, not yet judged (Amendment A-31): as a fall from as
+            // high strikes.
+            if let Some(f) = view.read(FactKey::new(organism, crate::schema::IMPACT)) {
+                let judged =
+                    int(view, FactKey::new(organism, crate::schema::IMPACT_JUDGED)).unwrap_or(0);
+                if f.provenance.tick as i64 > judged {
+                    let beyond = (f.value.as_int().unwrap_or(0) - r.safe_fall_cm).max(0);
+                    fall += beyond * r.fall_harm_per_metre / 100;
+                    out.push(Proposal::new(
+                        self.id(),
+                        FactKey::new(organism, crate::schema::IMPACT_JUDGED),
+                        ctx.basis_tick(),
+                        Change::Set(kernel::value::Value::Int(f.provenance.tick as i64)),
+                        Cause::new("impact_judged"),
+                    ));
+                }
+            }
             // Needs felt strongly enough to hurt, as their kinds declare (Amendment A-11).
             let mut aching = 0;
             for (object, level) in view.read_about(organism, NEED) {
@@ -357,19 +455,43 @@ impl System for Health {
             } else {
                 0
             };
-            let heal = if cold == 0 && fall == 0 && aching == 0 && starving == 0 {
+            // Burns: the heat of a fire, as Physical Reality reports it (Amendment A-28).
+            let heat = int(view, FactKey::new(organism, crate::schema::HEAT_EXPOSURE)).unwrap_or(0);
+            let mut burns = over(
+                r.burn_harm_per_hour * heat / FULL,
+                self.step.dt_ms,
+                &mut rng,
+            );
+            // Smoke, breathed where it stands (Amendment A-32): counted with the fire's harm.
+            let smoke = view
+                .read(FactKey::new(organism, CONTAINED_IN))
+                .and_then(|f| match f.value {
+                    kernel::value::Value::Entity(place) => {
+                        int(view, FactKey::new(place, crate::schema::SMOKE))
+                    }
+                    _ => None,
+                })
+                .unwrap_or(0);
+            burns += over(
+                r.smoke_harm_per_hour * smoke / FULL,
+                self.step.dt_ms,
+                &mut rng,
+            );
+            let heal = if cold == 0 && fall == 0 && aching == 0 && starving == 0 && burns == 0 {
                 over(r.heal_per_hour, self.step.dt_ms, &mut rng)
             } else {
                 0
             };
-            let next = (health - cold - fall - aching - starving + heal).clamp(0, FULL);
+            let next = (health - cold - fall - aching - starving - burns + heal).clamp(0, FULL);
             if next == health {
                 continue;
             }
             // The cause: the worst of what harmed it, or healing.
-            let worst = fall.max(cold).max(aching).max(starving);
+            let worst = fall.max(cold).max(aching).max(starving).max(burns);
             let why = match (next, worst) {
                 (_, 0) => "healing",
+                (0, w) if w == burns => "died_of_burns",
+                (_, w) if w == burns => "burns",
                 (0, w) if w == fall => "died_of_a_fall",
                 (0, w) if w == cold => "died_of_cold",
                 (0, w) if w == starving => "died_of_hunger",

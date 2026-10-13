@@ -10,7 +10,8 @@ use crate::model::{
     Flag, FlagSpec, InformationRules, JobSpec, JobWork, LivingRules, MadeOfSpec, Manifest,
     MaterialProperty, MaterialSpec, MindsRules, MotionSpec, NeedKindSpec, OrganismSpec,
     PhysicalRules, PortalDangerSpec, PortalSpec, PositionSpec, RecipeSpec, RegionMembershipSpec,
-    RegionSpec, ResourcesRules, SocietyRules, TerrainSpec, TravelSpec, WorldPackage,
+    RegionSpec, ResidentSpec, ResidentsRules, ResourcesRules, SocietyRules, TerrainSpec,
+    TravelSpec, WaterSpec, WorldPackage,
 };
 use crate::version::{EngineReq, Version};
 use std::fmt;
@@ -78,7 +79,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut pressure_sea_level: Option<i64> = None;
     let mut pressure_elevation_factor: Option<i64> = None;
     let mut pressure_variability: Option<i64> = None;
-    let mut wind_gradient_divisor: Option<i64> = None;
+    let mut wind_per_decapascal: Option<i64> = None;
     let mut fall_danger_per_meter: Option<i64> = None;
     let mut thermal_mass_reference: Option<i64> = None;
     let mut gravity_cm_s2: Option<i64> = None;
@@ -90,6 +91,86 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut sight_step_seconds: Option<u64> = None;
     let mut sight_min_illumination: Option<i64> = None;
     let mut carry_limit_kg: Option<i64> = None;
+    let mut hand_strike_percent: Option<i64> = None;
+    let mut tool_strike_percent_per_kg: Option<i64> = None;
+    let mut strike_scale: Option<i64> = None;
+    let mut wreckage_height_cm: Option<i64> = None;
+    let mut mend_scale: Option<i64> = None;
+    let mut default_strength: Option<i64> = None;
+    let mut fire_step_seconds: Option<u64> = None;
+    let mut fire_grow_per_hour: Option<i64> = None;
+    let mut burn_per_hour: Option<i64> = None;
+    let mut fire_reach_cm: Option<i64> = None;
+    let mut ignition_heat: Option<i64> = None;
+    let mut ignite_intensity: Option<i64> = None;
+    let mut rain_above: Option<i64> = None;
+    let mut douse_per_hour: Option<i64> = None;
+    let mut wall_thickness_cm: Option<i64> = None;
+    let mut wind_force_divisor: Option<i64> = None;
+    let mut wind_damage_scale: Option<i64> = None;
+    let mut wind_hold_per_kg: Option<i64> = None;
+    let mut wind_carry_cm_per_hour: Option<i64> = None;
+    let mut gale_below: Option<i64> = None;
+    let mut gale_per_decapascal: Option<i64> = None;
+    let mut year_days: Option<u64> = None;
+    let mut start_day: Option<u64> = None;
+    let mut latitude_centi_deg: Option<i64> = None;
+    let mut axial_tilt_centi_deg: Option<i64> = None;
+    let mut seasonal_amplitude_centi_c: Option<i64> = None;
+    let mut seasonal_lag_days: Option<u64> = None;
+    let mut lunar_month_seconds: Option<u64> = None;
+    let mut moon_phase_at_start: Option<i64> = None;
+    let mut moonlight_peak: Option<i64> = None;
+    let mut cloud_above: Option<i64> = None;
+    let mut cloud_shade: Option<i64> = None;
+    let mut cloud_damp: Option<i64> = None;
+    let mut rain_per_hour: Option<i64> = None;
+    let mut snow_below_centi_c: Option<i64> = None;
+    let mut fog_above: Option<i64> = None;
+    let mut fog_wind_below_cm_s: Option<i64> = None;
+    let mut humidity_per_degree: Option<i64> = None;
+    let mut diurnal_coldest_seconds: Option<u64> = None;
+    let mut diurnal_warmest_seconds: Option<u64> = None;
+    let mut climate_mixing_seconds: Option<u64> = None;
+    let mut front_distance_cm: Option<i64> = None;
+    let mut opening_air_speed_cm_s: Option<i64> = None;
+    let mut draught_percent: Option<i64> = None;
+    let mut open_air_height_cm: Option<i64> = None;
+    let mut soak_per_mm: Option<i64> = None;
+    let mut ground_drying_per_hour: Option<i64> = None;
+    let mut snow_melt_mm_per_degree_hour: Option<i64> = None;
+    let mut wetting_per_hour: Option<i64> = None;
+    let mut drying_per_hour: Option<i64> = None;
+    let mut dry_by_heat_per_hour: Option<i64> = None;
+    let mut tide_amplitude_cm: Option<i64> = None;
+    let mut tidal_period_seconds: Option<u64> = None;
+    let mut ice_mm_per_degree_hour: Option<i64> = None;
+    let mut wade_depth_cm: Option<i64> = None;
+    let mut ice_bears_mm: Option<i64> = None;
+    let mut bare_hand_hardness: Option<i64> = None;
+    let mut pit_half_width_cm: Option<i64> = None;
+    let mut tool_wear: Option<i64> = None;
+    let mut go_seconds: Option<i64> = None;
+    let mut storms: Vec<(u64, i64, i64, i64)> = Vec::new();
+    let mut latitudes: Vec<(u64, i64)> = Vec::new();
+    let mut humidities: Vec<(u64, i64)> = Vec::new();
+    let mut ground_water: Vec<(u64, i64)> = Vec::new();
+    let mut wear: Vec<(u64, i64)> = Vec::new();
+    let mut ground: Vec<(u64, u64)> = Vec::new();
+    let mut quarries: Vec<(u64, i64, [i64; 3], i64)> = Vec::new();
+    let mut waters: Vec<WaterSpec> = Vec::new();
+    let mut drains: Vec<(u64, u64)> = Vec::new();
+    let mut floods: Vec<(u64, Vec<u64>)> = Vec::new();
+    let mut burn_harm: Option<i64> = None;
+    let mut smoke_harm: Option<i64> = None;
+    let mut chill_wind: Option<i64> = None;
+    let mut wet_chill: Option<i64> = None;
+    let mut fire_warmth_per_hour: Option<i64> = None;
+    let mut smoke_per_hour: Option<i64> = None;
+    let mut smoke_clear_per_hour: Option<i64> = None;
+    let mut fire_fan_wind_cm_s: Option<i64> = None;
+    let mut fires: Vec<(u64, i64, bool)> = Vec::new();
+    let mut strength: Vec<(u64, i64)> = Vec::new();
     let mut perception_step_seconds: Option<u64> = None;
     let mut warmth_resolution: Option<i64> = None;
     let mut senses: Vec<(u64, i64)> = Vec::new();
@@ -124,6 +205,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut need_weight: Option<i64> = None;
     let mut hungry_above: Option<i64> = None;
     let mut work_value: Option<i64> = None;
+    let mut repair_value: Option<i64> = None;
+    let mut repair_below: Option<i64> = None;
     let mut tired_margin: Option<i64> = None;
     let mut sleep_hours: Option<(i64, i64)> = None;
     let mut courtship_step: Option<u64> = None;
@@ -137,6 +220,24 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
     let mut jobs: Vec<JobSpec> = Vec::new();
     let mut roles: Vec<(u64, u64)> = Vec::new();
     let mut owners: Vec<(u64, u64)> = Vec::new();
+    let mut residents: Vec<ResidentSpec> = Vec::new();
+    let mut larders: Vec<(u64, i64)> = Vec::new();
+    let mut r_sleep: Option<(i64, i64)> = None;
+    let mut r_work: Option<(i64, i64)> = None;
+    let mut r_hungry: Option<i64> = None;
+    let mut r_meal: Option<i64> = None;
+    let mut r_meals_per_shift: Option<i64> = None;
+    let mut r_meal_minutes: Option<i64> = None;
+    let mut r_walk: Option<i64> = None;
+    let mut r_spread: Option<i64> = None;
+    let mut r_body: Option<[i64; 3]> = None;
+    let mut r_sight: Option<i64> = None;
+    let mut r_meal_material: Option<u64> = None;
+    let mut r_meal_size: Option<[i64; 3]> = None;
+    let mut r_pantry_body: Option<[i64; 3]> = None;
+    let mut pantries: Vec<(u64, u64)> = Vec::new();
+    let mut residency: Vec<(u64, i64)> = Vec::new();
+    let mut has_residents_rules = false;
     let mut curiosity: Vec<(u64, i64)> = Vec::new();
     let mut likes: Vec<(u64, u64, i64)> = Vec::new();
     let mut home: Vec<(u64, u64)> = Vec::new();
@@ -260,7 +361,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     pressure_elevation_factor = Some(parse_num(value, line_no)?)
                 }
                 "pressure_variability" => pressure_variability = Some(parse_num(value, line_no)?),
-                "wind_gradient_divisor" => wind_gradient_divisor = Some(parse_num(value, line_no)?),
+                "wind_per_decapascal" => wind_per_decapascal = Some(parse_num(value, line_no)?),
                 "fall_danger_per_meter" => fall_danger_per_meter = Some(parse_num(value, line_no)?),
                 "thermal_mass_reference" => {
                     thermal_mass_reference = Some(parse_num(value, line_no)?)
@@ -278,6 +379,89 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                     sight_min_illumination = Some(parse_num(value, line_no)?)
                 }
                 "carry_limit_kg" => carry_limit_kg = Some(parse_num(value, line_no)?),
+                "hand_strike_percent" => hand_strike_percent = Some(parse_num(value, line_no)?),
+                "tool_strike_percent_per_kg" => {
+                    tool_strike_percent_per_kg = Some(parse_num(value, line_no)?)
+                }
+                "strike_scale" => strike_scale = Some(parse_num(value, line_no)?),
+                "wreckage_height_cm" => wreckage_height_cm = Some(parse_num(value, line_no)?),
+                "mend_scale" => mend_scale = Some(parse_num(value, line_no)?),
+                "fire_step_seconds" => fire_step_seconds = Some(parse_num(value, line_no)?),
+                "fire_grow_per_hour" => fire_grow_per_hour = Some(parse_num(value, line_no)?),
+                "burn_per_hour" => burn_per_hour = Some(parse_num(value, line_no)?),
+                "fire_reach_cm" => fire_reach_cm = Some(parse_num(value, line_no)?),
+                "ignition_heat" => ignition_heat = Some(parse_num(value, line_no)?),
+                "ignite_intensity" => ignite_intensity = Some(parse_num(value, line_no)?),
+                "rain_above" => rain_above = Some(parse_num(value, line_no)?),
+                "douse_per_hour" => douse_per_hour = Some(parse_num(value, line_no)?),
+                "wall_thickness_cm" => wall_thickness_cm = Some(parse_num(value, line_no)?),
+                "fire_warmth_per_hour" => fire_warmth_per_hour = Some(parse_num(value, line_no)?),
+                "smoke_per_hour" => smoke_per_hour = Some(parse_num(value, line_no)?),
+                "smoke_clear_per_hour" => smoke_clear_per_hour = Some(parse_num(value, line_no)?),
+                "fire_fan_wind_cm_s" => fire_fan_wind_cm_s = Some(parse_num(value, line_no)?),
+                "wind_force_divisor" => wind_force_divisor = Some(parse_num(value, line_no)?),
+                "wind_damage_scale" => wind_damage_scale = Some(parse_num(value, line_no)?),
+                "wind_hold_per_kg" => wind_hold_per_kg = Some(parse_num(value, line_no)?),
+                "wind_carry_cm_per_hour" => {
+                    wind_carry_cm_per_hour = Some(parse_num(value, line_no)?)
+                }
+                "gale_below" => gale_below = Some(parse_num(value, line_no)?),
+                "gale_per_decapascal" => gale_per_decapascal = Some(parse_num(value, line_no)?),
+                "year_days" => year_days = Some(parse_num(value, line_no)?),
+                "start_day" => start_day = Some(parse_num(value, line_no)?),
+                "latitude_centi_deg" => latitude_centi_deg = Some(parse_num(value, line_no)?),
+                "axial_tilt_centi_deg" => axial_tilt_centi_deg = Some(parse_num(value, line_no)?),
+                "seasonal_amplitude_centi_c" => {
+                    seasonal_amplitude_centi_c = Some(parse_num(value, line_no)?)
+                }
+                "seasonal_lag_days" => seasonal_lag_days = Some(parse_num(value, line_no)?),
+                "lunar_month_seconds" => lunar_month_seconds = Some(parse_num(value, line_no)?),
+                "moon_phase_at_start" => moon_phase_at_start = Some(parse_num(value, line_no)?),
+                "moonlight_peak" => moonlight_peak = Some(parse_num(value, line_no)?),
+                "cloud_above" => cloud_above = Some(parse_num(value, line_no)?),
+                "cloud_shade" => cloud_shade = Some(parse_num(value, line_no)?),
+                "cloud_damp" => cloud_damp = Some(parse_num(value, line_no)?),
+                "rain_per_hour" => rain_per_hour = Some(parse_num(value, line_no)?),
+                "snow_below_centi_c" => snow_below_centi_c = Some(parse_num(value, line_no)?),
+                "fog_above" => fog_above = Some(parse_num(value, line_no)?),
+                "fog_wind_below_cm_s" => fog_wind_below_cm_s = Some(parse_num(value, line_no)?),
+                "humidity_per_degree" => humidity_per_degree = Some(parse_num(value, line_no)?),
+                "diurnal_coldest_seconds" => {
+                    diurnal_coldest_seconds = Some(parse_num(value, line_no)?)
+                }
+                "diurnal_warmest_seconds" => {
+                    diurnal_warmest_seconds = Some(parse_num(value, line_no)?)
+                }
+                "climate_mixing_seconds" => {
+                    climate_mixing_seconds = Some(parse_num(value, line_no)?)
+                }
+                "front_distance_cm" => front_distance_cm = Some(parse_num(value, line_no)?),
+                "opening_air_speed_cm_s" => {
+                    opening_air_speed_cm_s = Some(parse_num(value, line_no)?)
+                }
+                "draught_percent" => draught_percent = Some(parse_num(value, line_no)?),
+                "open_air_height_cm" => open_air_height_cm = Some(parse_num(value, line_no)?),
+                "soak_per_mm" => soak_per_mm = Some(parse_num(value, line_no)?),
+                "ground_drying_per_hour" => {
+                    ground_drying_per_hour = Some(parse_num(value, line_no)?)
+                }
+                "snow_melt_mm_per_degree_hour" => {
+                    snow_melt_mm_per_degree_hour = Some(parse_num(value, line_no)?)
+                }
+                "wetting_per_hour" => wetting_per_hour = Some(parse_num(value, line_no)?),
+                "drying_per_hour" => drying_per_hour = Some(parse_num(value, line_no)?),
+                "dry_by_heat_per_hour" => dry_by_heat_per_hour = Some(parse_num(value, line_no)?),
+                "tide_amplitude_cm" => tide_amplitude_cm = Some(parse_num(value, line_no)?),
+                "tidal_period_seconds" => tidal_period_seconds = Some(parse_num(value, line_no)?),
+                "ice_mm_per_degree_hour" => {
+                    ice_mm_per_degree_hour = Some(parse_num(value, line_no)?)
+                }
+                "wade_depth_cm" => wade_depth_cm = Some(parse_num(value, line_no)?),
+                "ice_bears_mm" => ice_bears_mm = Some(parse_num(value, line_no)?),
+                "bare_hand_hardness" => bare_hand_hardness = Some(parse_num(value, line_no)?),
+                "pit_half_width_cm" => pit_half_width_cm = Some(parse_num(value, line_no)?),
+                "tool_wear" => tool_wear = Some(parse_num(value, line_no)?),
+                "go_seconds" => go_seconds = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -303,6 +487,11 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "hunger_per_hour" => hunger_per_hour = Some(parse_num(value, line_no)?),
                 "starving_above" => starving_above = Some(parse_num(value, line_no)?),
                 "starving_harm_per_hour" => starving_harm = Some(parse_num(value, line_no)?),
+                "strength" => default_strength = Some(parse_num(value, line_no)?),
+                "burn_harm_per_hour" => burn_harm = Some(parse_num(value, line_no)?),
+                "smoke_harm_per_hour" => smoke_harm = Some(parse_num(value, line_no)?),
+                "chill_wind_cm_s" => chill_wind = Some(parse_num(value, line_no)?),
+                "wet_chill_percent" => wet_chill = Some(parse_num(value, line_no)?),
                 other => {
                     return Err(ParseError::at(
                         line_no,
@@ -341,6 +530,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                 "need_weight" => need_weight = Some(parse_num(value, line_no)?),
                 "hungry_above" => hungry_above = Some(parse_num(value, line_no)?),
                 "work_value" => work_value = Some(parse_num(value, line_no)?),
+                "repair_value" => repair_value = Some(parse_num(value, line_no)?),
+                "repair_below" => repair_below = Some(parse_num(value, line_no)?),
                 "tired_margin" => tired_margin = Some(parse_num(value, line_no)?),
                 "sleep_hours" => sleep_hours = Some(parse_hours(value, line_no)?),
                 other => {
@@ -388,6 +579,89 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             }
             "roles" => roles.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
             "owners" => owners.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
+            "rules.residents" => {
+                has_residents_rules = true;
+                match key {
+                    "sleep_hours" => r_sleep = Some(parse_hours(value, line_no)?),
+                    "work_hours" => r_work = Some(parse_hours(value, line_no)?),
+                    "hungry_above" => r_hungry = Some(parse_num(value, line_no)?),
+                    "meal_nutrition" => r_meal = Some(parse_num(value, line_no)?),
+                    "meals_per_shift" => r_meals_per_shift = Some(parse_num(value, line_no)?),
+                    "meal_minutes" => r_meal_minutes = Some(parse_num(value, line_no)?),
+                    "walk_speed_cm_s" => r_walk = Some(parse_num(value, line_no)?),
+                    "hours_spread_minutes" => r_spread = Some(parse_num(value, line_no)?),
+                    "body" => {
+                        let body =
+                            parse_ints::<3>(value, line_no, "half_width, half_depth, height")?;
+                        if body.iter().any(|v| *v < 0) {
+                            return Err(ParseError::at(
+                                line_no,
+                                "a body's size cannot be negative",
+                            ));
+                        }
+                        r_body = Some(body);
+                    }
+                    "sight_cm" => r_sight = Some(parse_num(value, line_no)?),
+                    "meal_material" => r_meal_material = Some(parse_num(value, line_no)?),
+                    "meal_size" => {
+                        r_meal_size = Some(parse_ints::<3>(
+                            value,
+                            line_no,
+                            "half_width, half_depth, height",
+                        )?)
+                    }
+                    "pantry_body" => {
+                        r_pantry_body = Some(parse_ints::<3>(
+                            value,
+                            line_no,
+                            "half_width, half_depth, height",
+                        )?)
+                    }
+                    other => {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("unknown residents rule {other:?}"),
+                        ))
+                    }
+                }
+            }
+            "residents" => {
+                let id: u64 = parse_num(key, line_no)?;
+                residents.push(parse_resident(id, value, line_no)?);
+            }
+            "larders" => {
+                // home = meals[, pantry:id]
+                let home: u64 = parse_num(key, line_no)?;
+                let mut parts = value.split(',').map(str::trim);
+                let meals = parse_num(parts.next().unwrap_or(""), line_no)?;
+                larders.push((home, meals));
+                for part in parts {
+                    match part.split_once(':') {
+                        Some(("pantry", id)) => {
+                            pantries.push((home, parse_num(id.trim(), line_no)?))
+                        }
+                        _ => {
+                            return Err(ParseError::at(
+                                line_no,
+                                format!("a larder takes meals, then pantry:id, not {part:?}"),
+                            ))
+                        }
+                    }
+                }
+            }
+            "residency" => {
+                let rung = match value {
+                    "city" => society::schema::CITY,
+                    "scene" => society::schema::SCENE,
+                    other => {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("a place is at the city tier or in the scene, not {other:?}"),
+                        ))
+                    }
+                };
+                residency.push((parse_num(key, line_no)?, rung));
+            }
             "curiosity" => curiosity.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
             "home" => home.push((parse_num(key, line_no)?, parse_num(value, line_no)?)),
             "likes" => {
@@ -436,6 +710,155 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "senses" => {
                 let organism: u64 = parse_num(key, line_no)?;
                 senses.push((organism, parse_num(value, line_no)?));
+            }
+            "strength" => {
+                let organism: u64 = parse_num(key, line_no)?;
+                strength.push((organism, parse_num(value, line_no)?));
+            }
+            "water" => {
+                // place = pond|river|sea, depth cm, bank cm, catchment m², drain seconds (A-39)
+                let id: u64 = parse_num(key, line_no)?;
+                let mut parts = value.split(',').map(str::trim);
+                let kind = match parts.next().unwrap_or("") {
+                    "pond" => 1,
+                    "river" => 2,
+                    "sea" => 3,
+                    other => {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("water is a pond, a river, or the sea, not {other:?}"),
+                        ))
+                    }
+                };
+                let rest: Vec<&str> = parts.collect();
+                let [depth_cm, bank_cm, catchment_m2, drain_seconds] =
+                    parse_ints::<4>(&rest.join(","), line_no, "depth, bank, catchment, drain")?;
+                if depth_cm < 0 || bank_cm < depth_cm || catchment_m2 < 0 || drain_seconds <= 0 {
+                    return Err(ParseError::at(
+                        line_no,
+                        "water stands below its banks, drains in time, and has no less than no land",
+                    ));
+                }
+                waters.push(WaterSpec {
+                    id,
+                    kind,
+                    depth_cm,
+                    bank_cm,
+                    catchment_m2,
+                    drain_seconds,
+                });
+            }
+            "drains" => {
+                let from: u64 = parse_num(key, line_no)?;
+                drains.push((from, parse_num(value, line_no)?));
+            }
+            "floods" => {
+                let water: u64 = parse_num(key, line_no)?;
+                let places = value
+                    .split(',')
+                    .map(|p| parse_num(p.trim(), line_no))
+                    .collect::<Result<Vec<u64>, _>>()?;
+                floods.push((water, places));
+            }
+            "ground" => {
+                // place = what its ground is made of (Amendment A-42)
+                ground.push((parse_num(key, line_no)?, parse_num(value, line_no)?));
+            }
+            "quarry" => {
+                // material = units a pit holds, unit size XxYxZ, work per unit (Amendment A-42)
+                let material: u64 = parse_num(key, line_no)?;
+                let parts: Vec<&str> = value.split(',').map(str::trim).collect();
+                let [units, size, work] = parts[..] else {
+                    return Err(ParseError::at(line_no, "a quarry is units, XxYxZ, work"));
+                };
+                let dims = size
+                    .split('x')
+                    .map(|n| parse_num(n, line_no))
+                    .collect::<Result<Vec<i64>, _>>()?;
+                let [x, y, z] = dims[..] else {
+                    return Err(ParseError::at(line_no, "a size is XxYxZ"));
+                };
+                quarries.push((
+                    material,
+                    parse_num(units, line_no)?,
+                    [x, y, z],
+                    parse_num(work, line_no)?,
+                ));
+            }
+            "wear" => {
+                // workplace = how fast it wears in use, hundredths of a percent an hour (A-46)
+                let workplace: u64 = parse_num(key, line_no)?;
+                let per_hour: i64 = parse_num(value, line_no)?;
+                if per_hour < 0 {
+                    return Err(ParseError::at(line_no, "wear is not negative"));
+                }
+                wear.push((workplace, per_hour));
+            }
+            "ground_water" => {
+                // climate = how wet its ground begins, hundredths of a percent (Amendment A-41)
+                let climate: u64 = parse_num(key, line_no)?;
+                let wet: i64 = parse_num(value, line_no)?;
+                if !(0..=10_000).contains(&wet) {
+                    return Err(ParseError::at(
+                        line_no,
+                        "ground water lies between 0 and 10000",
+                    ));
+                }
+                ground_water.push((climate, wet));
+            }
+            "humidity" => {
+                // climate = normal humidity, hundredths of a percent (Amendment A-35)
+                let climate: u64 = parse_num(key, line_no)?;
+                let normal: i64 = parse_num(value, line_no)?;
+                if !(0..=10_000).contains(&normal) {
+                    return Err(ParseError::at(
+                        line_no,
+                        "a humidity lies between 0 and 10000",
+                    ));
+                }
+                humidities.push((climate, normal));
+            }
+            "latitude" => {
+                // place = hundredths of a degree north (Amendment A-34)
+                let place: u64 = parse_num(key, line_no)?;
+                let latitude: i64 = parse_num(value, line_no)?;
+                if !(-9_000..=9_000).contains(&latitude) {
+                    return Err(ParseError::at(
+                        line_no,
+                        "a latitude lies between the poles, -9000 to 9000",
+                    ));
+                }
+                latitudes.push((place, latitude));
+            }
+            "storms" => {
+                // region = from hour, hours, wind cm/s
+                let region: u64 = parse_num(key, line_no)?;
+                let [from, hours, wind] =
+                    parse_ints::<3>(value, line_no, "from hour, hours, wind")?;
+                if hours <= 0 || wind < 0 {
+                    return Err(ParseError::at(
+                        line_no,
+                        "a storm blows for a while, at a wind",
+                    ));
+                }
+                storms.push((region, from, hours, wind));
+            }
+            "fires" => {
+                // thing = fierceness[, kept]
+                let thing: u64 = parse_num(key, line_no)?;
+                let mut parts = value.split(',').map(str::trim);
+                let fierce = parse_num(parts.next().unwrap_or(""), line_no)?;
+                let kept = match parts.next() {
+                    None => false,
+                    Some("kept") => true,
+                    Some(other) => {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("a fire is kept or not, not {other:?}"),
+                        ))
+                    }
+                };
+                fires.push((thing, fierce, kept));
             }
             "knows" => {
                 let mind: u64 = parse_num(key, line_no)?;
@@ -583,6 +1006,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
                         "enclosed" => Flag::Enclosed,
                         "mobile" => Flag::Mobile,
                         "closed" => Flag::Closed,
+                        "paved" => Flag::Paved,
                         other => {
                             return Err(ParseError::at(
                                 line_no,
@@ -708,10 +1132,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "rules.physical.pressure_elevation_factor",
         )?,
         pressure_variability: require(pressure_variability, "rules.physical.pressure_variability")?,
-        wind_gradient_divisor: require(
-            wind_gradient_divisor,
-            "rules.physical.wind_gradient_divisor",
-        )?,
+        wind_per_decapascal: require(wind_per_decapascal, "rules.physical.wind_per_decapascal")?,
         fall_danger_per_meter: require(
             fall_danger_per_meter,
             "rules.physical.fall_danger_per_meter",
@@ -735,6 +1156,99 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             "rules.physical.sight_min_illumination",
         )?,
         carry_limit_kg: require(carry_limit_kg, "rules.physical.carry_limit_kg")?,
+        hand_strike_percent: require(hand_strike_percent, "rules.physical.hand_strike_percent")?,
+        tool_strike_percent_per_kg: require(
+            tool_strike_percent_per_kg,
+            "rules.physical.tool_strike_percent_per_kg",
+        )?,
+        strike_scale: require(strike_scale, "rules.physical.strike_scale")?,
+        wreckage_height_cm: require(wreckage_height_cm, "rules.physical.wreckage_height_cm")?,
+        mend_scale: require(mend_scale, "rules.physical.mend_scale")?,
+        fire_step_seconds: require(fire_step_seconds, "rules.physical.fire_step_seconds")?,
+        fire_grow_per_hour: require(fire_grow_per_hour, "rules.physical.fire_grow_per_hour")?,
+        burn_per_hour: require(burn_per_hour, "rules.physical.burn_per_hour")?,
+        fire_reach_cm: require(fire_reach_cm, "rules.physical.fire_reach_cm")?,
+        ignition_heat: require(ignition_heat, "rules.physical.ignition_heat")?,
+        ignite_intensity: require(ignite_intensity, "rules.physical.ignite_intensity")?,
+        rain_above: require(rain_above, "rules.physical.rain_above")?,
+        douse_per_hour: require(douse_per_hour, "rules.physical.douse_per_hour")?,
+        wall_thickness_cm: require(wall_thickness_cm, "rules.physical.wall_thickness_cm")?,
+        fire_warmth_per_hour: require(fire_warmth_per_hour, "rules.physical.fire_warmth_per_hour")?,
+        smoke_per_hour: require(smoke_per_hour, "rules.physical.smoke_per_hour")?,
+        smoke_clear_per_hour: require(smoke_clear_per_hour, "rules.physical.smoke_clear_per_hour")?,
+        fire_fan_wind_cm_s: require(fire_fan_wind_cm_s, "rules.physical.fire_fan_wind_cm_s")?,
+        wind_force_divisor: require(wind_force_divisor, "rules.physical.wind_force_divisor")?,
+        wind_damage_scale: require(wind_damage_scale, "rules.physical.wind_damage_scale")?,
+        wind_hold_per_kg: require(wind_hold_per_kg, "rules.physical.wind_hold_per_kg")?,
+        wind_carry_cm_per_hour: require(
+            wind_carry_cm_per_hour,
+            "rules.physical.wind_carry_cm_per_hour",
+        )?,
+        gale_below: require(gale_below, "rules.physical.gale_below")?,
+        gale_per_decapascal: require(gale_per_decapascal, "rules.physical.gale_per_decapascal")?,
+        year_days: require(year_days, "rules.physical.year_days")?,
+        start_day: require(start_day, "rules.physical.start_day")?,
+        latitude_centi_deg: require(latitude_centi_deg, "rules.physical.latitude_centi_deg")?,
+        axial_tilt_centi_deg: require(axial_tilt_centi_deg, "rules.physical.axial_tilt_centi_deg")?,
+        seasonal_amplitude_centi_c: require(
+            seasonal_amplitude_centi_c,
+            "rules.physical.seasonal_amplitude_centi_c",
+        )?,
+        seasonal_lag_days: require(seasonal_lag_days, "rules.physical.seasonal_lag_days")?,
+        lunar_month_seconds: require(lunar_month_seconds, "rules.physical.lunar_month_seconds")?,
+        moon_phase_at_start: require(moon_phase_at_start, "rules.physical.moon_phase_at_start")?,
+        moonlight_peak: require(moonlight_peak, "rules.physical.moonlight_peak")?,
+        cloud_above: require(cloud_above, "rules.physical.cloud_above")?,
+        cloud_shade: require(cloud_shade, "rules.physical.cloud_shade")?,
+        cloud_damp: require(cloud_damp, "rules.physical.cloud_damp")?,
+        rain_per_hour: require(rain_per_hour, "rules.physical.rain_per_hour")?,
+        snow_below_centi_c: require(snow_below_centi_c, "rules.physical.snow_below_centi_c")?,
+        fog_above: require(fog_above, "rules.physical.fog_above")?,
+        fog_wind_below_cm_s: require(fog_wind_below_cm_s, "rules.physical.fog_wind_below_cm_s")?,
+        humidity_per_degree: require(humidity_per_degree, "rules.physical.humidity_per_degree")?,
+        diurnal_coldest_seconds: require(
+            diurnal_coldest_seconds,
+            "rules.physical.diurnal_coldest_seconds",
+        )?,
+        diurnal_warmest_seconds: require(
+            diurnal_warmest_seconds,
+            "rules.physical.diurnal_warmest_seconds",
+        )?,
+        climate_mixing_seconds: require(
+            climate_mixing_seconds,
+            "rules.physical.climate_mixing_seconds",
+        )?,
+        front_distance_cm: require(front_distance_cm, "rules.physical.front_distance_cm")?,
+        opening_air_speed_cm_s: require(
+            opening_air_speed_cm_s,
+            "rules.physical.opening_air_speed_cm_s",
+        )?,
+        draught_percent: require(draught_percent, "rules.physical.draught_percent")?,
+        open_air_height_cm: require(open_air_height_cm, "rules.physical.open_air_height_cm")?,
+        soak_per_mm: require(soak_per_mm, "rules.physical.soak_per_mm")?,
+        ground_drying_per_hour: require(
+            ground_drying_per_hour,
+            "rules.physical.ground_drying_per_hour",
+        )?,
+        snow_melt_mm_per_degree_hour: require(
+            snow_melt_mm_per_degree_hour,
+            "rules.physical.snow_melt_mm_per_degree_hour",
+        )?,
+        wetting_per_hour: require(wetting_per_hour, "rules.physical.wetting_per_hour")?,
+        drying_per_hour: require(drying_per_hour, "rules.physical.drying_per_hour")?,
+        dry_by_heat_per_hour: require(dry_by_heat_per_hour, "rules.physical.dry_by_heat_per_hour")?,
+        tide_amplitude_cm: require(tide_amplitude_cm, "rules.physical.tide_amplitude_cm")?,
+        tidal_period_seconds: require(tidal_period_seconds, "rules.physical.tidal_period_seconds")?,
+        ice_mm_per_degree_hour: require(
+            ice_mm_per_degree_hour,
+            "rules.physical.ice_mm_per_degree_hour",
+        )?,
+        wade_depth_cm: require(wade_depth_cm, "rules.physical.wade_depth_cm")?,
+        ice_bears_mm: require(ice_bears_mm, "rules.physical.ice_bears_mm")?,
+        bare_hand_hardness: require(bare_hand_hardness, "rules.physical.bare_hand_hardness")?,
+        pit_half_width_cm: require(pit_half_width_cm, "rules.physical.pit_half_width_cm")?,
+        tool_wear: require(tool_wear, "rules.physical.tool_wear")?,
+        go_seconds: require(go_seconds, "rules.physical.go_seconds")?,
     };
     let minds_rules = match (
         think_step_seconds,
@@ -763,6 +1277,8 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             work_value: require(work_value, "rules.minds.work_value")?,
             tired_margin: require(tired_margin, "rules.minds.tired_margin")?,
             sleep_hours: require(sleep_hours, "rules.minds.sleep_hours")?,
+            repair_value: require(repair_value, "rules.minds.repair_value")?,
+            repair_below: require(repair_below, "rules.minds.repair_below")?,
         }),
     };
     let resources_rules = regrow_step.map(|regrow_step_seconds| ResourcesRules {
@@ -846,6 +1362,11 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
             hunger_per_hour: require(hunger_per_hour, "rules.living.hunger_per_hour")?,
             starving_above: require(starving_above, "rules.living.starving_above")?,
             starving_harm_per_hour: require(starving_harm, "rules.living.starving_harm_per_hour")?,
+            strength: default_strength,
+            burn_harm_per_hour: require(burn_harm, "rules.living.burn_harm_per_hour")?,
+            smoke_harm_per_hour: require(smoke_harm, "rules.living.smoke_harm_per_hour")?,
+            chill_wind_cm_s: require(chill_wind, "rules.living.chill_wind_cm_s")?,
+            wet_chill_percent: require(wet_chill, "rules.living.wet_chill_percent")?,
         }),
     };
 
@@ -878,6 +1399,18 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         travel,
         places,
         senses,
+        strength,
+        fires,
+        storms,
+        latitudes,
+        humidities,
+        ground_water,
+        wear,
+        ground,
+        quarries,
+        waters,
+        drains,
+        floods,
         knows,
         minds,
         temperament,
@@ -887,6 +1420,29 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
         jobs,
         roles,
         owners,
+        residents_rules: if has_residents_rules {
+            Some(ResidentsRules {
+                sleep_hours: require(r_sleep, "rules.residents.sleep_hours")?,
+                work_hours: require(r_work, "rules.residents.work_hours")?,
+                hungry_above: require(r_hungry, "rules.residents.hungry_above")?,
+                meal_nutrition: require(r_meal, "rules.residents.meal_nutrition")?,
+                meals_per_shift: require(r_meals_per_shift, "rules.residents.meals_per_shift")?,
+                meal_minutes: require(r_meal_minutes, "rules.residents.meal_minutes")?,
+                walk_speed_cm_s: require(r_walk, "rules.residents.walk_speed_cm_s")?,
+                hours_spread_minutes: require(r_spread, "rules.residents.hours_spread_minutes")?,
+                body: require(r_body, "rules.residents.body")?,
+                sight_cm: require(r_sight, "rules.residents.sight_cm")?,
+                meal_material: r_meal_material,
+                meal_size: r_meal_size,
+                pantry_body: r_pantry_body,
+            })
+        } else {
+            None
+        },
+        residents,
+        larders,
+        pantries,
+        residency,
         curiosity,
         likes,
         home,
@@ -901,6 +1457,7 @@ pub fn parse_world(text: &str) -> Result<WorldPackage, ParseError> {
 /// field is required.
 fn parse_deposit(id: u64, value: &str, line_no: usize) -> Result<DepositSpec, ParseError> {
     let (mut made_of, mut size, mut per_day, mut cap, mut stock) = (None, None, None, None, None);
+    let mut extra = DepositSpec::default();
     for part in value.split(',') {
         let (k, v) = part
             .split_once(':')
@@ -921,6 +1478,38 @@ fn parse_deposit(id: u64, value: &str, line_no: usize) -> Result<DepositSpec, Pa
             "per_day" => per_day = Some(parse_num(v.trim(), line_no)?),
             "cap" => cap = Some(parse_num(v.trim(), line_no)?),
             "stock" => stock = Some(parse_num(v.trim(), line_no)?),
+            // How it renews, how poor it is, and how hard it is to work (Amendment A-41).
+            "renewal" => {
+                extra.renewal = Some(match v.trim() {
+                    "nonrenewable" => 1,
+                    "renewable" => 2,
+                    "threshold" => 3,
+                    "flow" => 4,
+                    other => {
+                        return Err(ParseError::at(
+                            line_no,
+                            format!("a deposit renews as nonrenewable, renewable, threshold, or flow, not {other:?}"),
+                        ))
+                    }
+                })
+            }
+            "floor" => extra.floor = Some(parse_num(v.trim(), line_no)?),
+            "grade" => extra.grade = Some(parse_num(v.trim(), line_no)?),
+            "difficulty" => extra.difficulty = Some(parse_num(v.trim(), line_no)?),
+            "grows" => {
+                let parts = v
+                    .trim()
+                    .split('/')
+                    .map(|n| parse_num(n, line_no))
+                    .collect::<Result<Vec<i64>, _>>()?;
+                let [from, full, water] = parts[..] else {
+                    return Err(ParseError::at(line_no, "grows is FROM/FULL/WATER"));
+                };
+                if full <= from {
+                    return Err(ParseError::at(line_no, "it grows fully warmer than it begins"));
+                }
+                extra.grows = Some([from, full, water]);
+            }
             other => {
                 return Err(ParseError::at(
                     line_no,
@@ -937,6 +1526,7 @@ fn parse_deposit(id: u64, value: &str, line_no: usize) -> Result<DepositSpec, Pa
         per_day: per_day.ok_or_else(|| missing("per_day"))?,
         cap: cap.ok_or_else(|| missing("cap"))?,
         stock: stock.ok_or_else(|| missing("stock"))?,
+        ..extra
     })
 }
 
@@ -945,6 +1535,7 @@ fn parse_deposit(id: u64, value: &str, line_no: usize) -> Result<DepositSpec, Pa
 /// seconds in the making. Every field is required.
 fn parse_recipe(id: u64, value: &str, line_no: usize) -> Result<RecipeSpec, ParseError> {
     let (mut needs, mut makes, mut size, mut at, mut takes) = (None, None, None, None, None);
+    let (mut heat, mut power, mut wind, mut tool, mut count) = (false, None, None, None, None);
     let pair = |s: &str| -> Result<(i64, i64), ParseError> {
         let (a, b) = s
             .split_once('x')
@@ -981,6 +1572,12 @@ fn parse_recipe(id: u64, value: &str, line_no: usize) -> Result<RecipeSpec, Pars
             }
             "at" => at = Some(parse_num(v.trim(), line_no)?),
             "takes" => takes = Some(parse_num(v.trim(), line_no)?),
+            // What else the making needs, and how many it makes (Amendment A-43).
+            "heat" => heat = matches!(v.trim(), "yes" | "true"),
+            "power" => power = Some(parse_num(v.trim(), line_no)?),
+            "wind" => wind = Some(parse_num(v.trim(), line_no)?),
+            "tool" => tool = Some(parse_num(v.trim(), line_no)?),
+            "count" => count = Some(parse_num(v.trim(), line_no)?),
             other => {
                 return Err(ParseError::at(
                     line_no,
@@ -997,6 +1594,11 @@ fn parse_recipe(id: u64, value: &str, line_no: usize) -> Result<RecipeSpec, Pars
         size: size.ok_or_else(|| missing("size"))?,
         at: at.ok_or_else(|| missing("at"))?,
         takes_seconds: takes.ok_or_else(|| missing("takes"))?,
+        heat,
+        power,
+        wind,
+        tool,
+        count,
     })
 }
 
@@ -1045,6 +1647,33 @@ fn parse_job(id: u64, value: &str, line_no: usize) -> Result<JobSpec, ParseError
         to: to.ok_or_else(|| missing("to"))?,
         keep: keep.ok_or_else(|| missing("keep"))?,
         hours: hours.ok_or_else(|| missing("hours"))?,
+    })
+}
+
+/// Parse a resident (Amendment A-23): `home:H[, work:W][, hunger:N]`.
+fn parse_resident(id: u64, value: &str, line_no: usize) -> Result<ResidentSpec, ParseError> {
+    let (mut home, mut work, mut hunger) = (None, None, 0);
+    for part in value.split(',') {
+        let (k, v) = part
+            .split_once(':')
+            .ok_or_else(|| ParseError::at(line_no, format!("expected key:value, got {part:?}")))?;
+        match k.trim() {
+            "home" => home = Some(parse_num(v, line_no)?),
+            "work" => work = Some(parse_num(v, line_no)?),
+            "hunger" => hunger = parse_num(v, line_no)?,
+            other => {
+                return Err(ParseError::at(
+                    line_no,
+                    format!("unknown resident field {other:?}"),
+                ))
+            }
+        }
+    }
+    Ok(ResidentSpec {
+        id,
+        home: home.ok_or_else(|| ParseError::at(line_no, format!("resident {id} lacks home")))?,
+        work,
+        hunger,
     })
 }
 
@@ -1357,7 +1986,7 @@ humidity_variability = 800
 pressure_sea_level = 10130
 pressure_elevation_factor = 1
 pressure_variability = 60
-wind_gradient_divisor = 10
+wind_per_decapascal = 1
 fall_danger_per_meter = 1500
 thermal_mass_reference = 1000
 gravity_cm_s2 = 981
@@ -1369,6 +1998,69 @@ indoor_coupling_seconds = 14400
 sight_step_seconds = 1
 sight_min_illumination = 50
 carry_limit_kg = 25
+hand_strike_percent = 50
+tool_strike_percent_per_kg = 50
+strike_scale = 300
+wreckage_height_cm = 20
+mend_scale = 300
+fire_step_seconds = 10
+fire_grow_per_hour = 20000
+burn_per_hour = 30000
+fire_reach_cm = 300
+ignition_heat = 3000
+ignite_intensity = 2000
+rain_above = 9000
+douse_per_hour = 40000
+wall_thickness_cm = 20
+fire_warmth_per_hour = 2000
+smoke_per_hour = 40000
+smoke_clear_per_hour = 5000
+fire_fan_wind_cm_s = 1000
+wind_force_divisor = 3200
+wind_damage_scale = 16
+wind_hold_per_kg = 100
+wind_carry_cm_per_hour = 20000
+gale_below = 400
+gale_per_decapascal = 50
+year_days = 0
+start_day = 0
+latitude_centi_deg = 0
+axial_tilt_centi_deg = 0
+seasonal_amplitude_centi_c = 0
+seasonal_lag_days = 0
+lunar_month_seconds = 0
+moon_phase_at_start = 0
+moonlight_peak = 0
+cloud_above = 7000
+cloud_shade = 7500
+cloud_damp = 6000
+rain_per_hour = 1000
+snow_below_centi_c = 100
+fog_above = 9500
+fog_wind_below_cm_s = 300
+humidity_per_degree = 400
+diurnal_coldest_seconds = 0
+diurnal_warmest_seconds = 43200
+climate_mixing_seconds = 0
+front_distance_cm = 0
+opening_air_speed_cm_s = 5
+draught_percent = 1000
+open_air_height_cm = 1000
+soak_per_mm = 300
+ground_drying_per_hour = 30
+snow_melt_mm_per_degree_hour = 5
+wetting_per_hour = 20000
+drying_per_hour = 1500
+dry_by_heat_per_hour = 20000
+tide_amplitude_cm = 0
+tidal_period_seconds = 0
+ice_mm_per_degree_hour = 2
+wade_depth_cm = 50
+ice_bears_mm = 80
+bare_hand_hardness = 1000
+pit_half_width_cm = 100
+tool_wear = 0
+go_seconds = 5
 [regions]
 1 = 1500
 ";

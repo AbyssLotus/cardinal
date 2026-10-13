@@ -62,6 +62,7 @@ fn village(n: u64) -> WorldPackage {
             per_day: 20,
             cap: 30,
             stock: 10,
+            ..Default::default()
         });
     }
     for i in 0..n {

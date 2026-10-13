@@ -124,3 +124,28 @@ pub fn daylight_fraction(view: &dyn CommittedView, room: EntityId) -> i64 {
     }
     ((lit * PERCENT_FULL as i128) / floor).clamp(0, PERCENT_FULL as i128) as i64
 }
+
+/// How far north `place` lies, in hundredths of a degree (Amendment A-34): its own latitude, or
+/// the nearest enclosing place's, or the world's `default`.
+pub fn latitude_of(view: &dyn CommittedView, place: EntityId, default: i64) -> i64 {
+    ambient(view, place, crate::schema::LATITUDE).map_or(default, |(_, l)| l)
+}
+
+/// How clear the air is in `place`, in hundredths of a percent (Amendments A-32, A-35): what its
+/// smoke leaves, times what the fog over it leaves — fog lies over open ground, not in walled
+/// rooms. One sees through it only so far.
+pub fn air_clearness(view: &dyn CommittedView, place: EntityId) -> i64 {
+    let int = |fact: FactType| {
+        view.read(FactKey::new(place, fact))
+            .and_then(|f| f.value.as_int())
+            .unwrap_or(0)
+            .clamp(0, PERCENT_FULL)
+    };
+    let smoke = int(crate::schema::SMOKE);
+    let fog = if is_sheltered(view, place) {
+        0
+    } else {
+        ambient(view, place, crate::schema::FOG).map_or(0, |(_, f)| f.clamp(0, PERCENT_FULL))
+    };
+    (PERCENT_FULL - smoke) * (PERCENT_FULL - fog) / PERCENT_FULL
+}

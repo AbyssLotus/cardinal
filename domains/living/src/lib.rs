@@ -21,6 +21,7 @@
 
 pub mod composition;
 pub mod schema;
+pub mod seam;
 pub mod systems;
 
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
@@ -82,6 +83,18 @@ pub struct LivingConfig {
     pub starving_above: i64,
     /// Health lost per hour while starving.
     pub starving_harm_per_hour: i64,
+    /// Health lost per hour in the full heat of a fire (Amendment A-28).
+    pub burn_harm_per_hour: i64,
+    /// Health lost per hour breathing thick smoke (Amendment A-32).
+    pub smoke_harm_per_hour: i64,
+    /// How wind and wet hurry a body toward the air's temperature (Amendment A-38).
+    pub chill: systems::Chill,
+    /// How far a resident sees once they cross into the scene, in centimetres (Amendment A-24) —
+    /// if the world has residents.
+    pub resident_sight_cm: Option<i64>,
+    /// How strong the world's people are, unless declared otherwise (Amendment A-27): given to a
+    /// resident crossing into the scene.
+    pub strength: Option<i64>,
 }
 
 impl LivingDomain {
@@ -99,11 +112,13 @@ impl Domain for LivingDomain {
     fn owns(&self, fact_type: FactType) -> bool {
         fact_type == schema::BODY_HEAT
             || fact_type == schema::SIGHT_RANGE
+            || fact_type == schema::STRENGTH
             || fact_type == schema::FATIGUE
             || fact_type == schema::HUNGER
             || fact_type == schema::HEALTH
             || fact_type == schema::REST
             || fact_type == schema::FALL_JUDGED
+            || fact_type == schema::IMPACT_JUDGED
             || schema::NEED_FACTS.contains(&fact_type)
     }
 
@@ -111,12 +126,13 @@ impl Domain for LivingDomain {
         // One instance for the whole world; it iterates every organism it finds in reality.
         let c = self.config;
         let step = c.clock.step(c.metabolism_step_seconds.saturating_mul(1000));
-        vec![
+        let mut systems: Vec<Box<dyn System>> = vec![
             Box::new(systems::Thermoregulation::new(
                 step,
                 c.set_point_centi_c,
                 c.warm_response_seconds.saturating_mul(1000),
                 c.cold_response_seconds.saturating_mul(1000),
+                c.chill,
             )),
             // Tiring and resting, and what harm and healing do to health (Amendment A-10).
             Box::new(systems::Fatigue::new(
@@ -143,9 +159,20 @@ impl Domain for LivingDomain {
                     heal_per_hour: c.heal_per_hour,
                     starving_above: c.starving_above,
                     starving_harm_per_hour: c.starving_harm_per_hour,
+                    burn_harm_per_hour: c.burn_harm_per_hour,
+                    smoke_harm_per_hour: c.smoke_harm_per_hour,
                 },
             )),
-        ]
+        ];
+        // The vital state of residents crossing into the scene (Amendment A-24).
+        if let Some(sight) = c.resident_sight_cm {
+            systems.push(Box::new(seam::Seam::new(
+                c.set_point_centi_c,
+                sight,
+                c.strength,
+            )));
+        }
+        systems
     }
 
     fn compose(
@@ -157,10 +184,12 @@ impl Domain for LivingDomain {
         if fact_type == schema::BODY_HEAT {
             composition::compose_body_heat(current, changes)
         } else if fact_type == schema::SIGHT_RANGE
+            || fact_type == schema::STRENGTH
             || fact_type == schema::HUNGER
             || fact_type == schema::FATIGUE
             || fact_type == schema::HEALTH
             || fact_type == schema::FALL_JUDGED
+            || fact_type == schema::IMPACT_JUDGED
             || fact_type == schema::REST
             || schema::NEED_FACTS.contains(&fact_type)
         {
@@ -179,6 +208,13 @@ impl Domain for LivingDomain {
                     return Err(ValidationError::new(
                         "body heat resolved below absolute zero",
                     ));
+                }
+            }
+        }
+        if fact_type == schema::STRENGTH {
+            if let Resolved::Write(v) = value {
+                if !v.as_int().is_some_and(|n| (0..=schema::FULL).contains(&n)) {
+                    return Err(ValidationError::new("strength is 0..=100%"));
                 }
             }
         }

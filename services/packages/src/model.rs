@@ -78,6 +78,37 @@ pub struct WorldPackage {
     /// How far each organism can see, in centimetres (Living Systems' sensory capability,
     /// Amendment A-8): `(organism, sight range)`. An organism absent here perceives nothing.
     pub senses: Vec<(u64, i64)>,
+    /// How strong each organism is, in hundredths of a percent (Amendment A-27): `(organism,
+    /// strength)`. Those absent have the world's default, if it declares one.
+    pub strength: Vec<(u64, i64)>,
+    /// Fires burning at the start (Amendment A-28): `(thing, fierceness, kept)` — a kept fire is
+    /// a tended hearth's, neither consuming nor dying down.
+    pub fires: Vec<(u64, i64, bool)>,
+    /// Storms the world declares (Amendment A-29): `(region, from hour, hours, wind cm/s)`.
+    pub storms: Vec<(u64, i64, i64, i64)>,
+    /// Places' latitudes, where they differ from the world's (Amendment A-34): `(place,
+    /// hundredths of a degree north)`.
+    pub latitudes: Vec<(u64, i64)>,
+    /// Climates' normal humidity, where it differs from the world's baseline (Amendment A-35):
+    /// `(climate, hundredths of a percent)`.
+    pub humidities: Vec<(u64, i64)>,
+    /// How wet each climate's ground is when the world begins (Amendment A-41): `(climate,
+    /// hundredths of a percent)`.
+    pub ground_water: Vec<(u64, i64)>,
+    /// How fast each workplace wears while something is in the making at it (Amendment A-46):
+    /// `(workplace, hundredths of a percent of its integrity an hour)`.
+    pub wear: Vec<(u64, i64)>,
+    /// What each place's ground is made of (Amendment A-42): `(place, material)`.
+    pub ground: Vec<(u64, u64)>,
+    /// What a pit dug in ground of a material holds (Amendment A-42): `(material, units, unit
+    /// size, work per unit)`.
+    pub quarries: Vec<(u64, i64, [i64; 3], i64)>,
+    /// The world's water (Amendment A-39): ponds, rivers, and the sea.
+    pub waters: Vec<WaterSpec>,
+    /// Which water each pond or river flows on into: `(from, to)`.
+    pub drains: Vec<(u64, u64)>,
+    /// The low ground each body of water floods: `(water, places)`.
+    pub floods: Vec<(u64, Vec<u64>)>,
     /// What each mind knows at the start (Amendment A-8; Vol. IV Ch. 5): `(mind, things)`.
     /// For each thing, where it is; for an opening, also where it leads and whether it is open;
     /// for a place, also how warm its air is.
@@ -100,6 +131,19 @@ pub struct WorldPackage {
     pub roles: Vec<(u64, u64)>,
     /// Who owns what at the start: `(thing, owner)` (Amendment A-19).
     pub owners: Vec<(u64, u64)>,
+    /// The rhythm residents at the city tier live by, if the world has any (Amendment A-23).
+    pub residents_rules: Option<ResidentsRules>,
+    /// People at the city tier: resident records, not organisms (Appendix A, Ruling 19).
+    pub residents: Vec<ResidentSpec>,
+    /// How many meals each household's larder holds at the start: `(home, meals)`.
+    pub larders: Vec<(u64, i64)>,
+    /// Each household's pantry: `(home, pantry)`, the entity its larder becomes in the scene
+    /// (Amendment A-26). Declared with the larder: `home = meals, pantry:id`.
+    pub pantries: Vec<(u64, u64)>,
+    /// Places' rungs on the residency ladder at the start: `(place, rung)`, Society's
+    /// `CITY` or `SCENE` (Amendment A-24). A place declaring none takes its container's; with
+    /// none declared above it, it is in the scene.
+    pub residency: Vec<(u64, i64)>,
     /// How curious each mind is: `(mind, worth of seeing a place it has never stood in)`
     /// (Amendment A-19). Absent: incurious.
     pub curiosity: Vec<(u64, i64)>,
@@ -133,6 +177,8 @@ pub enum Flag {
     Mobile,
     /// A portal that starts closed.
     Closed,
+    /// Ground paved or floored over, not to be dug (Amendment A-42).
+    Paved,
 }
 
 /// The flags one entity carries.
@@ -317,7 +363,7 @@ pub struct PhysicalRules {
     /// Typical size of weather's departure from baseline pressure, in decapascals.
     pub pressure_variability: i64,
     /// Divisor scaling wind speed per unit pressure gradient (larger = gentler wind).
-    pub wind_gradient_divisor: i64,
+    pub wind_per_decapascal: i64,
     /// Danger points added per metre of a portal's height above the ground (fall danger).
     pub fall_danger_per_meter: i64,
     /// Thermal mass — heat stored per unit volume, kJ/(m³·K) — at which a region's temperature
@@ -342,6 +388,142 @@ pub struct PhysicalRules {
     pub sight_min_illumination: i64,
     /// The most a body can carry, in kilograms (Amendment A-12).
     pub carry_limit_kg: i64,
+    /// How hard a bare-handed blow lands, as a percentage of strength (Amendment A-27).
+    pub hand_strike_percent: i64,
+    /// How much harder each kilogram of a tool makes a blow, as a percentage of strength.
+    pub tool_strike_percent_per_kg: i64,
+    /// Integrity lost per unit a blow lands harder than a thing's weakest material, per kilogram
+    /// the thing weighs.
+    pub strike_scale: i64,
+    /// How tall the wreckage of a broken thing stands at most, in centimetres.
+    pub wreckage_height_cm: i64,
+    /// Integrity a mending action restores: this × 1000 over the thing's kilograms (A-31).
+    pub mend_scale: i64,
+    /// How often fire takes its course, in seconds (Amendment A-28).
+    pub fire_step_seconds: u64,
+    /// How fast a fire grows toward what its material allows, per hour.
+    pub fire_grow_per_hour: i64,
+    /// How much integrity a full fire eats per hour from a hundred kilograms of fuel.
+    pub burn_per_hour: i64,
+    /// How far a full fire reaches beyond its extent, in centimetres.
+    pub fire_reach_cm: i64,
+    /// The heat, times flammability, at which a thing catches fire.
+    pub ignition_heat: i64,
+    /// How fiercely a fire burns when it first catches.
+    pub ignite_intensity: i64,
+    /// The humidity at and above which rain falls on what is open to the sky.
+    pub rain_above: i64,
+    /// How fast rain puts out a fire in the open, per hour.
+    pub douse_per_hour: i64,
+    /// How thick a walled place's walls, floor, and roof are, in centimetres.
+    pub wall_thickness_cm: i64,
+    /// How much a full fire warms a hundred cubic metres of walled air, per hour, centidegrees
+    /// (Amendment A-32).
+    pub fire_warmth_per_hour: i64,
+    /// How much smoke a full fire raises in a hundred cubic metres of walled air, per hour.
+    pub smoke_per_hour: i64,
+    /// How much of a walled place's smoke clears per hour, again as much per open opening.
+    pub smoke_clear_per_hour: i64,
+    /// The wind, cm/s, that fans a fire in the open to twice what its fuel allows.
+    pub fire_fan_wind_cm_s: i64,
+    /// The wind's pressure is its speed squared over this, in the units of hardness (A-29).
+    pub wind_force_divisor: i64,
+    /// Integrity lost per hour per unit of pressure beyond what a structure bears.
+    pub wind_damage_scale: i64,
+    /// How much pressure each kilogram of a loose thing holds it against (Amendment A-33).
+    pub wind_hold_per_kg: i64,
+    /// How far, cm an hour, a wind that overwhelms what holds a thing carries it.
+    pub wind_carry_cm_per_hour: i64,
+    /// How far under normal, in decapascals, pressure must fall before a gale brews.
+    pub gale_below: i64,
+    /// How much wind, cm/s, each decapascal deeper brings.
+    pub gale_per_decapascal: i64,
+    /// How many days a year lasts (Amendment A-34); zero, no year and no seasons.
+    pub year_days: u64,
+    /// How many days after the spring equinox the world begins.
+    pub start_day: u64,
+    /// The latitude of every place that declares none, hundredths of a degree north.
+    pub latitude_centi_deg: i64,
+    /// How far north and south of the equator the sun travels over the year, hundredths of a degree.
+    pub axial_tilt_centi_deg: i64,
+    /// Half the difference between midsummer's and midwinter's normal temperature, centidegrees.
+    pub seasonal_amplitude_centi_c: i64,
+    /// How many days the year's warmest and coldest lag midsummer and midwinter.
+    pub seasonal_lag_days: u64,
+    /// How long the moon's month lasts, in seconds; zero, no moon.
+    pub lunar_month_seconds: u64,
+    /// The moon's phase when the world begins, hundredths of a percent of its month: 0 new, 5000 full.
+    pub moon_phase_at_start: i64,
+    /// The light of a full moon overhead, hundredths of a percent of full daylight.
+    pub moonlight_peak: i64,
+    /// The air's humidity past which cloud forms, hundredths of a percent (Amendment A-35);
+    /// the sky is overcast by the rain line.
+    pub cloud_above: i64,
+    /// How much of the day's light a full overcast keeps out.
+    pub cloud_shade: i64,
+    /// How much of the day/night swing a full overcast holds back.
+    pub cloud_damp: i64,
+    /// How hard it rains with the air saturated, hundredths of a millimetre an hour.
+    pub rain_per_hour: i64,
+    /// The air temperature, centidegrees, at and below which what falls is snow.
+    pub snow_below_centi_c: i64,
+    /// The relative humidity near the ground past which fog forms.
+    pub fog_above: i64,
+    /// The wind, cm/s, at and above which fog cannot settle.
+    pub fog_wind_below_cm_s: i64,
+    /// How much the humidity near the ground rises for each degree the air cools below its day's
+    /// mean, hundredths of a percent.
+    pub humidity_per_degree: i64,
+    /// When in the day the air is coldest, seconds after midnight (Amendment A-35).
+    pub diurnal_coldest_seconds: u64,
+    /// When in the day the air is warmest, seconds after midnight.
+    pub diurnal_warmest_seconds: u64,
+    /// How long neighbouring climates' weather takes to mix, the time constant in seconds
+    /// (Amendment A-36); zero, never.
+    pub climate_mixing_seconds: u64,
+    /// How far the wind carries weather between neighbouring climates' middles, centimetres; zero,
+    /// it carries none.
+    pub front_distance_cm: i64,
+    /// How fast air moves through an open opening of itself, each way, cm/s (Amendment A-37).
+    pub opening_air_speed_cm_s: i64,
+    /// What share of the wind outside, hundredths of a percent, blows through an opening onto open air.
+    pub draught_percent: i64,
+    /// How high over open ground smoke mixes before it is carried off, centimetres.
+    pub open_air_height_cm: i64,
+    /// How much wetter the ground grows for each millimetre of water that reaches it, hundredths
+    /// of a percent (Amendment A-38).
+    pub soak_per_mm: i64,
+    /// How fast the ground dries per hour in dry, dark, still air; twice as fast in full sun,
+    /// faster in wind.
+    pub ground_drying_per_hour: i64,
+    /// How many millimetres of lying snow melt per hour for each degree above freezing.
+    pub snow_melt_mm_per_degree_hour: i64,
+    /// How fast a thing in the open soaks in the world's hardest rain, per hour.
+    pub wetting_per_hour: i64,
+    /// How fast a wet thing dries per hour in dry, dark, still air.
+    pub drying_per_hour: i64,
+    /// How fast a fire's full heat dries a wet thing, per hour.
+    pub dry_by_heat_per_hour: i64,
+    /// Half the sea's rise and fall at a spring tide, centimetres (Amendment A-39).
+    pub tide_amplitude_cm: i64,
+    /// From one high tide to the next, seconds; zero, no tide.
+    pub tidal_period_seconds: u64,
+    /// Millimetres of ice formed an hour for each degree of frost, melted for each of thaw.
+    pub ice_mm_per_degree_hour: i64,
+    /// The deepest water, centimetres, one walks through.
+    pub wade_depth_cm: i64,
+    /// How thick ice must be, millimetres, to bear a walker.
+    pub ice_bears_mm: i64,
+    /// The hardest material a bare hand works (Amendment A-41); anything harder needs a tool no
+    /// softer than it.
+    pub bare_hand_hardness: i64,
+    /// How far to either side of a digger a pit is broken, centimetres (Amendment A-42).
+    pub pit_half_width_cm: i64,
+    /// What a go of work costs the tool that does it, hundredths of a percent of its integrity,
+    /// working stuff as hard as itself (Amendment A-46).
+    pub tool_wear: i64,
+    /// How long one go of work takes, seconds: a blow, a handful, a spadeful (Amendment A-48).
+    pub go_seconds: i64,
 }
 
 /// Tunable rules decision systems decide by (Vol. IV Ch. 2 §2.2; Amendment A-9).
@@ -377,6 +559,11 @@ pub struct MindsRules {
     /// The world's sleeping hours, `(from, to)` in whole hours; wrapping past midnight when
     /// `from > to` (Amendment A-18).
     pub sleep_hours: (i64, i64),
+    /// What mending something of one's own, or one's household's, is worth (Amendment A-45).
+    pub repair_value: i64,
+    /// How whole, in hundredths of a percent, a thing of one's own must fall below before it is
+    /// worth mending (Amendment A-46).
+    pub repair_below: i64,
 }
 
 /// Tunable rules deposits follow (Amendment A-15).
@@ -387,8 +574,9 @@ pub struct ResourcesRules {
 }
 
 /// A deposit: a thing in the world holding a stock that regrows, and yields an item per pick
-/// (Amendment A-15).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// (Amendment A-15) — or per so much work, as hard as its make and as poor as its grade, and
+/// renewing as its class says (Amendment A-41).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct DepositSpec {
     /// The deposit's entity id.
     pub id: u64,
@@ -402,6 +590,17 @@ pub struct DepositSpec {
     pub cap: i64,
     /// Units it holds at the start.
     pub stock: i64,
+    /// How it renews: nonrenewable 1, renewable 2, threshold 3, flow 4 (Amendment A-41); `None`,
+    /// renewable.
+    pub renewal: Option<i64>,
+    /// The units below which a threshold deposit collapses.
+    pub floor: Option<i64>,
+    /// Its grade, in hundredths of a percent.
+    pub grade: Option<i64>,
+    /// The work each unit takes at full grade.
+    pub difficulty: Option<i64>,
+    /// That it grows as living things do: `[from, full, water]`.
+    pub grows: Option<[i64; 3]>,
 }
 
 /// A recipe: what it needs, what it makes, where, and how long the making takes
@@ -420,6 +619,16 @@ pub struct RecipeSpec {
     pub at: u64,
     /// How long the product is in the making, in seconds.
     pub takes_seconds: i64,
+    /// That its workplace must be burning (Amendment A-43).
+    pub heat: bool,
+    /// The water that turns its mill.
+    pub power: Option<u64>,
+    /// The wind, cm/s, that turns its mill.
+    pub wind: Option<i64>,
+    /// How hard a tool the maker must hold.
+    pub tool: Option<i64>,
+    /// How many things it makes at once; `None`, one.
+    pub count: Option<i64>,
 }
 
 /// What a job does (Amendment A-18): one of the engine's closed set of mechanisms.
@@ -453,6 +662,54 @@ pub struct JobSpec {
     /// Its hours, `(from, to)` in whole hours of the day; wrapping past midnight when
     /// `from > to`.
     pub hours: (i64, i64),
+}
+
+/// The rhythm of a settlement's residents (Amendment A-23). Their hunger and fatigue rates are
+/// Living Systems' (`[rules.living]`): the same person tires at the same pace at every tier.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ResidentsRules {
+    /// The night, `(from, to)` in whole hours.
+    pub sleep_hours: (i64, i64),
+    /// Working hours, `(from, to)` in whole hours.
+    pub work_hours: (i64, i64),
+    /// Hunger past which a resident with food at home eats.
+    pub hungry_above: i64,
+    /// How much a meal eases hunger.
+    pub meal_nutrition: i64,
+    /// Meals a finished shift earns the household.
+    pub meals_per_shift: i64,
+    /// How long a meal takes, in minutes.
+    pub meal_minutes: i64,
+    /// Walking pace, in centimetres a second.
+    pub walk_speed_cm_s: i64,
+    /// How far, in minutes either side, a resident's own hours may lie from the settlement's.
+    pub hours_spread_minutes: i64,
+    /// The body a resident is given on crossing into the scene: half-width, half-depth, height,
+    /// in centimetres (Amendment A-24).
+    pub body: [i64; 3],
+    /// How far a resident sees once in the scene, in centimetres.
+    pub sight_cm: i64,
+    /// What a meal is made of, in a household's pantry in the scene (Amendment A-26): an edible
+    /// material feeding exactly a meal's nutrition. Required if any larder has a pantry.
+    pub meal_material: Option<u64>,
+    /// A meal's size, `[half-width, half-depth, height]`, cm.
+    pub meal_size: Option<[i64; 3]>,
+    /// A pantry's size in the scene, `[half-width, half-depth, height]`, cm.
+    pub pantry_body: Option<[i64; 3]>,
+}
+
+/// A person at the city tier (Amendment A-23): where they live and work, and how hungry they
+/// begin.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ResidentSpec {
+    /// The resident's entity id.
+    pub id: u64,
+    /// Their home, a place.
+    pub home: u64,
+    /// Where they work, if they do.
+    pub work: Option<u64>,
+    /// How hungry they begin.
+    pub hunger: i64,
 }
 
 /// Tunable rules Society's bonds follow (Amendment A-11).
@@ -538,6 +795,18 @@ pub struct LivingRules {
     pub starving_above: i64,
     /// Health lost per hour while starving.
     pub starving_harm_per_hour: i64,
+    /// How strong the world's people are unless declared otherwise, in hundredths of a percent
+    /// (Amendment A-27). Absent: only those declared have any strength.
+    pub strength: Option<i64>,
+    /// Health lost per hour in the full heat of a fire (Amendment A-28).
+    pub burn_harm_per_hour: i64,
+    /// Health lost per hour breathing thick smoke (Amendment A-32).
+    pub smoke_harm_per_hour: i64,
+    /// The wind on a body, cm/s, that doubles how fast it takes the air's temperature
+    /// (Amendment A-38).
+    pub chill_wind_cm_s: i64,
+    /// How much faster again a soaked body takes it, hundredths of a percent.
+    pub wet_chill_percent: i64,
 }
 
 /// One region the world begins with (Vol. IV Ch. 4, generation): an id, a starting
@@ -581,6 +850,23 @@ pub struct AdjacencySpec {
     pub a: u64,
     /// The neighbouring region's raw id.
     pub b: u64,
+}
+
+/// A body of water the world declares (Amendment A-39).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct WaterSpec {
+    /// The place that is water.
+    pub id: u64,
+    /// Pond 1, river 2, sea 3.
+    pub kind: i64,
+    /// How deep it stands at rest, in centimetres.
+    pub depth_cm: i64,
+    /// How deep it may stand before it tops its banks.
+    pub bank_cm: i64,
+    /// How much land drains into it, in square metres.
+    pub catchment_m2: i64,
+    /// How fast it drains what stands above its rest, the time constant in seconds.
+    pub drain_seconds: i64,
 }
 
 /// A region's seeded exposure to the open sky (Vol. III Ch. 1 §1.6), in hundredths of a

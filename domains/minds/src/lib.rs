@@ -10,6 +10,7 @@
 //! alone, and names beliefs and intents by their published fact ids.
 
 pub mod schema;
+pub mod seam;
 pub mod think;
 
 use kernel::domain::{Domain, ResolveError, Resolved};
@@ -29,6 +30,9 @@ pub struct MindsConfig {
     pub day_seconds: u64,
     /// The rules every mind decides by.
     pub rules: MindRules,
+    /// How a resident crossing into the scene is given a mind (Amendment A-24), if the world has
+    /// residents.
+    pub residents: Option<seam::ResidentMind>,
 }
 
 /// Decision systems, plugged into the kernel as the owner of goals, commitments, routines, and
@@ -55,7 +59,12 @@ impl Domain for MindsDomain {
 
     fn systems(&self) -> Vec<Box<dyn System>> {
         let c = self.config;
-        vec![Box::new(think::Think::new(c.clock, c.day_seconds, c.rules))]
+        let mut systems: Vec<Box<dyn System>> =
+            vec![Box::new(think::Think::new(c.clock, c.day_seconds, c.rules))];
+        if let Some(residents) = c.residents {
+            systems.push(Box::new(seam::Seam::new(c.day_seconds as i64, residents)));
+        }
+        systems
     }
 
     fn compose(
@@ -101,15 +110,36 @@ mod tests {
                 work_value: 250,
                 sleep_from_seconds: 22 * 3600,
                 sleep_to_seconds: 6 * 3600,
+                bare_hand_hardness: 1000,
+                repair_value: 280,
+                repair_below: 10_000,
             },
+            residents: Some(seam::ResidentMind {
+                walk_speed_cm_s: 120,
+                work_from_seconds: 8 * 3600,
+                work_to_seconds: 17 * 3600,
+                hours_spread_seconds: 2_700,
+            }),
         })
     }
 
     #[test]
     fn minds_read_beliefs_and_their_own_commitments_never_reality() {
         // Ruling 14: every fact type a decision system reads is the information layer's or its
-        // own. The kernel refuses any read a system did not declare, so this is the wall.
+        // own. The kernel refuses any read a system did not declare, so this is the wall. The
+        // seam is no decider: it makes a mind from the record a person crosses from, and reads
+        // that record alone (Amendment A-24).
         for system in domain().systems() {
+            if system.id().name() == "minds.seam" {
+                for fact in system.reads() {
+                    assert!(
+                        fact.name().starts_with("society.resident."),
+                        "the seam reads {}",
+                        fact.name()
+                    );
+                }
+                continue;
+            }
             for fact in system.reads() {
                 let name = fact.name();
                 assert!(
@@ -130,10 +160,13 @@ mod tests {
             "physical.act.take",
             "physical.act.consume",
             "physical.act.pick",
+            "physical.act.pick_up_to",
             "physical.act.drop",
             "economy.act.make",
             "economy.act.claim",
             "living.act.rest",
+            "physical.act.dig",
+            "physical.act.mend",
         ];
         for system in domain().systems() {
             for fact in system.writes() {

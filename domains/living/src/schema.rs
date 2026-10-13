@@ -8,6 +8,10 @@
 
 use kernel::fact::FactType;
 
+/// How thick the smoke is in a walled place — **Physical Reality's** (Amendment A-32), read where
+/// an organism is, to judge what breathing it does.
+pub const SMOKE: FactType = FactType::new("physical.environment.smoke");
+
 /// An organism's body heat, as fixed-point centidegrees Celsius — vital-state physiology
 /// (Vol. III Ch. 2, vital state), the substrate of the "warmth" need that tracks the
 /// environment. Owned by Living Systems; fixed-point, not float (Vol. V Ch. 4).
@@ -17,6 +21,11 @@ pub const BODY_HEAT: FactType = FactType::new("living.vital.body_heat");
 /// §2.2; Amendment A-8). What it can perceive, never what it knows: Physical Reality reports
 /// what lies in view within this range, and the information layer decides what is observed.
 pub const SIGHT_RANGE: FactType = FactType::new("living.sense.sight_range");
+
+/// How strong an organism is, in hundredths of a percent — a physical capability (Vol. III Ch. 2:
+/// "strength, speed, stamina as biological facts"; Amendment A-27). Physical Reality reads it to
+/// judge how hard a blow lands.
+pub const STRENGTH: FactType = FactType::new("living.capability.strength");
 
 /// How tired an organism is, in hundredths of a percent (0 rested, 10000 exhausted) — a need
 /// (Vol. III Ch. 2 §2.4; Amendment A-10): it rises while the organism is awake and falls while it
@@ -98,6 +107,17 @@ pub const IN_VIEW: FactType = FactType::new("physical.sense.in_view");
 /// The full measure of a need or of health, in hundredths of a percent.
 pub const FULL: i64 = 10_000;
 
+/// How hard a body was struck by something falling on it, as the height of a fall that would
+/// strike as hard — **Physical Reality's** report (Amendment A-31), judged as a fall would be.
+pub const IMPACT: FactType = FactType::new("physical.body.impact");
+
+/// The tick of the last impact this domain has judged, so each strikes once.
+pub const IMPACT_JUDGED: FactType = FactType::new("living.vital.impact_judged");
+
+/// How much heat from fire a body is taking — **Physical Reality's** report (Amendment A-28),
+/// consumed by id to judge burns (Appendix A, Ruling 9).
+pub const HEAT_EXPOSURE: FactType = FactType::new("physical.body.heat_exposure");
+
 /// How far a body fell in its most recent fall, in centimetres — **Physical Reality's** report,
 /// consumed by id to judge the harm (Appendix A, Ruling 9).
 pub const FALL_HEIGHT: FactType = FactType::new("physical.body.fall_height");
@@ -117,6 +137,19 @@ pub const CONTAINED_IN: FactType = FactType::new("physical.space.contained_in");
 /// by its stable id. If no enabled domain owns a consumed id, package validation catches the
 /// dangling read (Vol. IV Ch. 2).
 pub const AMBIENT_TEMPERATURE: FactType = FactType::new("physical.environment.temperature");
+
+/// A climate's wind, cm/s — **Physical Reality's** (Amendment A-38).
+pub const WIND_SPEED: FactType = FactType::new("physical.environment.wind_speed");
+
+/// Whether a place is walled — **Physical Reality's**: no wind blows in it.
+pub const ENCLOSED: FactType = FactType::new("physical.space.enclosed");
+
+/// How open a place is to the sky — **Physical Reality's**: a walled place declared exposed lets
+/// that share of the wind in.
+pub const EXPOSURE: FactType = FactType::new("physical.space.exposure");
+
+/// How wet a body is — **Physical Reality's** (Amendment A-38).
+pub const WETNESS: FactType = FactType::new("physical.body.wetness");
 
 /// Absolute zero in centidegrees Celsius (−273.15 °C) — the floor below which body heat is
 /// physically meaningless. The Validate stage rejects any resolved body heat beneath it.

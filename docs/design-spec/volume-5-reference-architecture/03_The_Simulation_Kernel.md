@@ -66,6 +66,8 @@ The `cause` field is where chronicle honesty is manufactured: a proposal must na
 
 
 **Owners may refuse writers** *(Amendment A-5)*. An owning domain may declare that some of its fact types accept proposals only from its own systems — the systems it registered at bootstrap. The kernel enforces this at Resolve: a proposal from any other system to such a fact fails the tick, named, exactly as an undeclared write does. This is how a ruling like Appendix A's Ruling 13 ("no other domain ever writes a position") becomes law rather than etiquette: deciders propose *intents*, which are open to them, and only the owner's systems turn intents into the restricted facts. Because authority is checked against the systems the owner registered, the kernel also refuses to run two systems under one id — a duplicate id would let a stranger wear an owner's name, and would share its random streams besides.
+
+**Retirement** *(Amendment A-25)*. A proposal may ask that an entity leave an owner's keeping: a `Retire` change, proposed on any fact of the entity whose type that owner owns. At Resolve the kernel drops every other proposal this tick to a fact of that entity the owner owns, then ends every such fact the entity holds — single and paired — under the owner's authority as any write is, and chronicles each under the retirement's cause. Facts other owners keep, and facts others hold *about* the entity, are untouched. It is how a domain lets go of a person crossing out of the scene in one commit, whatever its other systems were about to write about them, without each of those systems having to know that people leave.
 # 3.2 The Scheduler
 
 The scheduler owns two questions: *who runs this tick*, and *in what order do their effects compose*.

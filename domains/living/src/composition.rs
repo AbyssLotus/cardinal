@@ -39,7 +39,7 @@ pub fn compose_body_heat(
                 base = Some(n);
             }
             Change::Delta(d) => delta_sum = delta_sum.saturating_add(*d),
-            Change::Tombstone => tombstone = true,
+            Change::Tombstone | Change::Retire => tombstone = true,
             Change::Add(_) | Change::Remove(_) => {
                 return Err(ResolveError::new(
                     "body heat is single-valued; use Set/Create/Delta, not Add/Remove",

@@ -258,6 +258,29 @@ pub fn run_tick_metered<S: RealityStore>(
     let committing = std::time::Instant::now();
     let resolved = proposals.len();
 
+    // 3a. RETIRE (Amendment A-25) — an entity retired from an owner's keeping: every other change
+    //     proposed this tick to a fact of that entity the owner owns is moot, and every such fact
+    //     committed ends below. The first retiring proposal by system id is the one recorded.
+    let mut retired: BTreeMap<(crate::identity::EntityId, usize), Proposal> = BTreeMap::new();
+    if proposals.iter().any(|p| p.change == Change::Retire) {
+        let mut retiring: Vec<Proposal> = proposals
+            .iter()
+            .filter(|p| p.change == Change::Retire)
+            .copied()
+            .collect();
+        retiring.sort_by_key(|p| (p.target.entity, p.system.name()));
+        for p in retiring {
+            let owner = owner_index(domains, p.target.fact_type)
+                .ok_or(TickError::Unowned(p.target.fact_type))?;
+            retired.entry((p.target.entity, owner)).or_insert(p);
+        }
+        proposals.retain(|p| {
+            p.change != Change::Retire
+                && !owner_index(domains, p.target.fact_type)
+                    .is_some_and(|d| retired.contains_key(&(p.target.entity, d)))
+        });
+    }
+
     // 3-4. RESOLVE + VALIDATE — group proposals per fact (deterministic key order), then
     //      resolve each by its owner's cardinality and rules (Vol. V Ch. 3 §3.1).
     let mut grouped: BTreeMap<FactKey, Vec<Proposal>> = BTreeMap::new();
@@ -343,6 +366,30 @@ pub fn run_tick_metered<S: RealityStore>(
         }
     }
 
+    // 4a. Each retired entity's facts end, under the owner's authority as any write is: a fact
+    //     the owner keeps for its own systems is retired only by one of them.
+    let mut retirements: Vec<(FactKey, Cause)> = Vec::new();
+    for (&(entity, d), p) in &retired {
+        let owner = domains[d];
+        let mut keys: Vec<FactKey> = store
+            .facts_of(entity)
+            .into_iter()
+            .map(|(key, _)| key)
+            .filter(|key| owner.owns(key.fact_type))
+            .collect();
+        keys.dedup();
+        for key in keys {
+            if !owner.accepts(key.fact_type, p.system) {
+                return Err(TickError::Refused {
+                    system: p.system,
+                    fact_type: key.fact_type,
+                });
+            }
+            batch.resolutions.push(Resolution::Clear { key });
+            retirements.push((key, p.cause));
+        }
+    }
+
     // 5. COMMIT — the single mutation path; reality becomes N (Vol. V Ch. 2 §2.1). Nothing
     //    above mutated the store, so any error before here left it at N-1. `apply` is
     //    infallible, so once we reach it the tick is committed; the batch moves in, no clone.
@@ -357,6 +404,9 @@ pub fn run_tick_metered<S: RealityStore>(
             chronicle.push(ChronicleEntry::new(tick, p.target, p.cause));
         }
     }
+    for (key, cause) in retirements {
+        chronicle.push(ChronicleEntry::new(tick, key, cause));
+    }
 
     // 7. OBSERVE — read-only notification hook; nothing on the critical path here yet
     //    (Vol. V Ch. 3 §3.1; Vol. V Ch. 9 §9.5.2). The meters are its first reading.
@@ -366,6 +416,11 @@ pub fn run_tick_metered<S: RealityStore>(
         proposals: resolved,
     });
     Ok(())
+}
+
+/// Where in `domains` the owner of `fact_type` is, if any.
+fn owner_index(domains: &[&dyn Domain], fact_type: FactType) -> Option<usize> {
+    domains.iter().position(|d| d.owns(fact_type))
 }
 
 /// The enabled domain that owns `fact_type`, if any (Appendix A: one fact, one owner).

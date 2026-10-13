@@ -9,6 +9,33 @@ use kernel::domain::{ResolveError, Resolved};
 use kernel::proposal::Change;
 use kernel::value::Value;
 
+/// Compose pushes given a thing in one tick (Amendment A-33): they add up, as forces do. Clearing
+/// the last tick's push, in the tick new ones arrive, leaves the new ones standing.
+pub fn compose_push(changes: &[Change]) -> Result<Resolved, ResolveError> {
+    let mut sum = [0i64; 3];
+    let mut pushed = false;
+    for change in changes {
+        match change {
+            Change::Set(v) | Change::Create(v) => {
+                let p = v
+                    .as_vec3()
+                    .ok_or(ResolveError::new("a push is a distance"))?;
+                for i in 0..3 {
+                    sum[i] = sum[i].saturating_add(p[i]);
+                }
+                pushed = true;
+            }
+            Change::Tombstone | Change::Retire => {}
+            _ => return Err(ResolveError::new("a push is given or cleared")),
+        }
+    }
+    Ok(if pushed {
+        Resolved::Write(Value::Vec3(sum))
+    } else {
+        Resolved::Tombstone
+    })
+}
+
 /// Sum deltas onto the current value: at most one `Set`/`Create` establishes the base (two
 /// competing sets are an undeclared conflict and fail — Vol. V Ch. 3 §3.5, invariant 4),
 /// then all `Delta`s sum onto it. A `Tombstone` may not share the tick with a set or delta.
@@ -37,7 +64,7 @@ pub fn compose_additive(
                 base = Some(n);
             }
             Change::Delta(d) => delta_sum = delta_sum.saturating_add(*d),
-            Change::Tombstone => tombstone = true,
+            Change::Tombstone | Change::Retire => tombstone = true,
             Change::Add(_) | Change::Remove(_) => {
                 return Err(ResolveError::new(
                     "this fact is single-valued; use Set/Create/Delta, not Add/Remove",
@@ -57,6 +84,53 @@ pub fn compose_additive(
 
     let start = base.unwrap_or(0);
     Ok(Resolved::Write(Value::Int(start.saturating_add(delta_sum))))
+}
+
+/// A level that is absent at zero — wetness, ground water, lying snow (Amendment A-38): any
+/// number of systems may add to it or take from it in one tick; a set fixes the base, a
+/// tombstone sets it to zero; the sum is clamped into `[0, max]`, and nothing left is nothing.
+pub fn compose_fading(
+    current: Option<Value>,
+    changes: &[Change],
+    max: i64,
+) -> Result<Resolved, ResolveError> {
+    let mut base: i64 = current.and_then(|v| v.as_int()).unwrap_or(0);
+    let mut set_seen = false;
+    let mut delta: i64 = 0;
+    for change in changes {
+        match change {
+            Change::Set(v) | Change::Create(v) => {
+                if set_seen {
+                    return Err(ResolveError::new(
+                        "two competing sets with no declared tie-break",
+                    ));
+                }
+                set_seen = true;
+                base = v
+                    .as_int()
+                    .ok_or(ResolveError::new("this fact requires an integer value"))?;
+            }
+            Change::Tombstone | Change::Retire => {
+                if set_seen {
+                    return Err(ResolveError::new(
+                        "two competing sets with no declared tie-break",
+                    ));
+                }
+                set_seen = true;
+                base = 0;
+            }
+            Change::Delta(d) => delta = delta.saturating_add(*d),
+            Change::Add(_) | Change::Remove(_) => {
+                return Err(ResolveError::new(
+                    "this fact is single-valued; use Set/Delta, not Add/Remove",
+                ))
+            }
+        }
+    }
+    match base.saturating_add(delta).clamp(0, max) {
+        0 => Ok(Resolved::Tombstone),
+        n => Ok(Resolved::Write(Value::Int(n))),
+    }
 }
 
 /// Sum deltas as [`compose_additive`], then clamp the result into `[min, max]`. Used by the
@@ -110,7 +184,7 @@ pub fn compose_entity_ref(
                     "an entity-reference fact is single-valued; use Set/Create, not Add/Remove",
                 ))
             }
-            Change::Tombstone => tombstone = true,
+            Change::Tombstone | Change::Retire => tombstone = true,
         }
     }
 
@@ -137,15 +211,23 @@ pub fn compose_intent(
     current: Option<Value>,
     changes: &[Change],
 ) -> Result<Resolved, ResolveError> {
+    compose_entity_ref(current, &fresh_wins(changes))
+}
+
+/// The changes to an intent that count this tick: a fresh wish asked in the very tick Physical
+/// Reality clears the old one stands, and the clearing gives way (Amendment A-9; for any intent,
+/// whatever it holds — a number, a yes — Amendment A-48).
+pub fn fresh_wins(changes: &[Change]) -> Vec<Change> {
     let wishes: Vec<Change> = changes
         .iter()
         .copied()
         .filter(|c| !matches!(c, Change::Tombstone))
         .collect();
-    if wishes.is_empty() || wishes.len() == changes.len() {
-        return compose_entity_ref(current, changes);
+    if wishes.is_empty() {
+        changes.to_vec()
+    } else {
+        wishes
     }
-    compose_entity_ref(current, &wishes)
 }
 
 /// Resolve a three-component fact — a position, a size, a motion target (Amendment A-3): at
@@ -181,7 +263,7 @@ pub fn compose_vec3(
                 set_seen = true;
                 value = Some(Value::Vec3(v3));
             }
-            Change::Tombstone => tombstone = true,
+            Change::Tombstone | Change::Retire => tombstone = true,
             Change::Delta(_) | Change::Add(_) | Change::Remove(_) => {
                 return Err(ResolveError::new(
                     "a three-component fact is replaced whole: use Set, not Delta or Add/Remove",
@@ -229,7 +311,7 @@ pub fn compose_segment_field(
                 }
                 _ => set = Some(*v),
             },
-            Change::Tombstone => tombstone = true,
+            Change::Tombstone | Change::Retire => tombstone = true,
             Change::Delta(_) | Change::Add(_) | Change::Remove(_) => {
                 return Err(ResolveError::new(
                     "a motion segment is set or closed whole, never adjusted",
@@ -263,7 +345,7 @@ pub fn compose_bool(current: Option<Value>, changes: &[Change]) -> Result<Resolv
                 }
                 _ => set = Some(*b),
             },
-            Change::Tombstone => tombstone = true,
+            Change::Tombstone | Change::Retire => tombstone = true,
             _ => {
                 return Err(ResolveError::new(
                     "a flag takes only a true/false set or a clear",
@@ -406,5 +488,75 @@ mod tests {
         assert!(compose_segment_field(None, &same).is_ok());
         assert!(compose_vec3(None, &same, None).is_ok());
         assert!(compose_vec3(None, &two, None).is_err());
+    }
+}
+
+/// Compose changes to a thing's integrity (Amendment A-27): absent is whole (`full`); at most one
+/// `Set` establishes a base, then every `Delta` — damage and repair alike — adds to it, and the
+/// result is held within nothing and whole. Whole again, nothing need be stored: the fact is
+/// cleared.
+pub fn compose_integrity(
+    current: Option<Value>,
+    changes: &[Change],
+    full: i64,
+) -> Result<Resolved, ResolveError> {
+    let mut base = current.and_then(|v| v.as_int()).unwrap_or(full);
+    let mut set_seen = false;
+    let mut delta: i64 = 0;
+    for change in changes {
+        match change {
+            Change::Set(v) | Change::Create(v) => {
+                if set_seen {
+                    return Err(ResolveError::new("two competing settings of one integrity"));
+                }
+                set_seen = true;
+                base = v
+                    .as_int()
+                    .ok_or(ResolveError::new("integrity is a number"))?;
+            }
+            Change::Delta(d) => delta = delta.saturating_add(*d),
+            Change::Tombstone | Change::Retire => {
+                if changes.len() > 1 {
+                    return Err(ResolveError::new(
+                        "an integrity cleared and changed in one tick",
+                    ));
+                }
+                return Ok(Resolved::Tombstone);
+            }
+            Change::Add(_) | Change::Remove(_) => {
+                return Err(ResolveError::new("integrity is one number, not a set"))
+            }
+        }
+    }
+    let now = base.saturating_add(delta).clamp(0, full);
+    Ok(if now == full {
+        Resolved::Tombstone
+    } else {
+        Resolved::Write(Value::Int(now))
+    })
+}
+
+/// Compose changes to how fiercely something burns (Amendment A-28): fires set to it in one tick —
+/// one system's course, another's spark — burn as fiercely as the fiercest; only if nothing sets
+/// it does going out stand.
+pub fn compose_fire(changes: &[Change]) -> Result<Resolved, ResolveError> {
+    let mut fiercest: Option<i64> = None;
+    let mut out = false;
+    for change in changes {
+        match change {
+            Change::Set(v) | Change::Create(v) => {
+                let n = v
+                    .as_int()
+                    .ok_or(ResolveError::new("a fire burns by a number"))?;
+                fiercest = Some(fiercest.map_or(n, |f| f.max(n)));
+            }
+            Change::Tombstone | Change::Retire => out = true,
+            _ => return Err(ResolveError::new("a fire is set or goes out")),
+        }
+    }
+    match (fiercest, out) {
+        (Some(n), _) => Ok(Resolved::Write(Value::Int(n))),
+        (None, true) => Ok(Resolved::Tombstone),
+        (None, false) => Err(ResolveError::new("no change to a fire")),
     }
 }

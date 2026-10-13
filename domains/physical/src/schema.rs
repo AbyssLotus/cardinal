@@ -129,6 +129,11 @@ pub const PORTAL_DANGER_OVERRIDE: FactType = FactType::new("physical.space.porta
 /// darkness. A location with no exposure fact is treated as fully exposed.
 pub const EXPOSURE: FactType = FactType::new("physical.space.exposure");
 
+/// How far north of the equator a place lies, in hundredths of a degree (negative is south;
+/// Amendment A-34): how high the sun stands there, and when the seasons fall. World data,
+/// inherited down the nesting; a place with none lies at the world's latitude.
+pub const LATITUDE: FactType = FactType::new("physical.space.latitude");
+
 // ---- Constraints, ground, and travel (Vol. III Ch. 1 §1.11; Amendment A-4) --------------
 
 /// Whether a body is **solid**: nothing may pass through it or stand inside it (Vol. III Ch. 1
@@ -204,10 +209,23 @@ pub const ACT_FACE: FactType = FactType::new("physical.act.face");
 /// information layer, which decides what becomes observation and belief (Vol. II Ch. 4).
 pub const IN_VIEW: FactType = FactType::new("physical.sense.in_view");
 
+/// The place a body with sight took in whole at the last sight step (Amendment A-40): the place
+/// it stood in, lit, every corner of its floor within its sight, and nothing in it that could
+/// hide anything. Absent when it could not — in the dark, in a yard with a house standing in it,
+/// with its eyes shut. Written by Physical Reality only where it changes, with [`IN_VIEW`]. It
+/// names the place the view was taken in, so a mind just arrived somewhere does not judge its new
+/// place by the view from its old one.
+pub const SEEN_WHOLE: FactType = FactType::new("physical.sense.seen_whole");
+
 /// How far a body can see, in centimetres — **Living Systems'** fact (its sensory capability,
 /// Appendix A), consumed here by its stable id to bound what is in view. Naming an id is not
 /// importing code (Vol. III Ch. 12 §12.1).
 pub const SIGHT_RANGE: FactType = FactType::new("living.sense.sight_range");
+
+/// A decider's intent that a body rest — **Living Systems'** fact (Appendix A, Ruling 15),
+/// consumed here by its stable id: a body asked to rest that is still has its eyes shut
+/// (Amendment A-40).
+pub const REST: FactType = FactType::new("living.act.rest");
 
 /// What a body last tried and could not do (Amendment A-5): an entity reference to the door it
 /// could not reach, or to itself if it could not turn. Written by Physical Reality so a decider
@@ -234,6 +252,72 @@ pub const ILLUMINATION: FactType = FactType::new("physical.environment.illuminat
 /// (Vol. III Ch. 1 §1.10, environmental state).
 pub const HUMIDITY: FactType = FactType::new("physical.environment.humidity");
 
+/// A climate's normal humidity — what its weather departs from — in hundredths of a percent
+/// (Amendment A-35). World data: a fen is wetter than a dry valley. Absent, the world's baseline.
+pub const HUMIDITY_NORMAL: FactType = FactType::new("physical.environment.humidity_normal");
+
+/// How much of a climate's sky is cloud, in hundredths of a percent (Amendment A-35): it forms as
+/// the air grows humid, dims the day, and holds back the day's warmth and the night's cold.
+/// Absent, a clear sky.
+pub const CLOUD: FactType = FactType::new("physical.environment.cloud");
+
+/// How hard it is raining on a climate, in hundredths of a millimetre of water an hour
+/// (Amendment A-35). Absent, it is not.
+pub const RAIN: FactType = FactType::new("physical.environment.rain");
+
+/// How hard it is snowing on a climate, in hundredths of a millimetre of water an hour
+/// (Amendment A-35): what would have been rain, falling below the world's snow line. Absent, it
+/// is not.
+pub const SNOW: FactType = FactType::new("physical.environment.snow");
+
+/// How thick the fog is over a climate, in hundredths of a percent (Amendment A-35): it forms in
+/// still air near saturation and shortens sight, as smoke does. Absent, there is none.
+pub const FOG: FactType = FactType::new("physical.environment.fog");
+
+/// How wet a climate's ground is, in hundredths of a percent of what it holds (Amendment A-38):
+/// rain and melting snow soak in; dry air, sun, and wind dry it. Absent, dry.
+pub const GROUND_WATER: FactType = FactType::new("physical.environment.ground_water");
+
+/// How deep snow lies over a climate, in millimetres (Amendment A-38). Absent, none.
+pub const SNOW_DEPTH: FactType = FactType::new("physical.environment.snow_depth");
+
+/// How wet a thing or a body is, in hundredths of a percent (Amendment A-38): soaked by rain and
+/// snow in the open, dried by the air. Wet things burn less readily. Open to anyone — a bucket of
+/// water may be thrown. Absent, dry.
+pub const WETNESS: FactType = FactType::new("physical.body.wetness");
+
+/// That a place is water, and what kind (Amendment A-39): [`crate::water::POND`], `RIVER`, or
+/// `SEA`. World data.
+pub const WATER_KIND: FactType = FactType::new("physical.water.kind");
+
+/// How deep a body of water stands at rest, in centimetres. World data.
+pub const WATER_NORMAL: FactType = FactType::new("physical.water.normal");
+
+/// How deep a body of water may stand before it tops its banks, in centimetres. World data.
+pub const WATER_BANK: FactType = FactType::new("physical.water.bank");
+
+/// How fast a body of water drains what stands above its normal depth: the time constant, in
+/// seconds. World data.
+pub const WATER_DRAIN_SECONDS: FactType = FactType::new("physical.water.drain_seconds");
+
+/// How much land drains into a body of water, in square metres. World data.
+pub const CATCHMENT: FactType = FactType::new("physical.water.catchment");
+
+/// The water a pond or river flows on into (an entity reference). World data.
+pub const DRAINS_TO: FactType = FactType::new("physical.water.drains_to");
+
+/// The low ground a body of water floods when it tops its banks: a set of places. World data.
+pub const FLOODS: FactType = FactType::new("physical.water.floods");
+
+/// How deep a body of water stands now, in centimetres (Amendment A-39).
+pub const WATER_LEVEL: FactType = FactType::new("physical.water.level");
+
+/// How deep floodwater stands over a place, in centimetres (Amendment A-39). Absent, dry.
+pub const FLOOD_DEPTH: FactType = FactType::new("physical.water.flood_depth");
+
+/// How thick the ice on a body of water is, in millimetres (Amendment A-39). Absent, none.
+pub const ICE: FactType = FactType::new("physical.water.ice");
+
 /// Atmospheric pressure at a location, in decapascals (hPa x 10) as fixed-point
 /// (Vol. III Ch. 1 §1.10). Falls with elevation and drifts with weather; the pressure
 /// gradient between adjacent regions is what drives wind.
@@ -242,6 +326,16 @@ pub const PRESSURE: FactType = FactType::new("physical.environment.pressure");
 /// Wind speed at a location, in centimetres per second (Vol. III Ch. 1 §1.10, "Wind flows").
 /// Magnitude only; direction is [`WIND_TOWARD`].
 pub const WIND_SPEED: FactType = FactType::new("physical.environment.wind_speed");
+
+/// That an entity is a place one can be in, rather than a thing (Amendment A-30): a climate, a
+/// declared place, a room. World data. A place without walls — open ground, a street, a ruin — can
+/// be walked into and out of anywhere along its edge, not only through its openings.
+pub const PLACE: FactType = FactType::new("physical.space.place");
+
+/// A storm the world declares over a region (Amendment A-29): a set of `[from, to, wind]` — the
+/// seconds since the world began that it blows between, and its wind in centimetres per second.
+/// While it blows, the region's wind is at least the storm's.
+pub const STORM: FactType = FactType::new("physical.environment.storm");
 
 /// The neighbouring region the wind blows toward — wind's direction expressed *in the
 /// graph* rather than as a compass bearing, since space is representation-independent
@@ -323,12 +417,91 @@ pub const MATERIAL_POTENCY: FactType = FactType::new("physical.material.potency"
 /// How much dependence each dose of a material builds, 0..=10000 (Amendment A-13).
 pub const MATERIAL_HABIT: FactType = FactType::new("physical.material.habit");
 
+/// How whole a thing or a walled place is, in hundredths of a percent (Amendment A-27): absent
+/// means whole, so only what has been damaged carries it. Changes add up — damage and repair in one
+/// tick both apply (Vol. III Ch. 12) — held within nothing and whole. Open to any proposer
+/// (Appendix A, Ruling 9); Physical Reality breaks what reaches nothing.
+pub const INTEGRITY: FactType = FactType::new("physical.body.integrity");
+
+/// That a thing or a walled place is broken (Amendment A-27): a thing is its own wreckage — flat,
+/// not solid, not opaque, still its materials — a walled place a ruin, its walls down, a door
+/// broken open. Only Physical Reality's own systems record it.
+pub const BROKEN: FactType = FactType::new("physical.body.broken");
+
+/// What a broken thing was, to be again if mended whole (Amendment A-31): `[height, flags, 0]`,
+/// its height in centimetres and, in `flags`, whether it was solid (1), opaque (2), and walled (4).
+pub const WHOLE_SHAPE: FactType = FactType::new("physical.body.whole_shape");
+
+/// Grams of a thing's stuff laid by for mending it (Amendment A-44): what was brought to it and
+/// not yet worked in. Absent, none.
+pub const MEND_MATERIAL: FactType = FactType::new("physical.body.mend_material");
+
+/// How fast a workplace wears while something is in the making at it, in hundredths of a percent
+/// of its integrity an hour (Amendment A-46): world data. Absent, it does not wear.
+pub const WEAR_PER_HOUR: FactType = FactType::new("physical.body.wear_per_hour");
+
+/// The recipe a maker has in the making — **Economy's** fact, read by its published id to wear
+/// the workplace it is made at (Amendment A-46).
+pub const ECON_MAKING: FactType = FactType::new("economy.making");
+
+/// Where a recipe is made — **Economy's** fact, read by its published id (Amendment A-46).
+pub const ECON_RECIPE_AT: FactType = FactType::new("economy.recipe.at");
+
+/// A decider's intent that a body mend a thing (Amendment A-31): an entity reference. Carried out
+/// only with a tool in hand no softer than the thing's weakest material, on a thing within reach
+/// — or the place one stands in. Cleared either way.
+pub const ACT_MEND: FactType = FactType::new("physical.act.mend");
+
+/// How hard a body was struck by something falling on it, as the height of a fall that would
+/// strike as hard, in centimetres — a report, with the tick it happened (Amendment A-31), for
+/// whoever judges what it does to a body.
+pub const IMPACT: FactType = FactType::new("physical.body.impact");
+
+/// A decider's intent that a body strike a thing (Amendment A-27): an entity reference. Carried out
+/// only within reach, on a thing made of something with a known weight; a blow no harder than the
+/// thing's weakest material leaves no mark and is refused. Cleared either way.
+pub const ACT_STRIKE: FactType = FactType::new("physical.act.strike");
+
+/// How fiercely a thing or a walled place burns, in hundredths of a percent (Amendment A-28):
+/// absent means it is not burning. It grows toward what its most flammable material allows,
+/// consumes its integrity, heats what lies near it, and lights its place. Only Physical
+/// Reality's own systems write it.
+pub const BURNING: FactType = FactType::new("physical.fire.burning");
+
+/// A push given a thing (Amendment A-33): how far to move it, `[x, y, 0]` centimetres in its
+/// place's frame. Open to anyone — the wind, a shove. Pushes in one tick add up; Physical
+/// Reality moves the thing, if nothing else has hold of it this tick, and clears the push.
+pub const ACT_PUSH: FactType = FactType::new("physical.act.push");
+
+/// How thick the smoke is in a walled place, in hundredths of a percent (Amendment A-32): it
+/// rises from what burns there and clears through the place's open openings. Absent, or in the
+/// open, there is none. It shortens sight and harms breathing.
+pub const SMOKE: FactType = FactType::new("physical.environment.smoke");
+
+/// That a fire is kept (Amendment A-28): a hearth's fire, tended — it neither consumes what it
+/// burns in nor dies down. Declared by the world.
+pub const KEPT_FIRE: FactType = FactType::new("physical.fire.kept");
+
+/// A decider's intent that a body set fire to a thing (Amendment A-28): an entity reference.
+/// Carried out only with a flame to hand — something burning held, or within reach — on a thing
+/// within reach or in hand that can burn. Cleared either way.
+pub const ACT_IGNITE: FactType = FactType::new("physical.act.ignite");
+
+/// How much heat from fire a body is taking, in hundredths of a percent (Amendment A-28): a
+/// report, absent when none, for whoever judges what heat does to a body.
+pub const HEAT_EXPOSURE: FactType = FactType::new("physical.body.heat_exposure");
+
+/// How strong an organism is, in hundredths of a percent — **Living Systems'** capability, read
+/// by its published id to judge a blow (Amendment A-27).
+pub const STRENGTH: FactType = FactType::new("living.capability.strength");
+
 /// A decider's intent that a body take hold of a thing (Appendix A, Ruling 16): an entity
 /// reference. Carried out only within reach and for a thing whose weight is known and bearable;
 /// cleared either way.
 pub const ACT_TAKE: FactType = FactType::new("physical.act.take");
 
-/// A decider's intent that a body put down a thing it holds, where it stands.
+/// A decider's intent that a body put down things it holds, where it stands: a set of entity
+/// references, all put down in one go (Amendment A-48).
 pub const ACT_DROP: FactType = FactType::new("physical.act.drop");
 
 /// A decider's intent that a body consume a thing it holds — eat it, drink it.
@@ -350,6 +523,51 @@ pub const ACT_PICK: FactType = FactType::new("physical.act.pick");
 /// The deposit a body last picked from (Amendment A-15): what the pick yields is Resources' to
 /// judge (Appendix A, Ruling 16).
 pub const PICKED: FactType = FactType::new("physical.body.picked");
+
+/// How hard a body's last go at a deposit was, as a blow's strength (Amendment A-41): reported
+/// with [`PICKED`], for Resources to put toward the deposit's next unit.
+pub const PICK_EFFORT: FactType = FactType::new("physical.body.pick_effort");
+
+/// How many goes of work a body's last report at a deposit covers (Amendment A-48): a go lasts
+/// the world's `go_seconds`, and a tick holds as many as fit. Reported with [`PICKED`].
+pub const PICK_GOES: FactType = FactType::new("physical.body.pick_goes");
+
+/// How many more units of what a deposit yields the body's hands have room for (Amendment A-48),
+/// at most as many as its decider asked for: reported with [`PICKED`].
+pub const PICK_ROOM: FactType = FactType::new("physical.body.pick_room");
+
+/// A decider's limit on how many units a body's work at a deposit is to bring to hand (Amendment
+/// A-48): absent, as many as the work and the hands allow.
+pub const ACT_PICK_UP_TO: FactType = FactType::new("physical.act.pick_up_to");
+
+/// The size of each unit a deposit yields — **Resources'** fact, read by id (Amendment A-48): the
+/// room it takes in the hand.
+pub const YIELD_SIZE: FactType = FactType::new("resources.yield.size");
+
+/// What a deposit yields — **Resources'** fact, read by id (Amendment A-41): what a go at it
+/// must be hard enough to work.
+pub const YIELD_MADE_OF: FactType = FactType::new("resources.yield.made_of");
+
+/// How many hundredths of a unit a deposit holds — **Resources'** fact, read by id (Amendment
+/// A-42): a pit dug bare is passed over for a new one.
+pub const RESOURCE_STOCK: FactType = FactType::new("resources.stock");
+
+/// What a place's ground is made of (Amendment A-42): a material. World data, inherited down
+/// the nesting, as climate is: a quarry on the Hill is cut from the Hill's granite.
+pub const GROUND: FactType = FactType::new("physical.space.ground");
+
+/// That a place's ground is paved, floored, or otherwise not to be broken (Amendment A-42).
+/// World data, for the place itself.
+pub const PAVED: FactType = FactType::new("physical.space.paved");
+
+/// That a thing is a pit dug in the ground (Amendment A-42): made of the ground's material, it
+/// is a deposit of it, which Resources keeps.
+pub const PIT: FactType = FactType::new("physical.space.pit");
+
+/// A decider's intent that a body dig the ground where it stands (Amendment A-42): `true`. Open
+/// to anyone. Carried out where there is ground to dig and the body has a hand or a tool fit for
+/// it; cleared either way.
+pub const ACT_DIG: FactType = FactType::new("physical.act.dig");
 
 /// What a body last consumed (Amendment A-12): an entity reference to the thing, which has left
 /// the world. Written by Physical Reality so Living Systems can judge what it does to the body

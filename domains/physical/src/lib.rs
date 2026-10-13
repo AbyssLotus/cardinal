@@ -36,20 +36,28 @@
 //! left" are all answerable without a write per tick.
 
 pub mod act;
+pub mod air;
+pub mod calendar;
 pub mod climate;
 pub mod composition;
+pub mod fire;
 pub mod index;
 pub mod materials;
 pub mod motion;
 pub mod nearby;
 pub mod regions;
 pub mod schema;
+pub mod seam;
 pub mod shape;
 pub mod sight;
 pub mod space;
 pub mod systems;
 pub mod terrain;
 pub mod travel;
+pub mod water;
+pub mod wear;
+pub mod wet;
+pub mod wind;
 
 use kernel::domain::{Domain, ResolveError, Resolved, ValidationError};
 use kernel::fact::{Cardinality, FactType};
@@ -76,6 +84,11 @@ pub struct PhysicalConfig {
     pub environment_step_seconds: u64,
     /// Peak diurnal temperature swing, in centidegrees Celsius.
     pub diurnal_amplitude_centi_c: i64,
+    /// When in the day the air is coldest, and when warmest, in seconds after midnight
+    /// (Amendment A-35).
+    pub diurnal_coldest_seconds: u64,
+    /// When in the day the air is warmest.
+    pub diurnal_warmest_seconds: u64,
     /// Typical size (standard deviation) of weather's departure from normal temperature, in
     /// centidegrees Celsius.
     pub temperature_variability_centi_c: i64,
@@ -94,8 +107,11 @@ pub struct PhysicalConfig {
     pub pressure_elevation_factor: i64,
     /// Typical size of weather's departure from baseline pressure, in decapascals.
     pub pressure_variability: i64,
-    /// Divisor scaling wind speed per unit pressure gradient (larger = gentler wind).
-    pub wind_gradient_divisor: i64,
+    /// Wind, in cm/s, for each decapascal of difference between neighbouring climates' pressure
+    /// brought to the datum (Amendment A-36).
+    pub wind_per_decapascal: i64,
+    /// How weather passes between neighbouring climates (Amendment A-36).
+    pub fronts: systems::Fronts,
     /// Danger points added per metre of a portal's height above the ground (fall danger).
     pub fall_danger_per_meter: i64,
     /// Thermal mass — heat stored per unit volume, kJ/(m³·K) — at which a region's temperature
@@ -127,9 +143,50 @@ pub struct PhysicalConfig {
     pub sight_min_illumination: i64,
     /// The most a body can carry, in kilograms (Amendment A-12).
     pub carry_limit_kg: i64,
+    /// The body a resident is given on crossing into the scene — half-width, half-depth, height,
+    /// in centimetres (Amendment A-24) — if the world has residents.
+    pub resident_body: Option<[i64; 3]>,
+    /// The size of a household's pantry in the scene (Amendment A-26), if the world's residents
+    /// have them.
+    pub pantry_body: Option<[i64; 3]>,
+    /// How a blow is judged (Amendment A-27).
+    pub strike: act::StrikeRules,
+    /// How tall the wreckage of a broken thing stands at most, in centimetres (Amendment A-27).
+    pub wreckage_height_cm: i64,
+    /// Integrity a mending action restores, per kilogram of the thing over this (Amendment
+    /// A-31): `mend_scale × 1000 / kg`.
+    pub mend_scale: i64,
+    /// How fire behaves (Amendment A-28).
+    pub fire: fire::FireRules,
+    /// How wind bears on what stands in it (Amendment A-29).
+    pub wind: wind::WindRules,
+    /// How a deep low brews a gale (Amendment A-33).
+    pub gale: systems::Gale,
+    /// How far to either side of a digger a pit is broken, in centimetres (Amendment A-42).
+    pub pit_half_width_cm: i64,
+    /// The world's year, its latitude, and its moon (Amendment A-34).
+    pub calendar: calendar::Calendar,
+    /// Cloud, rain and snow, and fog (Amendment A-35).
+    pub sky: systems::SkyRules,
+    /// How air passes through openings (Amendment A-37).
+    pub air: air::AirRules,
+    /// How the ground and things get wet and dry, and snow lies (Amendment A-38).
+    pub wet: wet::WetRules,
+    /// Ponds, rivers, the sea, floods, and ice (Amendment A-39).
+    pub water: water::WaterRules,
 }
 
 impl PhysicalConfig {
+    /// The day's temperature curve these rules give (Amendment A-35).
+    pub const fn day_curve(&self) -> systems::DayCurve {
+        systems::DayCurve {
+            day_ms: self.day_length_seconds.saturating_mul(1000),
+            amplitude_centi_c: self.diurnal_amplitude_centi_c,
+            coldest_ms: self.diurnal_coldest_seconds.saturating_mul(1000),
+            warmest_ms: self.diurnal_warmest_seconds.saturating_mul(1000),
+        }
+    }
+
     /// The movement rules gravity and travel share, drawn from this configuration.
     pub const fn move_rules(&self) -> travel::MoveRules {
         travel::MoveRules {
@@ -139,6 +196,8 @@ impl PhysicalConfig {
             max_slope_percent: self.max_slope_percent,
             nav_cell_cm: self.nav_cell_cm,
             reach_cm: self.reach_cm,
+            wade_depth_cm: self.water.wade_depth_cm,
+            ice_bears_mm: self.water.ice_bears_mm,
         }
     }
 }
@@ -160,8 +219,21 @@ pub const RESTRICTED: &[FactType] = &[
     schema::ACT_REFUSED,
     schema::PORTAL_DANGER,
     schema::IN_VIEW,
+    schema::SEEN_WHOLE,
     schema::CONSUMED,
     schema::PICKED,
+    schema::PICK_EFFORT,
+    schema::PICK_GOES,
+    schema::PICK_ROOM,
+    schema::PIT,
+    schema::MEND_MATERIAL,
+    schema::BROKEN,
+    schema::BURNING,
+    schema::KEPT_FIRE,
+    schema::HEAT_EXPOSURE,
+    schema::WHOLE_SHAPE,
+    schema::IMPACT,
+    schema::SMOKE,
 ];
 
 /// The Physical Reality domain, plugged into the kernel (Appendix A owner of the stage).
@@ -196,6 +268,12 @@ impl Domain for PhysicalDomain {
         "physical"
     }
 
+    fn agenda(&self) -> Vec<FactType> {
+        // Where each opening leads, indexed by where: travel asks whether any opening leads to a
+        // place in one range walk, not by reading every opening each tick.
+        vec![schema::LEADS_TO]
+    }
+
     fn owns(&self, fact_type: FactType) -> bool {
         fact_type == schema::TEMPERATURE
             || fact_type == schema::TEMPERATURE_ANOMALY
@@ -208,6 +286,25 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::WIND_TOWARD
             || fact_type == schema::ELEVATION
             || fact_type == schema::EXPOSURE
+            || fact_type == schema::LATITUDE
+            || fact_type == schema::HUMIDITY_NORMAL
+            || fact_type == schema::CLOUD
+            || fact_type == schema::RAIN
+            || fact_type == schema::SNOW
+            || fact_type == schema::FOG
+            || fact_type == schema::GROUND_WATER
+            || fact_type == schema::SNOW_DEPTH
+            || fact_type == schema::WETNESS
+            || fact_type == schema::WATER_KIND
+            || fact_type == schema::WATER_NORMAL
+            || fact_type == schema::WATER_BANK
+            || fact_type == schema::WATER_DRAIN_SECONDS
+            || fact_type == schema::CATCHMENT
+            || fact_type == schema::DRAINS_TO
+            || fact_type == schema::FLOODS
+            || fact_type == schema::WATER_LEVEL
+            || fact_type == schema::FLOOD_DEPTH
+            || fact_type == schema::ICE
             || fact_type == schema::POSITION
             || fact_type == schema::BODY_SIZE
             || fact_type == schema::HEADING
@@ -229,6 +326,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_OPEN
             || fact_type == schema::ACT_CLOSE
             || fact_type == schema::ACT_FACE
+            || fact_type == schema::ACT_PUSH
             || fact_type == schema::ACT_REFUSED
             || fact_type == schema::CONTAINED_IN
             || fact_type == schema::IN_REGION
@@ -245,6 +343,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::MATERIAL_CONDUCTIVITY
             || fact_type == schema::MATERIAL_TOXICITY
             || fact_type == schema::IN_VIEW
+            || fact_type == schema::SEEN_WHOLE
             || fact_type == schema::MATERIAL_EDIBLE
             || fact_type == schema::MATERIAL_POTENCY
             || fact_type == schema::MATERIAL_HABIT
@@ -257,6 +356,29 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_LEAVE
             || fact_type == schema::ACT_PICK
             || fact_type == schema::PICKED
+            || fact_type == schema::PICK_EFFORT
+            || fact_type == schema::PICK_GOES
+            || fact_type == schema::PICK_ROOM
+            || fact_type == schema::ACT_PICK_UP_TO
+            || fact_type == schema::MEND_MATERIAL
+            || fact_type == schema::WEAR_PER_HOUR
+            || fact_type == schema::GROUND
+            || fact_type == schema::PAVED
+            || fact_type == schema::PIT
+            || fact_type == schema::ACT_DIG
+            || fact_type == schema::INTEGRITY
+            || fact_type == schema::BROKEN
+            || fact_type == schema::ACT_STRIKE
+            || fact_type == schema::STORM
+            || fact_type == schema::PLACE
+            || fact_type == schema::WHOLE_SHAPE
+            || fact_type == schema::SMOKE
+            || fact_type == schema::ACT_MEND
+            || fact_type == schema::IMPACT
+            || fact_type == schema::BURNING
+            || fact_type == schema::KEPT_FIRE
+            || fact_type == schema::ACT_IGNITE
+            || fact_type == schema::HEAT_EXPOSURE
     }
 
     fn accepts(&self, fact_type: FactType, system: kernel::fact::SystemId) -> bool {
@@ -280,6 +402,9 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::MADE_OF
             || fact_type == schema::TERRAIN_SAMPLE
             || fact_type == schema::IN_VIEW
+            || fact_type == schema::STORM
+            || fact_type == schema::FLOODS
+            || fact_type == schema::ACT_DROP
         {
             Cardinality::Many
         } else {
@@ -295,14 +420,12 @@ impl Domain for PhysicalDomain {
         let step = c
             .clock
             .step(c.environment_step_seconds.saturating_mul(1000));
-        let day_ms = c.day_length_seconds.saturating_mul(1000);
         let memory_ms = c.weather_persistence_seconds.saturating_mul(1000);
-        vec![
+        let mut systems: Vec<Box<dyn System>> = vec![
             Box::new(systems::DiurnalCycle::new(
                 c.clock,
                 step,
-                day_ms,
-                c.diurnal_amplitude_centi_c,
+                c.day_curve(),
                 c.thermal_mass_reference,
             )),
             Box::new(systems::TemperatureWeather::new(
@@ -310,18 +433,32 @@ impl Domain for PhysicalDomain {
                 c.temperature_variability_centi_c,
                 memory_ms,
                 c.thermal_mass_reference,
+                c.fronts,
             )),
             Box::new(systems::DayNightCycle::new(
                 c.clock,
                 step,
-                day_ms,
+                c.calendar,
                 c.illumination_peak,
+                c.sky.cloud_shade,
+            )),
+            // The seasons' share of the temperature (Amendment A-34).
+            Box::new(systems::Seasons::new(
+                c.clock,
+                step,
+                c.calendar,
+                c.thermal_mass_reference,
             )),
             Box::new(systems::Precipitation::new(
+                c.clock,
                 step,
                 c.humidity_baseline,
                 c.humidity_variability,
                 memory_ms,
+                c.sky,
+                c.day_curve(),
+                c.thermal_mass_reference,
+                c.fronts,
             )),
             Box::new(systems::PressureSystem::new(
                 step,
@@ -329,11 +466,15 @@ impl Domain for PhysicalDomain {
                 c.pressure_elevation_factor,
                 c.pressure_variability,
                 memory_ms,
+                c.fronts,
             )),
             Box::new(systems::WindSystem::new(
+                c.clock,
                 step,
-                c.wind_gradient_divisor,
+                c.wind_per_decapascal,
+                c.pressure_elevation_factor,
                 schema::MAX_WIND,
+                c.gale,
             )),
             Box::new(systems::PortalDanger::new(c.fall_danger_per_meter)),
             // Closes finished motion segments: one write per arrival (Amendment A-3).
@@ -342,19 +483,51 @@ impl Domain for PhysicalDomain {
             Box::new(travel::Gravity::new(c.move_rules())),
             Box::new(travel::Travel::new(c.move_rules())),
             // Opens, shuts, and turns on request, within reach (Amendment A-5).
-            Box::new(act::Act::new(c.reach_cm, c.carry_limit_kg)),
+            Box::new(
+                act::Act::new(
+                    c.reach_cm,
+                    c.carry_limit_kg,
+                    c.strike,
+                    c.wreckage_height_cm,
+                    c.move_rules(),
+                    c.fire.ignite_intensity,
+                    c.mend_scale,
+                    c.fire.wall_thickness_cm,
+                )
+                .with_pits(c.pit_half_width_cm),
+            ),
+            // What the wind tears at (Amendment A-29).
+            Box::new(wind::WindLoad::new(step, c.wind, c.fire.wall_thickness_cm)),
+            // Workplaces wearing while something is in the making at them (Amendment A-46).
+            Box::new(wear::Wear::new(c.clock.step(c.clock.tick_ms()))),
+            // Fire: burning, spreading, and the heat it gives (Amendment A-28).
+            Box::new(fire::Fire::new(
+                c.clock.step(c.fire.step_seconds.saturating_mul(1000)),
+                c.fire,
+                c.air,
+            )),
+            // The ground, the snow, and what stands in the rain (Amendment A-38).
+            Box::new(wet::Wet::new(step, c.wet)),
+            // Ponds, rivers, the sea, floods, and ice (Amendment A-39).
+            Box::new(water::Water::new(c.clock, step, c.water, c.calendar)),
             // Walled rooms' air follows the air outside them (Amendment A-5).
             Box::new(systems::Shelter::new(
                 step,
                 c.indoor_coupling_seconds.saturating_mul(1000),
                 c.thermal_mass_reference,
+                c.air,
             )),
             // What each body with sight could see (Amendment A-8).
             Box::new(sight::Sight::new(
                 c.clock.step(c.sight_step_seconds.saturating_mul(1000)),
                 c.sight_min_illumination,
             )),
-        ]
+        ];
+        // Bodies for residents crossing into the scene (Amendment A-24).
+        if let Some(body) = c.resident_body {
+            systems.push(Box::new(seam::Seam::new(body, c.pantry_body)));
+        }
+        systems
     }
 
     fn compose(
@@ -371,7 +544,16 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::FALL_HEIGHT
         {
             composition::compose_additive(current, changes)
+        } else if fact_type == schema::INTEGRITY {
+            composition::compose_integrity(current, changes, schema::PERCENT_FULL)
+        } else if fact_type == schema::BURNING {
+            composition::compose_fire(changes)
+        } else if fact_type == schema::HEAT_EXPOSURE || fact_type == schema::SMOKE {
+            composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
         } else if fact_type == schema::SOLID
+            || fact_type == schema::PLACE
+            || fact_type == schema::KEPT_FIRE
+            || fact_type == schema::BROKEN
             || fact_type == schema::OPAQUE
             || fact_type == schema::ENCLOSED
             || fact_type == schema::PORTAL_OPEN
@@ -389,8 +571,27 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::MOTION_END
         {
             composition::compose_segment_field(current, changes)
-        } else if fact_type == schema::POSITION {
+        } else if fact_type == schema::POSITION || fact_type == schema::WHOLE_SHAPE {
             composition::compose_vec3(current, changes, None)
+        } else if fact_type == schema::ACT_DIG {
+            composition::compose_bool(current, &composition::fresh_wins(changes))
+        } else if fact_type == schema::ACT_PICK_UP_TO {
+            let changes = composition::fresh_wins(changes);
+            composition::compose_bounded(current, &changes, 0, schema::MAX_SIZE)
+        } else if fact_type == schema::PAVED || fact_type == schema::PIT {
+            composition::compose_bool(current, changes)
+        } else if fact_type == schema::GROUND {
+            composition::compose_entity_ref(current, changes)
+        } else if fact_type == schema::PICK_EFFORT
+            || fact_type == schema::PICK_GOES
+            || fact_type == schema::PICK_ROOM
+            || fact_type == schema::MEND_MATERIAL
+        {
+            composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
+        } else if fact_type == schema::IMPACT {
+            composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
+        } else if fact_type == schema::ACT_PUSH {
+            composition::compose_push(changes)
         } else if fact_type == schema::BODY_SIZE {
             composition::compose_vec3(current, changes, Some((0, schema::MAX_SIZE)))
         } else if fact_type == schema::HEADING {
@@ -400,6 +601,32 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::EXPOSURE
         {
             composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
+        } else if fact_type == schema::GROUND_WATER || fact_type == schema::WETNESS {
+            composition::compose_fading(current, changes, schema::PERCENT_FULL)
+        } else if fact_type == schema::SNOW_DEPTH
+            || fact_type == schema::FLOOD_DEPTH
+            || fact_type == schema::ICE
+        {
+            composition::compose_fading(current, changes, schema::MAX_SIZE)
+        } else if fact_type == schema::WATER_LEVEL
+            || fact_type == schema::WATER_KIND
+            || fact_type == schema::WATER_NORMAL
+            || fact_type == schema::WATER_BANK
+            || fact_type == schema::WATER_DRAIN_SECONDS
+            || fact_type == schema::CATCHMENT
+        {
+            composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
+        } else if fact_type == schema::DRAINS_TO {
+            composition::compose_entity_ref(current, changes)
+        } else if fact_type == schema::HUMIDITY_NORMAL
+            || fact_type == schema::CLOUD
+            || fact_type == schema::FOG
+        {
+            composition::compose_bounded(current, changes, 0, schema::PERCENT_FULL)
+        } else if fact_type == schema::RAIN || fact_type == schema::SNOW {
+            composition::compose_bounded(current, changes, 0, schema::MAX_SIZE)
+        } else if fact_type == schema::LATITUDE {
+            composition::compose_bounded(current, changes, -9_000, 9_000)
         } else if fact_type == schema::PORTAL_DANGER || fact_type == schema::PORTAL_DANGER_OVERRIDE
         {
             composition::compose_bounded(current, changes, 0, schema::MAX_DANGER)
@@ -431,16 +658,19 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_REFUSED
             || fact_type == schema::CONSUMED
             || fact_type == schema::PICKED
+            || fact_type == schema::SEEN_WHOLE
         {
             composition::compose_entity_ref(current, changes)
         } else if fact_type == schema::TRAVEL_TO
             || fact_type == schema::ACT_OPEN
             || fact_type == schema::ACT_CLOSE
             || fact_type == schema::ACT_TAKE
-            || fact_type == schema::ACT_DROP
             || fact_type == schema::ACT_CONSUME
             || fact_type == schema::ACT_ARRIVE
             || fact_type == schema::ACT_PICK
+            || fact_type == schema::ACT_STRIKE
+            || fact_type == schema::ACT_IGNITE
+            || fact_type == schema::ACT_MEND
         {
             composition::compose_intent(current, changes)
         } else if fact_type == schema::ACT_FACE {
@@ -490,6 +720,7 @@ impl Domain for PhysicalDomain {
             || fact_type == schema::ACT_OPEN
             || fact_type == schema::ACT_CLOSE
             || fact_type == schema::ACT_REFUSED
+            || fact_type == schema::SEEN_WHOLE
         {
             if let Resolved::Write(v) = value {
                 if !matches!(v, Value::Entity(_)) {
@@ -508,11 +739,17 @@ impl Domain for PhysicalDomain {
         // material-composition set (§1.9), must be an entity reference, never a scalar. This
         // is the coherence check the cardinality-one path gets from `compose`/`validate`,
         // applied to the whole resolved set.
+        if fact_type == schema::STORM && values.iter().any(|v| v.as_vec3().is_none()) {
+            return Err(ValidationError::new(
+                "a storm is from when, to when, and how hard it blows",
+            ));
+        }
         if fact_type == schema::ADJACENT_TO
             || fact_type == schema::HAS_PORTAL
             || fact_type == schema::IN_REGION
             || fact_type == schema::MADE_OF
             || fact_type == schema::IN_VIEW
+            || fact_type == schema::ACT_DROP
         {
             for v in values {
                 if !matches!(v, Value::Entity(_)) {

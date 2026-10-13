@@ -3,6 +3,10 @@
 //! know of and nobody starves; Carol works the orchard and Bob bakes every day, and the hungry eat
 //! the pies; the household sleeps every night; every choice carries its reason; and the same seed
 //! makes the same week.
+//!
+//! And, since every store is filled by someone (`docs/audits/resources.md` §5 and §9; Amendment
+//! A-47), with nothing made filling itself: every trade is worked; the iron seam is smaller at the
+//! week's end and never regrows; the millstone wears as it grinds.
 
 use kernel::fact::FactKey;
 use kernel::store::RealityStore;
@@ -17,6 +21,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const HOUR: u64 = 6; // ten-minute ticks
 const DAY: u64 = 24 * HOUR;
+const IRON_SEAM: u64 = 3120;
+const MILLSTONE: u64 = 620;
+/// Who keeps each store (Amendment A-47): the farmer, the miller, the baker, the miner, the
+/// charcoal burner, the quarrywoman, the woodcutter, the steward, and Gwen.
+const TRADES: [u64; 9] = [2060, 2062, 2063, 2080, 2081, 2084, 2083, 2015, 2014];
 
 fn ashford() -> City {
     let mut pkg = with_tick_seconds(600);
@@ -33,6 +42,8 @@ struct Week {
     harms: BTreeSet<(u64, &'static str)>,
     /// (day, who) for every day someone worked.
     worked: BTreeSet<(u64, u64)>,
+    /// The iron seam's stock at the end of each day.
+    seam: Vec<i64>,
     /// (day, who) for every night someone slept.
     slept: BTreeSet<(u64, u64)>,
     /// Goals chosen without a reason or a score.
@@ -65,10 +76,14 @@ fn watch(city: &mut City, week: &mut Week, seen: &mut usize) {
         }
     }
     *seen = city.chronicle.len();
-    for who in [CAROL, BOB] {
+    for who in [CAROL, BOB].into_iter().chain(TRADES) {
         if city.int(who, REASON) == Some(REASON_WORK) {
             week.worked.insert((day, who));
         }
+    }
+    if city.tick % DAY == 0 {
+        week.seam
+            .push(city.int(IRON_SEAM, resources::schema::STOCK).unwrap_or(0) / 100);
     }
     for who in [ALICE, BOB, CAROL, DAVE, ERIN] {
         if city.read(who, RESTING) == Some(Value::Bool(true)) {
@@ -121,6 +136,27 @@ fn a_week_in_ashford_with_nobody_directed() {
     }
     let pies = week.meals.iter().filter(|(_, m)| *m == PIE).count();
     assert!(pies >= 7, "{pies} pies eaten in a week");
+
+    // Every trade is worked, with nothing made filling itself (Amendment A-47).
+    for who in TRADES {
+        assert!(
+            week.worked.iter().any(|(_, w)| *w == who),
+            "{who} never worked"
+        );
+    }
+    // The iron seam: worked, and never regrowing.
+    assert_eq!(week.seam.len(), 7);
+    assert!(week.seam[6] < 2_000, "the seam was worked: {:?}", week.seam);
+    assert!(
+        week.seam.windows(2).all(|w| w[1] <= w[0]),
+        "it never regrows: {:?}",
+        week.seam
+    );
+    // The millstone wears as it grinds.
+    let millstone = city
+        .int(MILLSTONE, physical::schema::INTEGRITY)
+        .unwrap_or(10_000);
+    assert!(millstone < 10_000, "the millstone wore: {millstone}");
 
     // Sleep, every night, for the whole household.
     for day in 0..7 {

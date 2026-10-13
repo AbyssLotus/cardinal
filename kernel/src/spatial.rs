@@ -194,6 +194,21 @@ pub trait SpatialQuery {
     /// whose origin is farther from the question than this, plus the question's own radius.
     /// Never smaller than the truth; it may run larger for a while after things leave.
     fn reach(&self, frame: EntityId) -> u64;
+
+    /// The subframes of `frame` whose subtree could meet `bounds`: each whose box, widened by its
+    /// reach, intersects them — the branches a search for what lies within `bounds` must enter
+    /// (Amendment A-25). Sorted by id. An index may answer by searching rather than scanning
+    /// every subframe; the answer is the same.
+    fn subframes_meeting(&self, frame: EntityId, bounds: &Aabb) -> Vec<EntityId> {
+        self.subframes(frame)
+            .into_iter()
+            .filter(|s| {
+                let reach = self.reach(*s).min(i64::MAX as u64 / 4) as i64;
+                self.placement(*s)
+                    .is_some_and(|p| p.bounds.expand(reach).intersects(bounds))
+            })
+            .collect()
+    }
 }
 
 /// The number of grid levels per frame.
@@ -301,6 +316,9 @@ pub struct SpatialIndex {
     reach: FastMap<EntityId, u64>,
     /// Per frame, removals since its reach was last recomputed exactly.
     churn: FastMap<EntityId, u32>,
+    /// Per frame, an upper bound on the reach of any of its subframes — so the subframes that
+    /// could meet a box are found by one search widened by it (Amendment A-25). Only grows.
+    sub_reach: FastMap<EntityId, u64>,
 }
 
 impl fmt::Debug for SpatialIndex {
@@ -325,7 +343,15 @@ impl SpatialIndex {
             subframes: FastMap::default(),
             reach: FastMap::default(),
             churn: FastMap::default(),
+            sub_reach: FastMap::default(),
         }
+    }
+
+    /// Note that `frame`, placed in `parent`, reaches `reach`: `parent`'s bound on its
+    /// subframes' reach covers it.
+    fn note_sub_reach(&mut self, parent: EntityId, reach: u64) {
+        let bound = self.sub_reach.entry(parent).or_insert(0);
+        *bound = (*bound).max(reach);
     }
 
     /// The placement rule this index mirrors.
@@ -439,7 +465,9 @@ impl SpatialIndex {
                 return;
             };
             let parent = slot.placement.frame;
-            value = corner_distance(&slot.placement.bounds).saturating_add(value);
+            let corner = corner_distance(&slot.placement.bounds);
+            self.note_sub_reach(parent, value);
+            value = corner.saturating_add(value);
             frame = parent;
         }
     }
@@ -478,10 +506,14 @@ impl SpatialIndex {
         if became_frame {
             if let Some(parent) = self.slots.get(&frame).map(|s| s.placement.frame) {
                 self.subframes.entry(parent).or_default().insert(frame);
+                let reach = self.reach.get(&frame).copied().unwrap_or(0);
+                self.note_sub_reach(parent, reach);
             }
         }
         if self.is_frame(entity) {
             self.subframes.entry(frame).or_default().insert(entity);
+            let reach = self.reach.get(&entity).copied().unwrap_or(0);
+            self.note_sub_reach(frame, reach);
         }
         let reach = self.contribution(entity);
         self.raise(frame, reach);
@@ -589,6 +621,30 @@ impl SpatialQuery for SpatialIndex {
     fn reach(&self, frame: EntityId) -> u64 {
         self.reach.get(&frame).copied().unwrap_or(0)
     }
+
+    fn subframes_meeting(&self, frame: EntityId, bounds: &Aabb) -> Vec<EntityId> {
+        let Some(subs) = self.subframes.get(&frame).filter(|s| !s.is_empty()) else {
+            return Vec::new();
+        };
+        // Any subframe whose widened box meets `bounds` has its own box within its reach — no
+        // more than the frame's bound — of them.
+        let widest = self
+            .sub_reach
+            .get(&frame)
+            .copied()
+            .unwrap_or(u64::MAX)
+            .min(i64::MAX as u64 / 4) as i64;
+        self.candidates(frame, &bounds.expand(widest))
+            .into_iter()
+            .filter(|(s, p)| {
+                subs.contains(s) && {
+                    let reach = self.reach(*s).min(i64::MAX as u64 / 4) as i64;
+                    p.bounds.expand(reach).intersects(bounds)
+                }
+            })
+            .map(|(s, _)| s)
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -632,6 +688,57 @@ mod tests {
         assert_eq!(level_for(&Aabb::new([0; 3], [400, 0, 0])), Some(0));
         assert_eq!(level_for(&Aabb::new([0; 3], [401, 0, 0])), Some(1));
         assert_eq!(level_for(&Aabb::EVERYTHING), None);
+    }
+
+    #[test]
+    fn subframes_meeting_a_box_are_those_a_scan_finds() {
+        // Amendment A-25: districts on a city's ground, each holding houses holding people; which
+        // districts could hold something in a box is the same by search as by scanning them all,
+        // as things move in and out.
+        let mut ix = SpatialIndex::new(Arc::new(Never));
+        let (ground, mut next) = (1u64, 100u64);
+        let mut districts = Vec::new();
+        for d in 0..40i64 {
+            let district = next;
+            next += 1;
+            ix.update(e(district), at(ground, Aabb::point([d * 40_000, 0, 0])));
+            for h in 0..5i64 {
+                let house = next;
+                next += 1;
+                ix.update(
+                    e(house),
+                    at(district, Aabb::point([h * 700, 1_000 + d * 50, 0])),
+                );
+                ix.update(e(next), at(house, Aabb::new([0, 0, 0], [25, 15, 175])));
+                next += 1;
+            }
+            districts.push(district);
+        }
+        let scan = |ix: &SpatialIndex, b: &Aabb| -> Vec<EntityId> {
+            ix.subframes(e(ground))
+                .into_iter()
+                .filter(|s| {
+                    let reach = ix.reach(*s) as i64;
+                    ix.placement(*s)
+                        .is_some_and(|p| p.bounds.expand(reach).intersects(b))
+                })
+                .collect()
+        };
+        let check = |ix: &SpatialIndex| {
+            for x in [-5_000i64, 0, 39_000, 200_000, 1_000_000, 1_600_000] {
+                let b = Aabb::around([x, 1_000, 0], 3_000);
+                assert_eq!(ix.subframes_meeting(e(ground), &b), scan(ix, &b), "at {x}");
+            }
+        };
+        check(&ix);
+        // A house moved far out along its street widens its district's reach.
+        ix.update(e(102), at(districts[0], Aabb::point([90_000, 0, 0])));
+        check(&ix);
+        // A district emptied stops being a subframe at all.
+        for h in 0..5u64 {
+            ix.update(e(districts[3] + 1 + h * 2), None);
+        }
+        check(&ix);
     }
 
     #[test]

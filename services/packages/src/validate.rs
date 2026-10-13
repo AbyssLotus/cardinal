@@ -85,8 +85,10 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     declared.extend(package.exposure.iter().map(|x| x.region_id));
     declared.extend(package.in_region.iter().map(|m| m.location_id));
     declared.extend(package.places.iter().map(|(p, _)| *p));
-    // Recipes and jobs are entities too, which a mind can be told of (Amendments A-17, A-18).
+    // Recipes and jobs are entities too, which a mind can be told of (Amendments A-17, A-18);
+    // and pantries, made by being declared with their larders (Amendment A-26).
     declared.extend(package.recipes.iter().map(|r| r.id));
+    declared.extend(package.pantries.iter().map(|(_, p)| *p));
     declared.extend(package.jobs.iter().map(|j| j.id));
     // Classification regions are made by being named (§1.7).
     declared.extend(package.in_region.iter().map(|m| m.region_id));
@@ -156,6 +158,62 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
     for &(who, _) in &package.roles {
         must_exist(who, who, "the person given a role");
     }
+    for r in &package.residents {
+        must_exist(r.id, r.home, "the resident's home");
+        if let Some(work) = r.work {
+            must_exist(r.id, work, "where the resident works");
+        }
+    }
+    for &(home, _) in &package.larders {
+        must_exist(home, home, "the home given a larder");
+    }
+    for &(place, _) in &package.residency {
+        must_exist(place, place, "the place given a rung");
+    }
+    for &(who, _) in &package.strength {
+        must_exist(who, who, "the organism given a strength");
+    }
+    for &(thing, _, _) in &package.fires {
+        must_exist(thing, thing, "the thing on fire");
+    }
+    for &(region, _, _, _) in &package.storms {
+        must_exist(region, region, "the region a storm blows over");
+    }
+    for &(place, _) in &package.latitudes {
+        must_exist(place, place, "the place given a latitude");
+    }
+    for &(place, material) in &package.ground {
+        must_exist(place, place, "the place given ground");
+        must_exist(place, material, "what its ground is made of");
+    }
+    for &(material, _, _, _) in &package.quarries {
+        must_exist(material, material, "the material quarried");
+    }
+    for &(workplace, _) in &package.wear {
+        must_exist(workplace, workplace, "the workplace that wears");
+    }
+    for &(climate, _) in &package.ground_water {
+        must_exist(climate, climate, "the climate given ground water");
+    }
+    for &(climate, _) in &package.humidities {
+        must_exist(climate, climate, "the climate given a humidity");
+    }
+    for w in &package.waters {
+        must_exist(w.id, w.id, "the place that is water");
+    }
+    for &(from, to) in &package.drains {
+        must_exist(from, from, "the water that drains");
+        must_exist(from, to, "the water it drains into");
+    }
+    for (water, places) in &package.floods {
+        must_exist(*water, *water, "the water that floods");
+        for &p in places {
+            must_exist(*water, p, "the ground it floods");
+        }
+    }
+    if let Some(m) = package.residents_rules.and_then(|r| r.meal_material) {
+        must_exist(m, m, "the material meals are made of");
+    }
     for &(thing, owner) in &package.owners {
         must_exist(thing, thing, "the thing given an owner");
         must_exist(thing, owner, "its owner");
@@ -213,6 +271,16 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
                 );
             }
             _ => {}
+        }
+    }
+    // One person, one tier at a time (Appendix A, Ruling 19): a resident is not also an organism.
+    for r in &package.residents {
+        if package.organisms.iter().any(|o| o.id == r.id) {
+            problem(
+                Layer::Coherence,
+                r.id,
+                "a resident at the city tier is not also an organism (Ruling 19)".into(),
+            );
         }
     }
     for &(who, material, _) in &package.likes {
@@ -468,6 +536,74 @@ pub fn validate(package: &WorldPackage) -> Vec<Problem> {
             }
             path.push(up);
             here = up;
+        }
+    }
+
+    // Pantries (Amendment A-26): each for a household with a larder, with the rules to make it;
+    // and a meal feeds the same at either tier (Law 14).
+    for &(home, pantry) in &package.pantries {
+        if !package.larders.iter().any(|(h, _)| *h == home) {
+            problem(
+                Layer::Coherence,
+                pantry,
+                format!("a pantry belongs to a household with a larder, and {home} has none"),
+            );
+        }
+    }
+    if let (false, Some(rr)) = (package.pantries.is_empty(), package.residents_rules) {
+        match (rr.meal_material, rr.meal_size, rr.pantry_body) {
+            (Some(m), Some(_), Some(_)) => {
+                let nutrition = package.materials.iter().find(|x| x.id == m).and_then(|x| {
+                    x.properties
+                        .iter()
+                        .find(|(p, _)| *p == crate::model::MaterialProperty::Nutrition)
+                        .map(|(_, v)| *v)
+                });
+                if nutrition != Some(rr.meal_nutrition) {
+                    problem(
+                        Layer::Coherence,
+                        m,
+                        format!(
+                            "a meal feeds {} at the city tier, so its material must feed the same \
+                             (Law 14)",
+                            rr.meal_nutrition
+                        ),
+                    );
+                }
+            }
+            _ => problem(
+                Layer::Coherence,
+                package.pantries[0].1,
+                "pantries need meal_material, meal_size, and pantry_body in [rules.residents]"
+                    .into(),
+            ),
+        }
+    }
+    // A resident begins at home, and at home they are a record: their home is at the city tier
+    // (Ruling 19; Amendment A-24). A home in the scene would have them cross on the first tick,
+    // which a world that means them to be organisms there should declare as organisms instead.
+    let rungs: BTreeMap<u64, i64> = package.residency.iter().copied().collect();
+    for r in &package.residents {
+        let mut here = Some(r.home);
+        let mut rung = society::schema::SCENE;
+        let mut hops = 0;
+        while let Some(p) = here.filter(|_| hops <= parent.len()) {
+            if let Some(declared) = rungs.get(&p) {
+                rung = *declared;
+                break;
+            }
+            here = parent.get(&p).copied();
+            hops += 1;
+        }
+        if rung != society::schema::CITY {
+            problem(
+                Layer::Coherence,
+                r.id,
+                format!(
+                    "the resident's home {} is in the scene, not at the city tier (Ruling 19)",
+                    r.home
+                ),
+            );
         }
     }
 

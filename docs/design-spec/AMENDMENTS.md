@@ -611,3 +611,1433 @@ goes took an outside profiler; the engine should say.
 **Rationale.** `docs/audits/world-scale.md` §8: the city tier's million residents must cost nothing
 until something is due. The spec has asked for this since Vol. I ("the scheduler should advance
 directly to the next due boundary"); this is its kernel primitive.
+
+---
+
+## A-23 — The city tier: residents (2026-10)
+
+**Edits:**
+- Appendix A (Ruling 19, one person, one tier at a time)
+- Vol. III Ch. 5 (residents, households, and the rhythm of a settlement)
+- Vol. I Ch. 4 §7.3 (Tier 1, individual simulation for loaded settlements: built)
+
+**Change.**
+- **Residents** (Society). At the city tier a person is a resident record, and nothing else:
+  - home and workplace, both places;
+  - what they are doing (sleeping, at home, walking, working, eating);
+  - where, and until which tick, an agenda fact (A-22);
+  - how hungry and how tired they are, as levels (A-20).
+
+  A household's larder, a count of meals, belongs to its home.
+- **The rhythm** (Society). A resident is attended to only when the thing they are doing ends.
+  Then the next thing is chosen from the hour and their state:
+  - **at night,** sleep at home, resting;
+  - **hungry, with food at home,** eat a meal: the larder gives one, hunger falls by its
+    nutrition;
+  - **in working hours,** walk to work, taking the time the distance takes at the world's walking
+    pace, and work until the hours end;
+  - **otherwise,** home, until the next of these is due.
+
+  Every rule and rate comes from the package.
+- **Everyone keeps the hours a little their own way.** Each resident's night and working hours
+  are the settlement's, shifted by a personal offset of up to the world's `hours_spread_minutes`
+  either side. The offset is fixed for each resident, derived from who they are. A city does not
+  all wake in the same minute, and its work is spread across the hour as people are.
+- **Earning the keep.** A finished shift adds the world's meals per shift to the worker's
+  household larder: an explicit boundary process (Vol. I, *Conservation*), standing in for the
+  economy the city tier does not simulate in detail.
+- **Cost.** A resident with nothing ending costs nothing. A day is a handful of segments, each a
+  few writes.
+
+**Not yet** (the next slice): promotion into the scene and demotion back across the seam; harm and
+death at the city tier; buying and selling.
+
+**Rationale.** `docs/audits/world-scale.md` §8, step 2: a city of a million on a desktop, every
+resident an individual who costs nothing until something is due.
+
+---
+
+## A-24 — Crossing the seam: promotion (2026-10)
+
+**Edits:**
+- Appendix A (Ruling 19: how a person crosses; Ruling 14: a mind is made from a record)
+- Vol. V Ch. 5 §5.2 (the residency ladder, per place: built for promotion)
+- Vol. V Ch. 2 (who holds a value: the agenda indexes entities too)
+- Vol. I, Law 14 (scale must not change truth: the promotion side, tested)
+
+**Change.**
+- **Residency** (Society) is a place's rung: *city* or *scene*.
+  - A place takes the rung of the nearest place holding it that declares one. With none
+    declared, it is in the scene.
+  - Residency is policy: whoever directs attention may set it (a player's frontend, a tool, a
+    test). It changes what is computed, never what is true.
+  - A package declares the rungs it starts with. A resident's home must be at the city tier at
+    load: a person the world means to be in the scene is declared as an organism.
+- **Marking a crossing** (Society). A resident in the scene is marked *crossing*, naming the place
+  they cross into. There are two ways in:
+  - **Attention arrives.** When a place's rung becomes *scene*, everyone not walking who is at
+    that place, or at a place within it, is marked. A place within it that keeps the city tier
+    keeps its people.
+  - **Walking in.** A resident's place changes only by walking. When a walk ends at a place in the
+    scene, the rhythm marks them instead of choosing their next segment.
+- **Crossing.** On the next tick every domain acts on the mark at once. Each reads the same
+  committed record, so the person changes tier in a single commit:
+  - **Physical Reality** gives them a body of the world's resident size, able to move, in the
+    place they cross into;
+  - **Living Systems** copies their hunger and fatigue exactly, levels and all (A-20). It gives
+    them full health, body heat at the world's set point, the world's resident sight, and rest
+    if they were asleep;
+  - **the information layer** gives them what a resident knows: where they are, where their home
+    and work are, the openings of each and into each from where it lies, and their hunger and
+    fatigue as felt;
+  - **decision systems** give them the residents' walking pace, their home, and lying down if
+    they were asleep. One with work gets two routines in their own hours: to work in working
+    hours, home for the rest. These are the same personal hours the city tier kept (A-23);
+  - **Society** retires the record's state and the mark. It keeps only who they are: home and
+    work.
+- **Never both.** No tick holds both a resident's state and an organism's: Ruling 19 holds through
+  the crossing. Hunger and fatigue are continuous across it.
+- **Who is at a place** (kernel). An agenda fact (A-22) whose value is an entity is indexed by the
+  entity it names, so `holding(fact, value)` finds who is at a place in proportion to how many
+  are. Attention arriving at a district costs what its residents cost, not what the city costs.
+  Without an index the answer comes from a scan, and is the same.
+- **A fixed trait from an id** (kernel). `EntityId::jitter(by)` gives an offset within `±by`
+  derived from the id alone. Society and decision systems both compute a resident's hours with
+  it, so the two tiers agree without either importing the other.
+
+**Measured** (`examples/city.rs`, minute ticks; Ryzen-class desktop figures are the target, these
+are from the development machine): a district of 3,000 residents crosses in about 50 ms, the
+same at a city of 100,000 as at a city of a million. A million residents still average 28 ms a tick,
+and peak at 2.7 GB.
+
+**Not yet** (the next slice):
+- demotion back to the city tier, which must retire facts other systems may be writing in the
+  same tick;
+- carrying held things across;
+- a household's larder becoming food one can take in the scene. Until then, a resident in the
+  scene grows hungry as anyone does, and eats only what they find.
+
+**Rationale.** `docs/audits/world-scale.md` §9: the player turns into a street of the city, and its
+people are there, as themselves.
+
+---
+
+## A-25 — Crossing back: demotion, and retirement (2026-10)
+
+**Edits:**
+- Appendix A (Ruling 19: how a person leaves the scene)
+- Vol. V Ch. 3 §3.1 (Resolve: retirement)
+- Vol. V Ch. 5 §5.2 (the residency ladder: both directions built; the round trip tested)
+- Vol. I, Law 14 (scale must not change truth: tested to the bit)
+
+**Change.**
+- **Retirement** (kernel). A new kind of change, `Retire`. It is proposed on any fact of an
+  entity, and retires the entity from the keeping of that fact type's owner:
+  - every fact the entity holds whose type that owner owns ends this tick, those about a pair
+    included;
+  - every other change proposed this tick to such a fact is moot, and is dropped before
+    resolution;
+  - a fact the owner keeps for its own systems (Amendment A-5) is retired only by one of them;
+  - each fact retired is chronicled under the retirement's cause;
+  - facts other owners keep for the entity, and facts others hold *about* it, are untouched.
+
+  The kernel carries it out; an owner's composition never sees it. This is how a domain lets go
+  of a person at once, whatever its other systems were about to write about them that tick,
+  without every system having to know that people leave.
+- **Leaving the scene** (Society). A resident in the scene who stands in a place at the city tier,
+  alive and carrying nothing, is marked *leaving*. On the next tick:
+  - Physical Reality, Living Systems, the information layer, and decision systems each retire
+    them;
+  - Society takes up their record again. Their hunger and fatigue are their body's, exactly. If
+    they were lying down at home in their own night, they are asleep until their own morning, as
+    the rhythm would have had them. At home or at work they have otherwise just arrived, and the
+    rhythm takes them up on the next tick. Anywhere else they walk on from where they stand: to
+    work in their working hours, otherwise home, taking the time the distance takes.
+
+  A resident in the scene is recorded as such (`society.resident.in_scene`), so finding who might
+  leave costs what the scene costs.
+- **What the city tier keeps and does not.** It keeps who a person is (home and work), how hungry
+  and tired they are, and where they are going. It keeps no memory, needs that arose, or
+  dependence: these end at the seam. A person who returns to the scene knows what a resident
+  knows.
+- **Away from home and work, in working hours** (the rhythm). A resident who is at neither,
+  having just come out of the scene, walks to work in working hours. Before this amendment no
+  resident could be anywhere else, so the rule changes nothing that was.
+- **Knowing the way across a city** (the information layer). A resident crossing in knows the
+  openings of their home, their work, and where they stand, and of every place holding each,
+  between it and the next out: the door onto the street, and the street's gate onto the city. So
+  one who lives in one district and works in another can walk between them in the scene.
+
+**Law 14, tested.** Ashford's Lanes brought into the scene at three in the morning and let go at
+half past leave the whole world's state hash identical, a day later, to a run where no one looked
+(`crossing.rs`).
+
+**A day of crossings** (`commute.rs`). In a generated town of four districts, with attention on
+two, people cross the seam all day as they commute:
+- at every tick each resident is exactly one thing, a record or an organism;
+- at every crossing, either way, their hunger is the same to the unit;
+- at eleven, every worker is at work, at whichever tier their workshop is;
+- at day's end, everyone is home.
+
+**The scene, cheaper and exact.** Generated districts showed the scene's systems doing work that
+grew with the city, not the scene. Each fix keeps every answer the same.
+- **Clear frames** (sight). Each evaluation works out once which frames hold nothing that could
+  block a line: no ground, and nothing walled or opaque anywhere within. A line through such a
+  frame is never tested inside it, and such a place is never scanned as an obstacle. A frame is
+  judged by looking over at most 16,384 things within it. One holding more — a city's open
+  ground — is looked into near each line instead, and the frames within it finished on the way
+  stay known.
+- **Bare places near a line** (sight). The places with no body of their own that a line could meet
+  are found by one search of the index, widened by the farthest any of them reaches, not by
+  scanning every such place in the frame for every line.
+- **Once per evaluation** (sight). Each thing's chain of containers, where it stands in each
+  frame, and each place's light are worked out once and shared by every line.
+- **Which branches a search enters** (kernel). The spatial index answers which subframes of a
+  frame could hold something within a box (`subframes_meeting`). Each frame keeps a bound on its
+  subframes' reach, so the answer is one search of the index widened by it, not a look at every
+  subframe. "What is within 30 m", asked by someone on a city's open ground, no longer looks at
+  every district in the city. Without the index, a scan gives the same answer.
+- **Routes once per tick** (travel). The way from one region to another, through openings a body
+  of a given size can use, is searched once per tick and shared: a crowd leaving one street for
+  another searches the city's openings once, not once each.
+- **Known places once per decision** (minds). Where a mind believes its openings lead is gathered
+  once per decision, not once per thing it knows of.
+
+In the commuting town, sight fell from 9.0 to 3.3 ms a tick. In the village bench, a tick at a
+thousand agents fell from 51 to 40 ms.
+
+**A gate for every district.** The city bench (`examples/city.rs`) now builds its city with the same
+generator as the test, with attention on its first districts and people crossing all day. Its first
+run found a gap: people in the scene who worked in a district without doors never left. Every
+generated district now has its gate onto the city's ground; only districts meant for the scene
+have doors on every home. A mind that knows no door into its workshop heads for the district it
+is in, and leaves the scene at the gate.
+
+**Not yet:**
+- carrying held things across (one carrying something stays in the scene until they set it down);
+- households' larders as food in the scene;
+- the economy's and resources' facts for a person crossing.
+
+**Rationale.** `docs/audits/world-scale.md` §10: the player walks out of the district, and its
+people go back to being the city's, costing nothing; walks back in, and there they are.
+
+---
+
+## A-26 — Larders in the scene: pantries (2026-10)
+
+**Edits:**
+- Appendix A (Ruling 19: a household's larder crosses the seam as its people do)
+- Vol. III Ch. 3 (deposits: deliveries)
+- Vol. III Ch. 5 (households: the larder in the scene; work in the scene earns)
+- Vol. I, *Conservation* (the larder's meals are counted across the seam, both ways)
+
+**Change.**
+- **A pantry** (Society, declared by the package). A household's larder may have a pantry: an
+  entity, declared with the larder (`home = meals, pantry:id`), that the larder becomes in the
+  scene. At the city tier it has no facts but its owner (Economy): the household, named by its
+  home.
+- **Setting the larder out.** When attention brings a home into the scene, its larder crosses as
+  its people do (A-24):
+  - Society marks the pantry crossing;
+  - on the next tick Physical Reality stands it in the home, at the world's pantry size;
+  - Resources makes it a deposit holding the larder's meals. It does not regrow. Each meal is the
+    world's meal material, which must feed exactly what a meal feeds at the city tier (Law 14,
+    validated);
+  - the rhythm lets the count go.
+- **Counting it back.** When the home is at the city tier again, the pantry is marked leaving. On the
+  next tick Physical Reality and Resources retire it (A-25). The rhythm counts the larder back:
+  the pantry's stock, plus any delivery not yet taken in.
+- **One book-keeper.** The rhythm keeps every larder's count across the seam. It lets the count go,
+  sends what is earned meanwhile to the pantry, and counts the pantry back in. No two systems ever
+  write one larder in one tick.
+- **Deliveries** (Resources). `resources.act.restock`, an intent open to anyone, carries whole units
+  to a deposit. Deliveries in one tick add up, and the deposit takes them in on the next.
+- **Work in the scene earns.** A resident in the scene standing at their work as their own hours
+  end earns their household its meals, as a finished shift does at the city tier. With the pantry
+  out, the meals are delivered to it.
+- **Knowing one's pantry.** A resident crossing in knows their household's pantry: where it is,
+  that it is theirs, how many meals it holds, and how filling a meal is. Those who are hungry fetch
+  a meal from it and eat it, as anyone eats from a tree they know (A-16).
+- **A household's things are its own.** A mind does not count as someone else's what its own
+  household owns (A-19). People in the scene, who can see into their neighbours' homes, leave
+  their neighbours' pantries alone.
+
+**Measured.**
+- Ashford's Lanes, a day in the scene: people eat from their pantries, a shift restocks one, and
+  nobody passes 90% hungry. When attention leaves, every larder is counted back exactly
+  (`crossing.rs`).
+- In the generated town, those living in the scene districts eat at home in the scene
+  (`commute.rs`).
+
+**Not yet:**
+- a meal picked but not eaten when its pantry leaves is not counted back;
+- one carrying something stays in the scene until they set it down (A-25).
+
+**Rationale.** Without this, a household whose home is in the scene could eat only at the city tier,
+at home, where its people never are while the home is in the scene. Within two days the scene
+would starve the people the city tier kept fed.
+
+---
+
+## A-27 — Integrity: things that break (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (materials: what a structure bears) and §1.11 (bodies: integrity, breaking)
+- Vol. III Ch. 2 (capability: strength)
+- Appendix A (Ruling 9, built: damage proposed by anyone, applied by Physical Reality; Ruling 13:
+  breaking is Physical Reality's)
+
+**Change.**
+- **Integrity** (Physical). How whole a thing or a walled place is, in hundredths of a percent.
+  - Absent means whole, so only what has been damaged carries it.
+  - Changes add up: damage and repair proposed in one tick both apply (Vol. III Ch. 12). The
+    result is held within nothing and whole; whole again, it is no longer stored.
+  - Open to any proposer (Ruling 9): a blow, a fire, a storm, a battle.
+- **Breaking** (Physical). When a thing's integrity reaches nothing, Physical Reality breaks it in the
+  next tick. Being broken is recorded, and only Physical Reality's own systems may record it.
+  - **A thing becomes its wreckage.** It is the same entity, still its materials and still its
+    owner's (Conservation). It lies flat, no taller than the world's wreckage height. It is no
+    longer solid or opaque. What it held spills where it stood.
+  - **A walled place becomes a ruin.** It is the same place, with its walls down. It is open to
+    sight and to the sky (no longer sheltered), and its doors are broken open.
+  - **A door breaks open:** both its faces broken, open, and no longer opaque.
+  - What stood on a broken thing is no longer held up. A thing that cannot move by itself (a
+    bottle on a table) falls as the thing breaks, taking the time gravity takes. A body that can
+    move by itself is gravity's on the next tick (A-4). What stood on it is found by looking
+    over the thing's place, so the answer is the same with or without the spatial index.
+- **Strength** (Living). An organism's physical capability, 0–100% (Vol. III Ch. 2: "strength,
+  speed, stamina as biological facts"). Declared per organism, or the world's default for its
+  people. A resident crossing into the scene is given the default.
+- **Striking** (Physical; Ruling 13). A decider proposes that a body strike a thing (`act.strike`).
+  Physical Reality carries out the blow if the thing is within reach, and is made of something with
+  a known weight. How hard it lands:
+  - **Bare-handed:** the body's strength, times the world's `hand_strike_percent`.
+  - **With a tool in hand:** a tool adds the world's `tool_strike_percent_per_kg` of strength for
+    each kilogram it weighs. It never strikes harder than its own weakest material: a wooden
+    club does not dent iron. The best thing in hand is used.
+  - **What it does:** a blow no harder than the target's weakest material leaves no mark, and is
+    refused, so the striker can notice. A harder blow costs the target integrity: how much
+    harder, times the world's `strike_scale`, over its weight in kilograms. One blow is one
+    action, the same at any tick length.
+
+**In Ashford:**
+- A packing crate stands in the yard with an apple in it, and a two-kilogram hammer lies by it.
+- People are 40% strong; Carol, who hauls the harvest, 70%.
+- Erin's fists cannot break the crate. Carol's can, in a few blows. Erin with the hammer can, in
+  two. The broken crate lies flat and timber in the yard, and the apple rolls out.
+
+**Not yet:**
+- rebuilding what is broken;
+- harm to those inside a ruin as it falls;
+- breaking a body (harm to the living is Living's);
+- deciders that choose to strike (A-30).
+
+**Rationale.** `docs/audits/mutable-world.md` §3.1: the foundation fire, wind, and conflict all
+propose to.
+
+---
+
+## A-28 — Fire (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 ("fire spreads because nearby materials satisfy ignition conditions": built)
+  and §1.10 (environment: rain on what is open to the sky)
+- Vol. III Ch. 2 §2.4 (harm: burns)
+- Appendix A (Ruling 9: Physical Reality reports heat, Living Systems judges burns)
+
+**Change.**
+- **Burning** (Physical; only its own systems write it). How fiercely a thing or a walled place
+  burns. Absent means not burning. On the world's fire cadence:
+  - **Its course.** It grows toward what the thing's most flammable material allows, at the
+    world's rate. It eats the thing's integrity: at full fierceness, the world's `burn_per_hour`
+    from a hundred kilograms of fuel, more slowly by the cube root of how much more there is. A
+    walled place's fuel is its walls, floor, and roof, at the world's `wall_thickness_cm`. With
+    nothing left the fire goes out, and what burned is broken (A-27): wreckage, or a ruin. In the
+    open, while humidity is at the world's `rain_above` or more, rain puts it out. A fire the
+    world declares *kept*, a tended hearth's, neither grows, nor eats, nor dies down.
+  - **Its heat.** It heats everything within its reach that it has a line to. Its reach is the
+    world's `fire_reach_cm` at full fierceness, beyond its own extent, measured to the nearest
+    edge of what it heats. It gives more the nearer and the fiercer it is. The line is drawn from
+    the fire's middle (heat radiates from its whole body), and walls, opaque bodies, and rising
+    ground stop it as they stop a gaze. Walls keep heat out until they burn themselves.
+  - **What it holds and what holds it.** A fire inside a walled place heats its walls, as near as
+    it is to the nearest of them or the ceiling. A walled place on fire heats everything inside it.
+  - **Catching.** A thing that can burn catches when the heat it is given, times its flammability,
+    reaches the world's `ignition_heat`. It catches at the world's `ignite_intensity`. Fires set to
+    one thing in one tick burn as fiercely as the fiercest.
+- **Heat exposure** (Physical, a report). How much heat each body that moves by itself is taking,
+  written only where it changed.
+- **Burns** (Living). Health lost at the world's `burn_harm_per_hour`, in proportion to heat
+  exposure. Death by fire is chronicled as such.
+- **Firelight** (Physical: sight). What burns can be seen, and so can everything in the place it
+  burns in, whatever the daylight.
+- **Setting fire** (Physical; Ruling 13). A decider proposes that a body set fire to a thing
+  (`act.ignite`). It is carried out if the body has a flame to hand (something burning that it
+  holds, or within its reach), and the thing is in hand or in reach and can burn. Otherwise it is
+  refused.
+- **Fires the world declares.** `[fires] thing = fierceness[, kept]`.
+
+**In Ashford** (`tests/reference/tests/fire.rs`):
+- The hay wagon is straw. Set alight against Alice's house, it takes the timber kitchen and the
+  bedroom over it, which burn down to ruins open to the sky; the granite cellar does not burn.
+  Bob, who has no mind of his own in that test to flee with, is burned.
+- A kept fire in the hearth lights the kitchen at midnight, so Bob can see the table, and in half
+  an hour sets nothing near it alight.
+- Erin cannot set the crate alight with nothing burning to hand. She lights the torch at the
+  hearth and sets the crate alight with it. The crate burns down to wreckage; its apple, too wet
+  to burn, rolls out.
+- Under rain, the burning hay wagon goes out; the kitchen table burning under the roof does not.
+
+**Not yet:**
+- smoke;
+- fire warming the air (it reports heat to bodies; the climate's temperature is untouched);
+- minds that flee fire or put it out;
+- fire at the city tier.
+
+**Rationale.** `docs/audits/mutable-world.md` §3.2.
+
+---
+
+## A-29 — Wind (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (a structure fails because its material cannot bear the stress: built for
+  wind) and §1.10 (storms the world declares)
+- Vol. IV (the world package: `[storms]`)
+
+**Change.**
+- **Storms** (Physical; world data). A world may declare storms over its regions:
+  `[storms] region = from hour, hours, wind cm/s`. While one blows, the region's wind is at
+  least the storm's. Otherwise wind is the pressure gradient's, as before.
+- **Wind load** (Physical). On the environment's cadence, every structure in the open bears the
+  wind of the region it stands in. A structure is a thing made of something, or a walled place's
+  outer walls. "In the open" means:
+  - it stands in a place, not inside another thing that shelters it (an apple in a crate, a
+    hammer in a hand); a ruin counts as a place;
+  - no walled place is around it.
+
+  The wind presses with its speed squared, over the world's `wind_force_divisor`, in the units of
+  hardness. Where that exceeds what the structure's weakest material bears, the structure loses
+  integrity: the world's `wind_damage_scale` per hour for each unit it exceeds by, more slowly by
+  the cube root of how much of it there is, as fire eats (A-28). Breaking is as any breaking
+  (A-27): a shed to its wreckage, a house to a ruin. What the house sheltered is in the open from
+  then on.
+- In calm weather nothing is looked at.
+
+**In Ashford** (`tests/reference/tests/wind.rs`):
+- A 40 m/s gale over the Vale presses at 50%. In four hours it brings down the timber shed and
+  Alice's timber house, and breaks the packing crate. The granite manor, the iron hammer, and the
+  glass bottle stand untouched.
+- The kitchen table stands out the gale behind the kitchen's walls, and bears it only once they
+  fall.
+- A 25 m/s wind presses at about 20%: it scatters the straw of the hay wagon and leaves the shed
+  without a mark.
+
+**Not yet:**
+- light, loose things blown about;
+- wind fanning a fire and carrying it downwind;
+- harm to people caught out in a storm;
+- weather that brews its own storms.
+
+**Rationale.** `docs/audits/mutable-world.md` §3.3: the user's "destroyed by winds".
+
+---
+
+## A-30 — Open ground (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.5 (movement between places: built for places without walls)
+- Vol. IV (the world package: the loader marks places)
+
+**Change.**
+- **Place** (Physical; world data). That an entity is a place one can be in, rather than a thing:
+  a climate region, a declared place, a room. The loader marks every one.
+- **Open ground.** A place without walls (a garden plot, a street, a ruin) is walked into and out
+  of anywhere along its edge, not only through its openings:
+  - **Into it**, from the place around it: one walks to the nearest point of its footprint, or
+    stands where one is if already over it. For a place with no size, one walks to where it is.
+  - **Out of it**, into the place around it: one walks to the nearest point of its edge, or, for a
+    place with no size, from its middle.
+  - Each is chronicled as a crossing (`entered`, `left`), as a doorway is.
+- **The way between places** is found breadth first, as before, now over three kinds of step:
+  through an opening, into an open place, out of one. Openings come before edges, and openings in
+  ascending id, so the answer is deterministic. Edges are taken only along the two lines of
+  containers, up from where one is and down toward where one is going, so a search across a
+  city's open ground does not wander into every street in it. Routes are remembered for the
+  tick.
+- A walled place is still entered only by its doors. A ruin (A-27) is open ground: what was a
+  house is walked into where its wall stood.
+- Before this, travel crossed only openings: two open places side by side, with no opening
+  between them, had no way between them.
+
+**In Ashford** (`tests/reference/tests/open_ground.rs`):
+- Erin walks from the yard into a 4 m garden plot across its edge, stands within it, and walks out
+  again.
+- She walks to a spot in the yard with no size, and is in it.
+- With the kitchen's front door shut and its walls standing, she has no way in.
+- With its walls brought down, she walks into the ruin over the rubble, not through its doorway
+  (narrowed for the test), and up to the table inside.
+
+**Rationale.** `docs/audits/mutable-world.md` §3, slice 5.
+
+---
+
+## A-31 — Collapse and mending (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (structures fail: what falls strikes; what is broken can be made whole)
+- Vol. III Ch. 2 §2.4 (harm: struck by what falls)
+- Appendix A (Ruling 9: damage and repair compose on one integrity)
+
+**Change.**
+- **Impact** (Physical; a report). When a walled place breaks into a ruin, every body inside it that
+  moves by itself is struck, as by a fall from as high as the walls stood. The report carries the
+  tick it happened. Living Systems judges it as it judges a fall (A-10), once per impact.
+- **What it was** (Physical; only its own systems write it). Breaking (A-27) records what a thing
+  or place was: its height, and whether it was solid, opaque, and walled.
+- **Mending** (Physical; Ruling 13). A decider proposes that a body mend a thing (`act.mend`). It is
+  carried out if all three hold:
+  - the thing is damaged;
+  - it is within reach, or it is the place the body stands in, or, for an opening, one of its faces
+    is within reach;
+  - the body holds a tool no softer than the thing's weakest material.
+
+  Otherwise it is refused. Each go restores the world's `mend_scale` from a hundred kilograms,
+  less, the more there is to mend (a walled place's walls, floor, and roof, as fire counts them).
+  Mending and damage to one thing in one tick both apply: integrity is additive (A-27).
+- **Made whole.** A broken thing whose integrity comes back whole is what it was again: as tall,
+  as solid, as opaque, and walled if it was walled. A ruin made whole has the doors and windows
+  that broke with it whole again, opaque, and able to be shut. Found among what changed, as
+  breaking is.
+
+**In Ashford** (`tests/reference/tests/mending.rs`):
+- The kitchen comes down on Bob. He is struck as by a 2.8 m fall, and hurt. Dave, upstairs, is
+  not in the kitchen and is untouched.
+- Carol smashes the crate. With bare hands she mends nothing. With the iron hammer, a few goes
+  make it whole: 40 cm tall and solid again, with nothing left to mend.
+- Bob, in the kitchen ruin with the hammer, rebuilds it (with a quicker `mend_scale`). It is
+  walled again, its front door is whole, and he can shut it.
+
+**Rationale.** `docs/audits/mutable-world.md` §1 (composition: "fire consuming a wall that
+soldiers are repairing").
+
+---
+
+## A-32 — Fire in the air (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 (environment: fire warms the air, fills it with smoke, and is fanned by wind)
+- Vol. III Ch. 2 §2.4 (harm: smoke)
+
+**Change.**
+- **Warmth.** A fire inside a walled place warms its air: the world's `fire_warmth_per_hour`
+  centidegrees at full fierceness for a hundred cubic metres, less in a bigger place. A kept
+  fire (A-28) warms as any other.
+- **Smoke** (Physical; only its own systems write it). How thick the smoke is in a walled place:
+  - It rises from every fire burning there that is not kept, by the world's `smoke_per_hour` at
+    full fierceness for a hundred cubic metres. A kept fire's smoke goes up its chimney.
+  - It clears by the world's `smoke_clear_per_hour` share of itself, and as much again for each of
+    the place's openings that stands open.
+  - In the open, or once a place's walls fall, there is none.
+- **Smoke and sight.** In a smoky place one sees only as far as the smoke lets one: at full smoke,
+  not at all.
+- **Smoke and breath** (Living). Health is lost at the world's `smoke_harm_per_hour`, in
+  proportion to the smoke where one stands, counted with burns.
+- **Fanning.** In the open, the wind fans a fire: at the world's `fire_fan_wind_cm_s`, to twice
+  what its fuel alone allows (never past full), and it carries the fire's heat twice as far.
+
+**In Ashford** (`tests/reference/tests/fire_air.rs`):
+- Six hours of a kept hearth warm the kitchen by more than 3 °C, with no smoke.
+- The kitchen table, set alight, fills the kitchen with smoke, thicker with the doors and window
+  shut than open.
+- At midnight in the shut-up kitchen, Bob sees the lamp by firelight, then loses it in the smoke,
+  and is hurt breathing it.
+- The burning hay wagon stays short of full in the Vale's breeze. A 10 m/s wind fans it to full.
+
+**Not yet:**
+- warmth carried from room to room, and smoke drifting through open doors to the next room.
+
+**Rationale.** A-28's "not yet": smoke, and fire warming the air.
+
+---
+
+## A-33 — Wind that moves things, and gales (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (loose things blown about) and §1.10 (storms the weather makes)
+- Appendix A (Ruling 13: a push is anyone's to give)
+
+**Change.**
+- **A push** (Physical; Ruling 13). A proposal that a thing move by `[x, y]` centimetres in its
+  place's frame (`act.push`). It is open to anyone (the wind, a shove), and pushes in one tick add
+  up. Physical Reality carries it out last of all it does in a tick, then clears it. A thing is
+  not pushed if, that tick:
+  - someone took hold of it;
+  - it broke or fell;
+  - it is already moving (it finishes that move first).
+
+  In a place with a size, a push stops at the place's edge.
+- **Carried off by the wind.** On the environment's cadence, a loose thing (one that is not solid)
+  standing in the open is carried downwind if the wind's pressure exceeds what its weight holds
+  (the world's `wind_hold_per_kg` for each kilogram). It is carried the world's
+  `wind_carry_cm_per_hour` per hour, scaled by how far the wind overwhelms its hold:
+  - downwind means toward the region the wind blows to, where both have a place in a common
+    frame;
+  - otherwise it goes a gust's way, drawn from the thing's own random stream.
+- **Gales from deep lows** (Physical; world rules). Where a region's pressure falls more than the
+  world's `gale_below` decapascals under normal, its wind rises by the world's
+  `gale_per_decapascal` cm/s for each decapascal deeper. It is the same as a declared storm's
+  (A-29): the wind is at least the gale's.
+
+**In Ashford** (`tests/reference/tests/wind.rs`):
+- In a 40 m/s gale the torch is carried more than 10 m across the yard, and stays in it. The crate,
+  solid, does not move.
+- A shove given the bottle moves it exactly as far as it was pushed, and the push is spent.
+- With weather that swings hard and a low gale threshold, a gale brews within two days with no
+  storm declared. With Ashford's own weather, in the same two days, none does.
+
+**Not yet:**
+- people pushed or knocked down by the wind;
+- fire carried downwind as embers;
+- storms and fire at the city tier.
+
+**Rationale.** A-29's "not yet": light, loose things blown about, and weather that brews its own
+storms.
+
+---
+
+## A-34 — The calendar: seasons, the sun's year, and the moon (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 (*Time and Change*: sunrise, sunset, and seasons built; the moon)
+- Vol. IV Ch. 2 §2.2 (world rules: the year, latitude, tilt, seasons, the moon)
+- Vol. IV (the world package: `[latitude]`)
+
+**Change.**
+- **The year** (world rules). A world declares how many days its year lasts (`year_days`; zero
+  means no year) and how many days after the spring equinox it begins (`start_day`). The sun's
+  declination follows the year as a sine of the world's axial tilt.
+- **Latitude** (Physical; world data). How far north a place lies, in hundredths of a degree. A
+  place declares one in `[latitude]` or inherits it down the nesting; else it lies at the world's.
+- **The sun.** Its height is `sin h = sin φ sin δ + cos φ cos δ cos(hour angle)`. Open ground is
+  lit at the world's peak times that height while the sun is up. So days lengthen toward
+  midsummer and shorten toward midwinter, noon stands lower in winter, and the far north has
+  midnight sun and polar night. With no year, at latitude zero, this is exactly the day the
+  engine had before.
+- **The seasons' warmth** (Physical). Every climate open to the sky warms toward midsummer and
+  cools toward midwinter by the world's `seasonal_amplitude_centi_c`, warmest
+  `seasonal_lag_days` after midsummer. It is reversed south of the equator, and damped by exposure
+  and thermal mass as the day's swing is. Like the day's swing, each step proposes the change in
+  the seasonal level, so it is exact at any tick length. A region's declared temperature is its
+  air on the world's first day.
+- **The moon.** A month of `lunar_month_seconds`; zero means no moon. It begins at
+  `moon_phase_at_start`. Its light at night is the world's `moonlight_peak` times how much of it
+  is lit times its height. It rises later each night, and a full moon stands opposite the sun.
+
+**In Ashford** (52° north, a 365-day year, beginning a month after the spring equinox, at new
+moon; `tests/reference/tests/climate.rs`):
+- The noon sun stands 49.6° high and lights open ground at 76% of its peak; the rooms by their
+  openings, in proportion.
+- The first day has fourteen hours of daylight; midsummer, two months on, sixteen and a half.
+- A year of seasons warms the Vale 7 °C by three months in and cools it 7 °C below its start by
+  nine; granite Highmoor answers less; a year on, both are back where they began. The same at
+  hour ticks and ten-minute ticks, exactly.
+- Under a full moon at midnight Erin can make out the apple tree across the yard; under the new
+  moon she cannot.
+- Dawn comes just before five: the hungry courier sets off for the tree an hour earlier than he
+  did when every day was an equinox.
+
+**Found:** a body lying down still sees. Before, dawn and the end of the sleeping hours fell
+together; now a late-April dawn shows a resting mind what it wants, and it gets up. That belongs
+with perception and is left to it. *(Settled by A-40: a body at rest has its eyes shut.)*
+
+**Rationale.** `docs/audits/environment.md` §4, slice 1.
+
+---
+
+## A-35 — The sky: the day's curve, cloud, rain and snow, and fog (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 (environmental state: cloud, precipitation, fog; the day's temperature)
+- Vol. III Ch. 1 §1.11 ("thick fog limits visibility": built)
+- Vol. IV Ch. 2 §2.2 (world rules), Vol. IV (the world package: `[humidity]`)
+
+**Change.**
+- **The day's curve.** A world declares when in the day its air is coldest and when warmest
+  (`diurnal_coldest_seconds`, `diurnal_warmest_seconds`). The swing rises straight from the one to
+  the other and falls straight back. At midnight and noon it is the curve the engine had.
+  A climate's declared temperature is the coldest of its day, as before. It begins as far above
+  that as the curve stands at the first moment.
+- **Humidity normals** (world data). A climate may declare its normal humidity in `[humidity]`;
+  else it is the world's baseline. Its weather departs from that normal as before. This is *the
+  air's* humidity.
+- **Cloud** (Physical; written by the sky). Cloud forms as the air's humidity passes the world's
+  `cloud_above`, and the sky is overcast by `rain_above`.
+  - It keeps out `cloud_shade` of the light: of the region's own sky, and of a room's, through its
+    openings.
+  - It holds back `cloud_damp` of the day's swing: cooler afternoons, milder nights. The sky
+    proposes the change in that share between its step's start and end, against the cloud it
+    committed last, so the share telescopes exactly however cloud comes and goes.
+- **Rain and snow** (Physical; written by the sky). Rain falls from air at `rain_above` or more:
+  `rain_per_hour` with the air saturated, less in proportion below that. At `snow_below_centi_c`
+  or colder, it falls as snow. Both are rates in hundredths of a millimetre an hour, absent when
+  nothing falls. Fire in the open is put out by either (A-28 now reads them, not the humidity).
+- **Humidity near the ground.** The humidity fact is now the air's humidity, raised by
+  `humidity_per_degree` for each degree the air stands below its day's mean, and lowered for each
+  degree above it. The day's mean takes cloud's share into account. So dawns are damp and
+  afternoons dry.
+- **Fog** (Physical; written by the sky). Fog forms where the humidity near the ground passes
+  `fog_above` in air stiller than `fog_wind_below_cm_s`: thicker toward saturation, thinner as
+  the wind rises. It lies over open ground, not in walled rooms.
+- **Thick air and sight.** How clear the air is in a place is what its smoke leaves (A-32) times
+  what its fog leaves. One sees only as far as the air about one lets one, and what is in thick
+  air is seen only from as near.
+
+**In Ashford** (coldest at five, warmest at three; Highmoor 75% humid, Southfen 80%;
+`tests/reference/tests/sky.rs`):
+- At 85% the Vale's sky is three-quarters cloud, and noon is 44% as bright as a clear noon.
+- Under a full overcast the day swings 2 °C, not 5.
+- With cloud coming and going over ten days, the Vale's air is at every step exactly its start,
+  plus the day's swing since, less the share of it the cloud then holds back.
+- At 95% it rains 5 mm an hour; declared at five below, the same air snows.
+- At 86%, still Southfen lies under fog at dawn, lifted by three.
+- At six in a damp dawn Erin cannot see the apple tree across the yard for fog, though it is
+  light enough; by noon she can.
+- With the coldest hour at dawn, Erin now feels the cold toward dawn, not in the late evening,
+  and by then it is light enough to see the way in.
+
+**Rationale.** `docs/audits/environment.md` §4, slice 2.
+
+---
+
+## A-36 — Wind and fronts: weather between climates (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 ("wind flows": wind from the weather; weather carried between climates)
+- Vol. IV Ch. 2 §2.2 (world rules: `wind_per_decapascal` replaces `wind_gradient_divisor`;
+  `climate_mixing_seconds`, `front_distance_cm`)
+
+**Change.**
+- **Wind from pressure at sea level.** Before, wind blew down the difference in neighbouring
+  climates' raw pressure. Pressure falls with height, so the wind always blew uphill, toward the
+  moor, however the weather stood. Now each climate's pressure is brought to the datum (its
+  elevation times the world's pressure fall per metre, added back) before neighbours are
+  compared. Height alone moves no air; the wind follows the weather, toward the lowest
+  neighbour. Its speed is the world's `wind_per_decapascal` for each decapascal of difference.
+  Declared storms and brewed gales (A-29, A-33) still set a floor.
+- **Fronts.** Each climate's weather (its departures from normal temperature, humidity, and
+  pressure) is mixed, before each step of its weather, with its neighbouring climates'. Each
+  neighbour weighs in:
+  - by the step's share of `climate_mixing_seconds`: weather everywhere slowly mixes;
+  - and, if the neighbour's wind blows toward this climate, by how far that wind travels in the
+    step, against `front_distance_cm`: weather rides the wind downwind.
+
+  The mix is a weighted mean, the climate's own weather at weight one, so it is stable at any
+  step length. Only departures cross: each climate keeps its own normal, so a moor stays colder
+  than a valley, but a cold spell on the moor is felt downwind.
+
+**In Ashford** (3 cm/s per decapascal; weather mixing over two days; neighbours 20 km apart;
+`tests/reference/tests/fronts.rs`, `climate.rs`):
+- With steady weather, pressure still falls with height, Southfen to the Vale to Highmoor, and
+  the air is still everywhere.
+- A low 200 decapascals deep over Highmoor draws the Vale's air toward it at about 6 m/s, and the
+  moor is calm. A high blows off the moor into the Vale instead.
+- A spell 6 °C cold over the moor under a high rides the wind down into the Vale, taking more than
+  2 °C off its weather within half a day, and reaches the fens beyond, less. Under a low the wind
+  blows the other way, and the Vale feels less than 1 °C of it, by slow mixing alone. With
+  fronts turned off, neither feels any.
+- With Ashford's own weather the wind is now a breeze of a few metres a second that comes and
+  goes, not a steady 35 cm/s up toward the moor. Tests that need still air declare steady
+  weather.
+
+**Rationale.** `docs/audits/environment.md` §4, slice 3; and the wind's old flaw, found in the
+building.
+
+---
+
+## A-37 — Air between places: warmth and smoke through openings (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 ("smoke diffuses": built between places; air quality outdoors)
+- Vol. IV Ch. 2 §2.2 (world rules: `opening_air_speed_cm_s`, `draught_percent`,
+  `open_air_height_cm`)
+
+**Change.**
+- **Air through openings.** Air passes both ways through every opening that stands open (a
+  broken door stands open), as fast as the opening's area times the speed air moves through it:
+  the world's natural draught (`opening_air_speed_cm_s`), and, where the opening gives onto open
+  air, `draught_percent` of the wind outside. An opening's two faces are one way.
+- **What holds air.** A walled place holds its floor area times its height. Open ground with a
+  size (a yard, a ruin) holds its area to the world's mixing height (`open_air_height_cm`). Anything
+  else is open air: too much to change, and it gives back only its own air.
+- **Warmth.** A walled room's air follows the outside through its walls, as before (A-5). It now
+  also trades with whatever lies beyond each open opening: the next room's air, or the open air's.
+  This is solved as a weighted mean in the room's own air, stable at any step length. An open
+  door lets the night in; a hearth's warmth climbs an open stair.
+- **Smoke.**
+  - It rises from what burns, except a kept fire (A-32), into the walled place around it, or into
+    the open ground the fire stands on if that holds air.
+  - It leaks away at `smoke_clear_per_hour`, now through walls and roof only. Over open ground the
+    wind also carries it off, at the wind's speed across the place.
+  - It trades through every open opening: the difference in smoke, times the air that passes,
+    shared out by how much air each side holds. So it drifts up a stair, out of a door, and in at
+    one from a smoky yard.
+  - Open ground's smoke shortens sight and harms breath, as a room's does (A-32, A-35).
+- Before this, an open opening only cleared a room's smoke faster, as if onto clean air, and
+  carried no warmth at all.
+
+**In Ashford** (5 cm/s draught; a tenth of the wind; smoke over open ground mixing ten metres
+up; the yard now declares its size, 40 m × 30 m; `tests/reference/tests/air.rs`):
+- Alice's kitchen begins the night at 20 °C. With its front door and window open, two hours on it
+  is much nearer the yard's air than when shut up behind its timber walls.
+- The house shut up, a kept fire in the hearth warms the bedroom up the stair and the cellar down
+  it.
+- The burning table's smoke drifts up the stair to the bedroom, thinner than in the kitchen.
+- The packing crate burning in the still yard smokes the air over it, and the smoke drifts in at
+  the kitchen's open door. Shut up, the house keeps it out. A 5 m/s wind carries most of it off.
+- Erin, making for the kitchen she remembers warm, finds its door has let the night in, and
+  climbs to the bedroom, where the warmth went.
+- With the doors shut, the kitchen's and the hall's swing is smaller than before, and later: each
+  also trades air with heavier rooms up and down its stairs.
+
+**Not yet:**
+- smoke production by how much is burning, not only how fiercely: a burning house smokes no more
+  than a torch at the same fierceness;
+- a plume: smoke over open ground is well mixed across the place, not thick downwind of the fire
+  and thin upwind.
+
+**Rationale.** `docs/audits/environment.md` §4, slice 4; A-32's "not yet".
+
+---
+
+## A-38 — Wet and snow (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 (environmental state: soil moisture; snow cover)
+- Vol. III Ch. 1 §1.9 (fire: wet things burn less readily)
+- Vol. III Ch. 2 (body heat: wind and wet hurry a body toward the air's temperature)
+- Vol. IV Ch. 2 §2.2 (world rules: `soak_per_mm`, `ground_drying_per_hour`,
+  `snow_melt_mm_per_degree_hour`, `wetting_per_hour`, `drying_per_hour`, `dry_by_heat_per_hour`;
+  Living's `chill_wind_cm_s`, `wet_chill_percent`)
+
+**Change.**
+- **Ground water** (Physical). How wet a climate's ground is. Rain soaks in at `soak_per_mm` for
+  each millimetre, and so does melting snow. It dries at `ground_drying_per_hour` times how dry
+  the air is, twice as fast in full sun, faster in wind. It does not dry under snow.
+- **Snow cover** (Physical). Snow builds ten times as deep as the water in it, and melts at
+  `snow_melt_mm_per_degree_hour` for each degree above freezing, into the ground.
+- **Wetness** (Physical; open to anyone, as a bucket may be thrown). How wet a thing or a body
+  is. Whatever stands in the open while rain or snow falls soaks, at `wetting_per_hour` in the
+  world's hardest rain, less in lighter. Everything wet dries as the ground does, slowly indoors
+  in a room's still, dim air.
+- **Wet things burn less readily.** A thing burns as its most flammable material, less as much as
+  it is wet. It catches from heat only by that, and a fire on it grows only to that. A flame
+  lights only what will burn at least as fiercely as a fire begins. A fire's heat dries what it
+  reaches, at `dry_by_heat_per_hour` at full heat, so a soaked thing beside a fire holds out
+  until it is dried.
+- **Chill** (Living). A body is pulled toward the air's temperature faster:
+  - by one again for every `chill_wind_cm_s` of wind on it. Living finds that wind as it finds the
+    air: walking up what encloses the body to its climate's wind, none once a wall stands
+    between, and only the declared share through a walled place open to the sky. (A per-body
+    wind report was tried first and dropped: the breeze changes every step, and a write for
+    every body outdoors every step is churn the world does not need.)
+  - by `wet_chill_percent` when soaked through, in proportion as it is wet.
+- Ground water, snow depth, and wetness are levels that vanish at zero. Any number of systems
+  may add to them or take from them in one tick: fire dries, rain wets.
+
+**In Ashford** (`tests/reference/tests/wet.rs`):
+- Three hours of 5 mm rain wet the Vale's ground by about 45%. On a dry spring day, half-wet
+  ground dries even at night, and faster under the sun.
+- Declared five below, saturated air lays 10 cm of snow in two hours, and the frozen ground takes
+  none of it. Twenty centimetres on the spring ground melt by noon, into the ground.
+- An hour of rain soaks the packing crate in the yard. The kitchen table stays dry.
+- Dry, the crate catches from the torch burning beside it. Soaked, it is still drying in the
+  torch's heat forty minutes on.
+- Three hours in a 20 m/s gale leave Erin's body colder than in still air, and colder still in
+  the gale and rain. Bob, in the kitchen with the house shut up, feels no wind. (With the front
+  door open he would be colder too, for the draught it lets in: A-37.)
+- Ashford's ordinary breezes of a few metres a second chill a body only a little: a gale of
+  20 m/s doubles how fast it takes the air's cold.
+- That little is enough to move people, through what they believe of the house's rooms (A-37).
+  Gwen, cold at dawn in a kitchen whose open door let the night in, goes down to the cellar she
+  remembers warmer; the love test keeps her ignorant of the cellar so she stays with Finn.
+  Erin, cold in the bedroom on her second morning, goes out into the yard the sun has warmed
+  first.
+
+**Not yet:**
+- deep snow slowing those who walk through it;
+- rivers, ponds, and flooding (A-39).
+
+**Rationale.** `docs/audits/environment.md` §4, slice 5.
+
+---
+
+## A-39 — Water: ponds, rivers, the sea, floods, and ice (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.10 (water level, rivers that flood, tides: built)
+- Vol. III Ch. 1 §1.11 ("water flows downhill": built for the world's declared watercourses)
+- Vol. IV Ch. 2 §2.2 (world rules: `tide_amplitude_cm`, `tidal_period_seconds`,
+  `ice_mm_per_degree_hour`, `wade_depth_cm`, `ice_bears_mm`)
+- Vol. IV (the world package: `[water]`, `[drains]`, `[floods]`)
+
+**Change.**
+- **Water** (world data). A place may be water:
+  `[water] place = pond|river|sea, depth cm, bank cm, land drained m², drain seconds`. These
+  give its depth at rest, the depth at which it tops its banks, the land whose rain runs into
+  it, and the time constant at which what stands above its rest flows on. `[drains] a = b`: a
+  pond or river flows on into `b`. `[floods] a = places`: the low ground it covers over its banks.
+- **Water level** (Physical), on the environment's cadence:
+  - The sea stands at its depth plus the tide: `tide_amplitude_cm` over `tidal_period_seconds`,
+    all of it at new and full moon, half at the quarters. What runs into the sea is lost in it.
+  - A pond or river takes in the rain on its own face, all of it. It takes in the rain and
+    melt-water on its land in proportion to how wet the land already is (A-38): dry ground
+    drinks it.
+  - It takes in whatever flows on into it, upstream first, within the same step. What stands
+    above its rest flows on downstream at its drain time.
+  - Each level is solved at the step's own end, so a river stands as high at any tick length.
+- **Floods** (Physical). Water above its banks covers the low ground it floods, as deep as it
+  stands above them. The flood rises and drains as fast as the water drains.
+- **Ice** (Physical). Ice forms on water at `ice_mm_per_degree_hour` for each degree of frost,
+  and melts at the same rate for each degree of thaw.
+- **Water stands in the way.** No one walks into water, or onto flooded ground, deeper than
+  `wade_depth_cm`, unless ice at least `ice_bears_mm` thick bears them. The way is found around
+  it if there is one, and reported blocked if not.
+- **What stands in water is soaked** (A-38): in water not frozen over, or on flooded ground.
+
+**In Ashford** (a pond in the manor grounds, a metre deep; the River Brack past the mill, knee
+deep, 300 hectares draining into it, running to the sea; the sea at the harbour, five metres at
+mean tide; `tests/reference/tests/water.rs`):
+- At new moon the sea rises and falls three metres, high again 12 h 25 min after the first high.
+  At the first quarter it rises and falls half as much.
+- An hour of the hardest rain on land already soaked swells the Brack over its banks and floods
+  the far field more than half a metre deep. On dry land the ground drinks it, and the Brack
+  stays in its banks. The same at minute and ten-minute ticks.
+- Erin, setting out for the far field a kilometre off, finds no way into it while it is flooded.
+  Dry, she gets there.
+- The manor's pond is too deep to wade. In a hard frost it freezes thick enough by midday that
+  Erin walks out onto it.
+- The hammer, dropped in the Brack on a dry day, is wet through at once.
+
+**Not yet:**
+- people and things carried off by floodwater, or drowning;
+- boats that float on the water's level;
+- walking slowed by deep snow and shallow water.
+
+**Rationale.** `docs/audits/environment.md` §4, slice 6.
+
+---
+
+## A-40 — Shut eyes: what gets a sleeper up (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 (*What is in view*: a body at rest has its eyes shut; a place seen whole)
+- Appendix A (Ruling 15: Physical Reality reads the rest intent too)
+- Vol. II Ch. 4 (*The Layer as Built*: a sleeper knows only what it feels and holds; *Absence can
+  be seen* only in a place seen whole)
+- Vol. V Ch. 9 §9.3 (minds that sleep: what gets a sleeper up)
+
+**Change.**
+- **A body at rest has its eyes shut** (Physical). Sight reads Living Systems' rest intent,
+  `living.act.rest`, by its id, as it already reads the sight range. A body asked to rest that is
+  still sees nothing. *Still* is the test Living uses to judge a rest (Ruling 15): not moving,
+  and not setting off. Only what the body holds stays in its view, known by touch (A-13). When it
+  gets up, or is moved, its eyes open and it sees again at the next sight step. In this engine,
+  resting and sleeping are one state.
+- **What it saw becomes memory** (Information). Nothing new is needed here. As a sleeper's view
+  empties, each belief about what it saw is stamped with the moment it was last seen, as for
+  anything lost from sight. It grows no fonder of those it cannot see, though a longing is still
+  eased by lying in the same place as its object. It still feels itself: the cold, hunger,
+  fatigue, its needs, and what it holds.
+- **Light alone wakes no one.** No felt fact of light is added, and first light gets no one up.
+  The world's sleeping hours (A-18) say when its people rise. A sleeper woken by the light would
+  be up before four at Ashford's midsummer, two hours before the town's hours end. A winter
+  morning is no different: a sleeper gets up at the end of the hours, in the dark. Out of the
+  sleeping hours, a sleeper gets up once rested, as before.
+- **In the sleeping hours, only what presses gets a sleeper up** (Minds). That is the cold,
+  hunger, a longing or a craving, a routine, or work, each scored as always against staying put.
+  A want or curiosity does not: they fill the hours when nothing presses (A-19). This holds even
+  for a want the sleeper already knows of. Out of the sleeping hours, anything worth more than
+  staying put gets a sleeper up, as before. Lying down is unchanged: a want may still keep a mind
+  up past its bedtime.
+- **A place seen whole** (Physical). With what is in view, Sight now publishes the place a body
+  took in whole, if any: `physical.sense.seen_whole`, written only when it changes. A body takes
+  in the place it stands in when:
+  - the place is lit;
+  - every corner of its floor is within the body's sight, as far as the air there lets one see;
+  - nothing in it could hide anything: no wall, nothing opaque, no rising ground.
+
+  A place with no size has no corners to reach, and is never seen whole. Eyes shut, a body takes
+  in nothing. The place stays in the body's view when lit (A-11), as before.
+- **Absence needs a place seen whole** (Information). A mind concludes that a thing it believed
+  here is not here (A-11) only when the place Physical says it took in whole is the place it
+  stands in. The marker names the place the view was taken in, so the first view after a mind
+  walks somewhere new, still taken from where it came from, decides nothing.
+
+**In Ashford** (`tests/reference/tests/needs.rs`, `perception.rs`):
+- Erin lies down in the yard in the small hours of a late-April night, sleeps through a sunrise
+  just before five, and gets up at six, rested. The test runs on Ashford's own calendar again,
+  not at the equinox.
+- The green bottle lies five metres from her in the dawn light. It is glass, which she likes.
+  Asleep, she has nothing in view, and she sleeps on. Up at six, she goes in from the cold, then
+  comes back out for the bottle. (Before, it got her up at twenty to six.)
+- Put into her hand as she sleeps, the bottle is known by touch: glass, and no one's. Still she
+  sleeps till six, and then claims it.
+- At noon Erin sees the bottle, goes into the kitchen, and comes back out to the doorstep, where
+  the house hides it. She still believes it lies in the yard. In the kitchen, which she takes in
+  whole, Dave still sees that Bob is gone.
+
+**Found:**
+- **Absence ignored what stands in a place, and when the view was taken.** A-11 let a mind
+  conclude a thing was gone whenever its place was lit and in view. The yard has had the house
+  standing in it since A-37. Erin, back on the doorstep for the bottle she saw at dawn, could not
+  see it round the house, and let it go. She never went for it again. Worse, the first view after
+  any step through a door was the one taken from the far side: from the kitchen she had seen the
+  yard through the doorway, so the yard counted as in view. Before this amendment, Erin claimed
+  the bottle at dawn from where she lay, and neither fault showed. The wants test caught it.
+- **Love takes a day longer.** Finn and Gwen used to watch each other for an hour from where
+  they lay, from first light until the sleeping hours ended. That no longer counts as time
+  together, and they become lovers on the third day, not the second (`love.rs`).
+
+**Not yet:**
+- noise, pain, smoke or fire waking a sleeper; nothing yet sends a mind away from a fire;
+- waking with the sun, for a world whose people do;
+- lying awake: resting with open eyes;
+- absence on open ground or in a big hall: a mind there never concludes a thing is gone, even when
+  the spot where it lay is in plain view. Beliefs hold places, not spots.
+
+**Rationale.** A-34 found that a body lying down still saw. When the calendar moved Ashford's
+dawn before the end of its sleeping hours, the first light showed a resting mind something it
+wanted, and it got up for a bottle.
+
+---
+
+## A-41 — Taking from deposits: tools, effort, grade, and renewal (2026-10)
+
+**Edits:**
+- Vol. III Ch. 3 §3.4 (yield as a function of grade, capability, and method; the four renewal
+  classes: built)
+- Vol. III Ch. 1 §1.9 (a tool no softer than what it works)
+- Vol. IV Ch. 2 §2.2 (world rules: `bare_hand_hardness`), Vol. IV (deposits' `renewal`, `floor`,
+  `grade`, `difficulty`, `grows`; `[ground_water]`)
+
+**Change.**
+- **One way to take from a deposit.** A go at a deposit (`act.pick`, A-15) needs, within reach, a
+  hand or a tool fit for what the deposit yields. A bare hand works only what is no harder than
+  the world's `bare_hand_hardness`: fruit, berries, wheat. Anything harder needs a tool no softer
+  than it: a hammer for ore, an edge for timber. With nothing fit, the go is refused.
+- **Effort** (Physical; a report). Each go's effort is reported with it: the hardest blow the body
+  lands with what is fit, as a strike is judged (A-27), by strength and the tool's weight, never
+  harder than the tool.
+- **Work** (Resources). A deposit's `difficulty` is the work each unit takes at full grade. Its
+  `grade` divides that, so a seam half as rich takes twice the work. Each go's effort goes toward
+  the next unit, whoever's go it is. The go that completes it takes one unit from the stock into
+  that hand. One go yields one unit at most. A deposit with no difficulty yields a unit to every
+  go, as before.
+- **Renewal** (Resources; world data per deposit):
+  - *nonrenewable*: never regrows;
+  - *renewable* (the default, as before): regrows at its daily rate up to its cap;
+  - *threshold*: as renewable, until it is taken below its `floor`; then it has collapsed, and
+    never regrows again;
+  - *flow*: refills to its cap at each renewal, and cannot be stockpiled at the source.
+- **Growing things** (Resources). A renewable or threshold deposit that `grows` regrows only as
+  warm as it stands between its two temperatures, and only as much as its climate's ground holds
+  the water it needs (A-38).
+- **Ground water at the start** (world data): `[ground_water] climate = level`. Ground that
+  began bone dry would grow nothing until it rained.
+
+**In Ashford** (`tests/reference/tests/extract.rs`):
+- An iron seam (grade 60%) and a poorer copper seam in the mine's deep gallery, nonrenewable;
+  a stand of timber in the wood (threshold: floor ten logs; it grows); wheat on the farm (it
+  grows); iron ore, copper ore, and wheat as materials. Bare hands work what is no harder than
+  soil. The Vale's ground begins at 40% wet, Highmoor's 60%, Southfen's 80%.
+- Carol cannot work the iron seam with her hands. With the hammer, a few blows bring a lump of
+  ore away, and the seam holds one fewer.
+- Carol works it in fewer blows than Erin; at half the grade, it takes her about twice as many.
+- Three days on, the seam has not regrown.
+- Felled to its floor, the stand regrows a log a day. Felled one below it, it never regrows.
+- In three spring days the wheat ripens by half again. In frost, or on dry ground, it does not
+  grow at all.
+- Brambles declared to flow are back to their full eight at the next renewal.
+
+**Not yet:** digging the ground (A-42).
+
+**Rationale.** `docs/audits/resources.md`, slice R2 (built first: digging is taking from a pit).
+
+---
+
+## A-42 — Ground and quarries (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (what the ground is made of)
+- Vol. III Ch. 3 §3.4 (deposits opened by digging)
+- Vol. IV Ch. 2 §2.2 (world rules: `pit_half_width_cm`), Vol. IV (`[ground]`, `[quarry]`, the
+  `paved` flag)
+
+**Change.**
+- **Ground** (Physical; world data). `[ground] place = material`: what a place's ground is made
+  of, inherited down the nesting as climate is. The Hill's mine mouth stands on the Hill's
+  granite.
+- **Paved** (Physical; world data). A place flagged `paved` is not to be dug: cobbles, floors.
+- **Digging** (`act.dig`, open to any decider; Physical carries it out). A body digs the ground
+  where it stands, if there is ground to dig. There is none:
+  - inside a thing, or in a walled place;
+  - in water, on flooded ground, on ice;
+  - on paved ground;
+  - where nothing up the nesting declares a ground.
+
+  It digs at a pit within its reach that is not dug bare, the lowest first. If there is none, it
+  breaks a new pit where it stands: a thing in the place, `pit_half_width_cm` to either side,
+  made of the ground's material. Either way the dig is a go at that pit, as a pick is (A-41): a
+  hand or a tool fit for the ground, and its effort reported.
+- **Quarries** (Resources). A pit not yet a deposit becomes one. It is nonrenewable, holding
+  what the world declares for a pit in that ground: `[quarry] material = units, unit size, work
+  per unit`. The dig that breaks ground yields nothing of itself. When a pit is dug bare it stays
+  where it is, and the next dig beside it breaks a new one.
+
+**In Ashford** (the Vale and Southfen on clay, Highmoor and the Hill on granite; granite pits hold
+5,000 blocks of ten kilos at hard work; clay pits a hundred thousand spadefuls by hand; the
+Lanes cobbled; `tests/reference/tests/quarry.rs`):
+- At the mine mouth, Carol's first blow with the hammer breaks ground, and the pit gives a granite
+  block every few blows after. The pit holds one fewer.
+- Without a tool she cannot break the granite, and no pit is dug. Erin, in the yard, digs clay by
+  hand: the first dig breaks ground, the second brings it up.
+- Nothing is dug in the kitchen, on the Lanes' cobbles, or in the Brack.
+- In pits that hold two spadefuls, the third spadeful comes from a second pit beside the first.
+
+**Rationale.** `docs/audits/resources.md`, slice R1: "stone anywhere the ground is stone."
+
+---
+
+## A-43 — The chains: heat, power, tools, and what a making yields (2026-10)
+
+**Edits:**
+- Vol. III Ch. 4 §4.4 (production: what a making needs besides its inputs)
+- Vol. IV (recipes' `heat`, `power`, `wind`, `tool`, `count`)
+
+**Change.** A recipe (A-17) may also need, and Economy judges it when the making begins:
+- **heat**: its workplace burning (A-28): an oven, a kiln, a forge. Cold, it is refused
+  ("no fire").
+- **power from water**: the water that turns its mill must be running, at or above its normal
+  level and not frozen over (A-39). Otherwise it is refused.
+- **power from wind**: at least so much wind at the workplace (A-36).
+- **a tool**: something the maker holds, not used up in the making, no softer than the recipe
+  asks: an edge for sawing.
+- **count**: how many things it makes at once. Absent, one.
+
+The inputs still leave the world as the making begins, and what is made arrives when its time is
+up (A-17).
+
+**In Ashford** (`tests/reference/tests/chains.rs`):
+- Copper and charcoal as materials.
+- Workplaces:
+  - a millstone in the mill, turned by the Brack;
+  - a bread oven beside it;
+  - a sawpit and a charcoal kiln in the wood;
+  - a forge in the miners' cabin on the Hill.
+- The oven, the kiln, and the forge are kept burning.
+- The mill and the farmhouse get doors: before, nothing could have come in or gone out.
+- Recipes:
+  - flour from four sheaves of wheat, while the Brack turns the mill;
+  - bread from two scoops of flour, in the burning oven;
+  - four planks sawn from a log, with an edge to hand;
+  - two lumps of charcoal from two logs, in the burning kiln;
+  - an iron bar from two lumps of ore and one of charcoal at the forge, and a copper bar the
+    same way.
+
+What the tests show:
+- The miller bakes a loaf from two scoops of flour in half an hour. With the oven cold, he
+  cannot.
+- He grinds four sheaves into a scoop of flour in ten minutes. In a hard frost, once the Brack
+  has iced over, the wheel stands still.
+- Carol fells a log and saws it into four planks with the hammer in hand. Without it, the log
+  stays a log.
+- Two logs in the kiln give two lumps of charcoal in an hour.
+- At the forge, two lumps of ore and one of charcoal give an iron bar in an hour.
+
+**Not yet:** who does this work of their own accord, and the flour bin and the miller's loaves
+still filling themselves (A-45).
+
+**Rationale.** `docs/audits/resources.md`, slice R3.
+
+---
+
+## A-44 — Mending takes material (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (mending, A-31: what it uses up)
+- Vol. I (conservation: nothing is mended out of nothing)
+
+**Change.**
+- **Each go at mending uses up the thing's stuff**: its weakest material, the one that gave way,
+  in proportion to what the go restores. A go that restores a share of a thing takes that share of
+  its weight. The stuff comes from:
+  - what is laid by for it ([`MEND_MATERIAL`], grams, on the thing): stuff brought to it on
+    earlier goes and not yet worked in;
+  - then loose pieces made of that material alone, held by the mender first, then lying within
+    reach. Not the thing itself, nor a fixture, nor anything that moves by itself. Lowest ids
+    first, whole pieces, until the go has enough. What is over is laid by.
+- With less than a go needs, it restores what that much allows. With none, the go is refused,
+  as it is without a tool.
+- **A ruin counts as the shell it was** (structure, A-28/A-29/A-31): its walls, floor, and roof,
+  not a solid block of its size. Before this, a fallen house's mass was counted as a solid block
+  of timber its size, 196 tonnes for Alice's kitchen. That made each go at rebuilding it restore
+  a sliver, and it would have made rebuilding take four times the timber the house was built
+  from.
+
+**In Ashford** (`tests/reference/tests/mending.rs`):
+- Carol mends the smashed crate with the hammer from a stack of seven-kilo boards beside it. Six
+  or seven go into it, the 45 kilos its wreckage weighs, with the remainder laid by.
+- Bob rebuilds the kitchen's ruin from eighty half-tonne beams piled by him. About 78 of them go
+  into the 44 tonnes of its walls, floor, and roof. With a hammer and no timber, he is refused.
+
+**Rationale.** `docs/audits/resources.md`, slice R4: "repairing a house should take the
+materials it needs."
+
+## A-45 — Agents get what they need: tools, digging, the mill's jobs, and repair (2026-10)
+
+**Edits:**
+- Vol. II Ch. 3 (perception: what is seen of hardness, wholeness, fixtures, places, and ground)
+- Vol. II Ch. 5 (minds: work that extracts, digging, open ground, and the want to repair)
+- Vol. III Ch. 3 (who takes from deposits: the labour is the organism's)
+- Appendix B (Ashford's Millside: the farmer, the miller, and the baker at work)
+
+**Change.**
+- **What is seen** (Information). Perception adds, as beliefs about pairs:
+  - how hard a material is, seen in what is made of it, or known from a deposit's yield;
+  - how whole a thing is (absent: whole, as far as one knows);
+  - whether a thing is a **fixture**: solid, a body in the way, not a piece to carry off and use.
+    Written only for what is one;
+  - for a place, whether it is **walled** (`false`: open ground, entered anywhere along its
+    edge), and for the place underfoot, what its **ground** is made of.
+
+  Starting knowledge gives the same for what a mind knows at the start.
+- **Open ground** (minds). A mind's map joins a place it believes unwalled to the place around
+  it, with no opening between them. A blocked mind heads for the first *opening* on its way,
+  skipping steps across open ground. The farmer walks from his field to the mill across Millside.
+- **A tool for the work** (minds). Work on something harder than a bare hand works (Physical's
+  rule, A-41, now one of the mind's rules) first fetches a tool:
+  - one it carries believed no softer;
+  - else the nearest it knows of that is not someone else's, a fixture, an opening, a place, or
+    a deposit.
+
+  With none to be had, the work is let go.
+- **What counts as a source** (minds). A deposit believed to bear the material, or a **piece**:
+  a thing believed made of that material and nothing else, not a fixture, an opening, or a
+  place, and never what the mind is working on. Before this, any thing with the material among
+  its parts would do: a door with timber in it, for timber. Where nothing of it is known, a mind
+  **digs** it, at the nearest place it believes has ground of it (A-42): it stands there, digs
+  go after go, and carries off what comes up.
+- **Repair** (minds; a want, beside A-19's). A mind believes a thing damaged when it believes it
+  less than whole. If the thing is its own, its household's, or its home, it may mend it. The
+  want is worth `rules.minds.repair_value`, less the way there, and it does not press like
+  hunger.
+  - It fetches a tool fit for the thing's weakest material.
+  - It fetches a piece of that material, from a store or a source, digging it if need be.
+  - It goes to the thing (into it, if it is a place; else up beside it) and mends, go after go.
+    Each go uses up what it takes (A-44).
+  - Done once it believes the thing whole. Given up if no tool or no material is to be had.
+- **Millside feeds itself** (Ashford).
+  - The farmer carries wheat from his field to the mill (job 962).
+  - The miller grinds it while the Brack turns his wheel (job 963).
+  - His daughter, the baker, bakes the flour into bread at the oven (job 964).
+  - The miller's loaves and the flour bin no longer fill themselves.
+  - Grinding takes two sheaves to a scoop, and a loaf takes one scoop. The field holds up to
+    200 sheaves and ripens 40 a day in season.
+  - The manor pantry, the Heron's stores, the fish barrel, and the farmhouse larder are marked as
+    stand-ins for trade and kitchens not yet built.
+
+**In Ashford** (`tests/reference/tests/labour.rs`):
+- Over two days at ten-minute ticks, the farmer crosses to the mill with wheat. The miller grinds
+  and the baker bakes, and neither goes hungry.
+- Carol, set to carry iron ore from the seam to the mine mouth, fetches the hammer first: ore is
+  too hard for a hand.
+- Erin, set to carry clay to the kitchen with none lying anywhere she knows, digs it from the
+  yard's clay by hand and carries it in.
+- Carol mends her half-smashed crate. She wakes at dawn and takes up the hammer. She mends with
+  the timber torch beside the crate, then with logs from a woodpile, one at a time, until the
+  crate is whole. She never tries the shed or the wardrobe (fixtures) or the front door (an
+  opening).
+
+**Rationale.** `docs/audits/resources.md`, slice R5: "there is currently no way for agents to
+get these resources."
+
+## A-46 — Use wears things (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (integrity: what use costs a tool and a workplace)
+- Vol. III Ch. 4 §4.4 (making: a workplace worn through makes nothing)
+- Vol. II Ch. 5 (minds: when a thing is worth mending)
+
+**Change.**
+- **A go of work wears the tool that does it** (Physical, Act). A go at a deposit or a pit that
+  needs a tool, and a go of mending, each cost the tool integrity: `rules.physical.tool_wear`
+  for stuff as hard as the tool, less in proportion for softer stuff. Iron on ore (two-thirds
+  as hard) wears twice as fast as iron on timber (a third). The tool is the one that does the
+  go: for extraction, the one that lands the hardest blow (a bare hand, if it lands as hard);
+  for mending, the hardest held that is hard enough, since it wears least.
+- **A tool worn to nothing is used up.** It is gone, like food eaten, not left as wreckage: what
+  was left of it is spent. With it gone, the next go is judged without it.
+- **A workplace wears while something is in the making at it** (Physical, a new system, Wear).
+  The rate is world data (`[wear] workplace = hundredths of a percent an hour`), because a
+  millstone needs dressing far more often than an oven wears. Physical reads Economy's
+  `economy.making` and `economy.recipe.at` by their published ids. Two makers at one workplace
+  wear it twice as fast. The wear is the same at any tick length (Law 14).
+- **A workplace worn through breaks**, as anything does that reaches nothing (A-27). Economy
+  refuses to make anything at a broken workplace (`workplace_broken`) until it is mended
+  (A-31, A-44).
+- **Bare hands mend what bare hands work.** Mending needed a tool even for clay. A thing no
+  harder than `bare_hand_hardness` (A-41) is now mended by hand, as it is worked by hand. Minds
+  already assumed this (A-45), and were refused.
+- **A little wear is not worth stopping for** (minds). The repair want (A-45) starts only once a
+  thing is believed below `rules.minds.repair_below`. Once begun, it goes on until the thing is
+  whole.
+
+**In Ashford** (`tests/reference/tests/wear.rs`; `tool_wear = 30`, `repair_below = 9500`):
+- Ten goes of the hammer at the iron seam cost it 2%, and ten at the stand of timber 1%.
+- A hammer all but worn out is spent by one more go at the seam, and the next go is refused.
+- A millstone worn 6% an hour in use loses 1% in ten minutes' grinding and nothing standing
+  idle, the same at minute and ten-second ticks. One all but worn through breaks in its next
+  grinding and grinds nothing after.
+- The baker mends the cracked clay oven by hand with three lumps of clay. The third go is
+  refused: the clay is used up.
+- The miller lets his millstone be at 3% worn. At 8% worn, past Ashford's 5% line, he mends it
+  whole with some two dozen ten-kilo granite blocks and the hammer.
+
+**Rationale.** `docs/audits/resources.md` §9, F2: nothing used iron, blocks, or clay once made,
+so the trades that make them would work a day and stand idle.
+
+## A-47 — Every store filled by someone (2026-10)
+
+**Edits:**
+- Appendix B (Ashford: the trades, its workplaces' owners and wear, fish, and every
+  self-filling store retired)
+- Vol. II Ch. 5 (minds: a given-up repair taken up again)
+- Vol. III Ch. 1 §1.11 (travel: the way to a room whose door opens from beside its house)
+
+**Change.**
+- **Nothing made fills itself in Ashford.** The manor pantry, the farmhouse larder, the Heron's
+  stores, the fish barrel, and the cellar's apple crate keep what they hold and no longer
+  regrow. What renews is what grows: fruit, berries, wheat, timber, and fish.
+- **The trades** (jobs, each keeping a store):
+  - Jory mines iron ore and brings it to the miners' cabin.
+  - Kit fells logs and burns charcoal at the kiln for the same cabin.
+  - The villager keeps the smithy: iron bars, the tools anyone takes up when theirs wears out
+    (A-46).
+  - Nell quarries granite on the Hill for the millstone.
+  - The hiker cuts wood and stacks it on a woodpile in Alice's yard, for mending.
+  - The steward fetches the manor's bread from the mill.
+  - Gwen lays apples by in the cellar.
+
+  Each trade starts with its own tool, owned and in hand. The miller's pick lies in the mill.
+- **Workplaces have owners, and wear** (`[wear]`, A-46):
+  - the millstone is the miller's (0.5% an hour of grinding);
+  - the oven is the baker's (0.1%);
+  - the kiln is Kit's (0.1%);
+  - the forge is the smith's (0.2%);
+  - the sawpit is the woodcutter's.
+- **Fish.** A shoal off the quay, which the guard fishes, and the Heron's nets over her side,
+  which her crew haul. Both are living stocks.
+- **A given-up repair is taken up again once it can be done** (minds). A mind gave up mending
+  for want of a tool or the stuff, and a give-up lifted only when it learned the thing had moved.
+  A crate never moves, so it was never retried. Now the repair is taken up again once the mind
+  believes it has both a tool fit for it and a piece of its stuff, or a place to get one.
+
+**Found and fixed along the way:**
+- **The way into a room whose door opens from beside its house.** The manor's hall is in the
+  manor house, but its door opens from the grounds. Travel steps into open places only along
+  two lines of containers: up from where one is, down toward where one is going (A-30). The
+  grounds lie on neither, so the hall could be left but never re-entered from outside. Travel
+  now also steps down toward any opening that leads onto that line, found from the index of
+  where openings lead.
+- **Pits blew away.** A pit (A-42) has a footprint and no height, so it weighs nothing, and the
+  wind carried it off (A-33). The quarrywoman followed hers across the Hill. A pit is a hole in
+  the ground: neither wind nor a push moves it.
+- **The forge stood where one comes in.** One entering a place with no size stands at its middle,
+  and the cabin's forge, a solid, stood there. The forge is moved. Travel still sets a body down
+  in a sizeless place without looking for solids there; this is open.
+- **A gallery colder than the hill flipped a miner every tick.** In the deep gallery at 11 °C,
+  Jory felt cold enough that warmth outside outweighed work. Outside, warmth was met at once and
+  work won; back inside, he was cold again. Minds have no hysteresis between warmth and work, and
+  most of Ashford in spring leaves a body just below the cold line. This is open. Ashford's
+  gallery is now as warm as the rock keeps it, 15 °C.
+
+**Not done.** Minds count their patience in ticks, and a go of work is one go a tick (A-41). At
+ten-minute ticks, ore that takes a dozen blows takes hours: a week at ten-minute ticks mines a
+handful of lumps where minute ticks mine a dozen a day. Law 14 holds for the world and not for
+labour. The trades are tested at minute ticks; the week checks that each is worked.
+
+**In Ashford** (`tests/reference/tests/labour.rs`, `week.rs`):
+- No deposit of anything made renews.
+- In a working day at minute ticks: Jory mines about fourteen lumps and Kit burns seven
+  batches of charcoal. The smith makes bars, Nell brings granite to the mill, and the woodcutter
+  stacks logs on the woodpile.
+- Over two days the steward brings bread to the hall. With the ship's stores and the barrel bare,
+  the guard and the Heron's crew eat fish and none goes hungry.
+- After a gale tears 30% off Carol's crate, she mends it whole from the woodpile.
+- A week, nobody directed: nobody starves; every trade is worked; the iron seam is smaller at the
+  week's end and never regrows; the millstone wears.
+
+**Rationale.** `docs/audits/resources.md` §9, F3 and F4.
+
+## A-48 — Work that keeps time (2026-10)
+
+**Edits:**
+- Vol. III Ch. 1 §1.9 (acts of work: how long a go is; the carry limit)
+- Vol. III Ch. 3 (taking from deposits: every unit the work completes)
+- Vol. II Ch. 5 (minds: what a step of work asks for)
+- Law 14 (tick-length invariance), for labour
+
+**Change.**
+- **A go of work lasts the tick** (Physical, Act). Taking from a deposit, digging, and mending are
+  each done for the tick's length: as many goes as fit, each `rules.physical.go_seconds` long,
+  dithered so no fraction is lost over many ticks. At one-minute ticks a go is twelve blows; at
+  ten-minute ticks, a hundred and twenty; at one-second ticks, a fifth of one. Act reports the
+  goes (`physical.body.pick_goes`) with a go's effort. Tools wear by the go (A-46). Mending
+  restores what that many goes restore, with stuff for all of it (A-44).
+- **A deposit yields every unit the work completes** (Resources), not one at most. A unit takes
+  at least one go: fruit is a handful a go, not a tree a tick. Work beyond a unit's worth is not
+  banked.
+- **No more than the hands have room for.** The carry limit (A-12) counts everything held
+  together, not each thing alone. Act reports how many more units of a deposit's yield the hands
+  have room for (`physical.body.pick_room`), and the deposit yields no more. With no room, the go
+  is refused, and the refusal names the body itself: its hands are full.
+- **No more than asked.** A decider may limit what a go brings (`physical.act.pick_up_to`); the
+  limit lasts the go it was asked with.
+- **A load is set down in one go.** `physical.act.drop` holds a set: everything asked is put down
+  in the one tick.
+- **Minds ask for a tick's work at a time.**
+  - A mind asks for as many units as it wants: one to eat, what the store lacks for a job.
+  - It takes its work up again once it has seen the last go's yield, so no more is fetched than
+    wanted.
+  - With its hands full, it takes the load to the store.
+  - It sets down a whole load at once: everything carried made of the same stuff, held on the
+    same terms.
+- **A fresh intent outlives the clearing of the old one, whatever it holds.** A number or a yes
+  composes as an entity intent does (A-9).
+- **Ashford:**
+  - a go is five seconds;
+  - lumps of ore are 3.6 kilos, not 16, so a smith can carry the two a bar needs;
+  - charcoal burns from one log, not two (two logs are more than anyone carries).
+
+**What it does not do.** A decision still takes a few ticks: act, perceive, decide. At coarse
+ticks each step of a plan costs those ticks, so a cycle of fetch, work, carry, and set down still
+takes longer in game time at ten-minute ticks than at one-minute ticks. Each step now commands a
+tick's work and a whole load, so the gap is a few steps' delay, not every blow and every thing set
+down.
+
+**In Ashford** (`tests/reference/tests/work_time.rs`; restated: `extract.rs`, `things.rs`,
+`wear.rs`, `chains.rs`):
+- A minute's picking brings twelve apples, at five-second ticks or at one-minute ticks.
+- Ten minutes at the iron seam bring the same ore at one-minute and at ten-minute ticks.
+- With the hammer, six lumps of ore fill Carol's 25-kilo carry; the next go is refused, her hands
+  full.
+- Six lumps are set down in one tick.
+- A minute of the hammer at the seam wears it twice what a minute at the timber does.
+
+**Found along the way.** "Keep at it every tick" over-fetched. A mind that re-asked before the
+last yield arrived got several meals for one breakfast. A city resident carrying the spare could
+not cross back to the city tier, since carrying things across the seam is not built. Minds wait
+to see each go's yield.
+
+**Rationale.** `docs/audits/two-towns.md`, T1.

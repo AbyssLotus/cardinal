@@ -45,7 +45,7 @@ humidity_variability = 800
 pressure_sea_level = 10130
 pressure_elevation_factor = 1
 pressure_variability = 60
-wind_gradient_divisor = 10
+wind_per_decapascal = 3             # 3 cm/s of wind per decapascal between neighbours at sea level (A-36)
 fall_danger_per_meter = 1500
 thermal_mass_reference = 2000
 gravity_cm_s2 = 981
@@ -57,6 +57,69 @@ indoor_coupling_seconds = 14400
 sight_step_seconds = 1              # what each body can see, refreshed every second
 sight_min_illumination = 50         # below 0.5% of full daylight, nothing can be made out
 carry_limit_kg = 25                 # the most anyone can carry
+hand_strike_percent = 50            # a fist lands at half one's strength (Amendment A-27)
+tool_strike_percent_per_kg = 50     # each kilogram of a tool in hand adds half again
+strike_scale = 300                  # how much a blow harder than the weakest material breaks
+wreckage_height_cm = 20             # what is broken lies flat
+mend_scale = 300                    # with a tool, a crate is mended whole in a few goes (A-31)
+fire_step_seconds = 10              # fire takes its course every ten seconds (Amendment A-28)
+fire_grow_per_hour = 20000          # a fire takes hold over a quarter of an hour
+burn_per_hour = 30000               # a full fire eats 100 kg of fuel in twenty minutes
+fire_reach_cm = 300                 # and throws its heat three metres
+ignition_heat = 3000                # heat times flammability at which a thing catches
+ignite_intensity = 2000             # how a fire starts
+rain_above = 9000                   # the air's humidity past which it rains, or snows (A-35)
+douse_per_hour = 40000              # and rain puts a fire out within the quarter hour
+wall_thickness_cm = 20              # a room's walls, floor, and roof: what of it burns
+fire_warmth_per_hour = 2000         # a full fire warms 100 m3 of walled air 20 degrees an hour (A-32)
+smoke_per_hour = 40000              # and fills it with smoke within a quarter hour
+smoke_clear_per_hour = 5000         # half the smoke clears in an hour, faster for each open door
+fire_fan_wind_cm_s = 1000           # a 10 m/s wind doubles a fire in the open, and its reach
+wind_force_divisor = 3200           # a 40 m/s gale presses at 50%: past timber, short of granite (A-29)
+wind_damage_scale = 16              # and tears down a timber shed within the couple of hours it blows
+wind_hold_per_kg = 100              # a kilogram holds its place against 1% of pressure (A-33)
+wind_carry_cm_per_hour = 20000      # what the wind overwhelms, it carries up to 200 m an hour
+gale_below = 400                    # a low 400 daPa under normal brews a gale: seldom, in the Vale
+gale_per_decapascal = 50            # half a metre a second more for each decapascal deeper
+year_days = 365                     # a year of 365 days (Amendment A-34)
+start_day = 30                      # the world begins a month past the spring equinox: late April
+latitude_centi_deg = 5200           # 52 degrees north
+axial_tilt_centi_deg = 2344         # the sun's year runs 23.44 degrees either side of the equator
+seasonal_amplitude_centi_c = 700    # summer runs 7 degrees above the year's mean, winter 7 below
+seasonal_lag_days = 30              # the warmest of the year a month after midsummer
+lunar_month_seconds = 2551443       # 29.53 days from new moon to new moon
+moon_phase_at_start = 0             # a new moon on the first night
+moonlight_peak = 120                # a full moon well up in the sky is just enough to see by
+cloud_above = 7000                  # cloud gathers past 70% humidity (Amendment A-35)
+cloud_shade = 7500                  # a full overcast keeps out three quarters of the light
+cloud_damp = 6000                   # and holds back 60% of the day's swing: mild nights, cool days
+rain_per_hour = 1000                # saturated air pours 10 mm an hour
+snow_below_centi_c = 100            # at 1 degree or colder it falls as snow
+fog_above = 9000                    # fog past 90% humidity near the ground
+fog_wind_below_cm_s = 300           # in air stiller than 3 m/s
+humidity_per_degree = 600           # 6% damper for each degree cooler: damp dawns, dry afternoons
+diurnal_coldest_seconds = 18000     # coldest about dawn, at five
+diurnal_warmest_seconds = 54000     # warmest at three in the afternoon
+climate_mixing_seconds = 172800     # neighbouring climates' weather mixes over a couple of days (A-36)
+front_distance_cm = 2000000         # and the wind carries it the 20 km from one to the next
+opening_air_speed_cm_s = 5          # air trades through an open doorway at 5 cm/s each way (A-37)
+draught_percent = 1000              # and a tenth of the wind outside blows through it
+open_air_height_cm = 1000           # smoke over open ground fills the air ten metres up
+soak_per_mm = 300                   # each millimetre of rain wets the ground 3% (A-38)
+ground_drying_per_hour = 30         # and it dries a few percent a day, faster in sun and wind
+snow_melt_mm_per_degree_hour = 5    # snow melts 5 mm an hour for each degree above freezing
+wetting_per_hour = 20000            # in the hardest rain a thing in the open is soaked in half an hour
+drying_per_hour = 1500              # and dries in an afternoon's sun and breeze
+dry_by_heat_per_hour = 20000        # a fire's full heat dries a soaked thing in half an hour
+tide_amplitude_cm = 150             # the sea rises and falls 1.5 m either side of its mean at springs (A-39)
+tidal_period_seconds = 44712        # high water every 12 hours 25 minutes
+ice_mm_per_degree_hour = 2          # water freezes 2 mm an hour for each degree of frost
+wade_depth_cm = 50                  # no one wades deeper than 50 cm
+ice_bears_mm = 80                   # ice 8 cm thick bears a walker
+bare_hand_hardness = 1000           # bare hands pick fruit and dig soil; stone, ore, and timber need a tool (A-41)
+pit_half_width_cm = 100             # a pit is broken two metres across (A-42)
+tool_wear = 30                      # a go on stuff as hard as the tool costs it 0.3% (A-46)
+go_seconds = 5                      # a go of work — a blow, a handful, a spadeful — takes five seconds (A-48)
 
 [rules.living]
 metabolism_step_seconds = 60
@@ -74,6 +137,11 @@ dependence_fade_per_day = 1500      # 15% less dependent for each day without
 hunger_per_hour = 200               # 2% hungrier for each hour
 starving_above = 9000               # past 90% hungry: starving
 starving_harm_per_hour = 100        # 1% of health lost each hour starving
+strength = 4000                     # people are 40% strong unless said otherwise (Amendment A-27)
+burn_harm_per_hour = 6000           # the full heat of a fire costs 60% of health an hour (A-28)
+smoke_harm_per_hour = 3000          # thick smoke, 30% an hour (A-32)
+chill_wind_cm_s = 2000              # a 20 m/s gale on a body doubles how fast it takes the air's cold (A-38)
+wet_chill_percent = 20000           # soaked through, three times as fast again
 
 [rules.information]
 perception_step_seconds = 1
@@ -97,10 +165,28 @@ need_above = 3000                   # a longing or craving felt past 30% moves a
 need_weight = 20                    # what each hundredth of a percent past that is worth
 hungry_above = 4000                 # past 40% hungry, a mind goes looking for food
 work_value = 250                    # what working one's job is worth, in its hours
+repair_value = 280                  # what mending one's own is worth: more than work (A-45)
+repair_below = 9500                 # a thing is worth mending once worn below 95% (A-46)
 sleep_hours = 22-6                  # the hours a mind with nothing to do sleeps, once at all tired
 
 [rules.resources]
 regrow_step_seconds = 600           # fruit ripens in ten-minute steps
+
+[rules.residents]
+# The rhythm of the city tier (Amendment A-23); hunger and fatigue at Living's rates.
+sleep_hours = 22-6
+work_hours = 8-17
+hungry_above = 4000                 # hungry past 40%, and food at home: eat
+meal_nutrition = 4000
+meals_per_shift = 3                 # a shift earns the household three meals
+meal_minutes = 30
+walk_speed_cm_s = 120
+hours_spread_minutes = 45           # each keeps the hours up to 45 minutes their own way
+body = 25, 15, 175                  # crossing into the scene (Amendment A-24): a body this size
+sight_cm = 3000                     # and sight to 30 m
+meal_material = 711                 # a larder in the scene is a pantry of meals (Amendment A-26),
+meal_size = 8, 8, 6                 # each feeding what a meal feeds at the city tier
+pantry_body = 40, 30, 120
 
 [rules.society]
 courtship_step_seconds = 600
@@ -116,7 +202,7 @@ part_below = 3000                   # both this cool: they part
 2 = 600, 40000          # Highmoor
 3 = 1800, 500           # Southfen
 400 = 1300, 5300        # the mine mouth (on the Hill)
-401 = 1100, 5300        # the deep gallery
+401 = 1500, 5300        # the deep gallery: warm as the rock keeps it, deep under the Hill (A-47)
 402 = 1500, 5300        # the miners' cabin
 103 = 2000              # Alice's kitchen, still warm from last night's stove
 
@@ -129,13 +215,25 @@ part_below = 3000                   # both this cool: they part
 13 = 10                 # the Harbour
 14 = 10                 # Millside
 100 = 11                # Alice's yard
+112 = 100               # the woodpile, by the shed: a corner of the yard (Amendment A-47)
 101 = 11                # Alice's house
 300 = 11                # the manor grounds
 305 = 11                # the manor house
+150 = 11                # the Lanes: a street of houses at the city tier (Amendment A-23)
+151 = 150               # its six homes
+152 = 150
+153 = 150
+154 = 150
+155 = 150
+156 = 150
+157 = 150               # and the workshop at the end of it
 200 = 12                # the cottage
 600 = 14                # the farm
 602 = 600               # the far field
 603 = 14                # the wood
+605 = 14                # the River Brack, running past the mill (Amendment A-39)
+307 = 300               # the manor's pond
+506 = 13                # the sea, at the harbour
 
 [containment]
 1 = 9
@@ -152,6 +250,10 @@ part_below = 3000                   # both this cool: they part
 3100 = 100              # the apple tree, at the far end of the yard
 122 = 103               # the hearth
 3005 = 100              # a green glass bottle, lying in the yard
+3006 = 100              # a packing crate in the yard (Amendment A-27)
+3007 = 3006             # with an apple in it
+3008 = 100              # and a hammer beside it
+3009 = 100              # a torch, unlit, by the crate (Amendment A-28)
 # Food for those the orchard is beyond (Amendment A-19, a week in Ashford)
 3101 = 301                 # the manor pantry, in the hall
 3102 = 102                 # a crate of windfall apples in the cellar
@@ -163,6 +265,22 @@ part_below = 3000                   # both this cool: they part
 3108 = 601                 # the farmhouse larder
 3109 = 604                 # the miller's loaves
 3110 = 603                 # brambles in the wood
+3120 = 401                 # the iron seam, in the deep gallery (Amendment A-41)
+3121 = 401                 # the copper seam
+3122 = 603                 # the stand of timber, in the wood
+3124 = 13                  # fish off the quay (Amendment A-47)
+3125 = 500                 # the Heron's nets, over her side
+3130 = 2080                # each trade's own tool, in hand (Amendment A-47): Jory's pick,
+3131 = 2081                # Kit's, Nell's, and the woodcutter's axe
+3132 = 2084
+3133 = 2083
+3134 = 604                 # the miller's pick, for dressing his stones
+3123 = 600                 # the wheat, on the farm
+620 = 604                  # the millstone, in the mill (Amendment A-43)
+621 = 604                  # the bread oven, beside it
+622 = 603                  # the sawpit, in the wood
+623 = 603                  # the charcoal kiln, deep in the wood
+624 = 402                  # the forge, in the miners' cabin
 3111 = 12                  # a bush at the foot of the Hill
 3112 = 12                  # a bush in the west valley
 3113 = 12                  # a bush in the east valley
@@ -209,6 +327,7 @@ part_below = 3000                   # both this cool: they part
 14 = -100000, 0, 0
 # Old Town
 100 = 0, 0, 0
+112 = 300, -500, 0
 101 = 1000, 0, 0
 102 = 0, 0, -300
 103 = 0, 0, 0
@@ -222,6 +341,10 @@ part_below = 3000                   # both this cool: they part
 3100 = -1200, 600, 0
 122 = -400, 300, 0
 3005 = -300, -300, 0
+3006 = 0, -600, 0
+3007 = 0, 0, 0
+3008 = 100, -600, 0
+3009 = -100, -600, 0
 3101 = 100, 150, 0
 3102 = 100, 0, 0
 3103 = 0, 60, 0
@@ -232,6 +355,18 @@ part_below = 3000                   # both this cool: they part
 3108 = 150, 0, 0
 3109 = 150, 0, 0
 3110 = 60, 0, 0
+3120 = 300, 0, 0
+3121 = -300, 0, 0
+3122 = 500, 500, 0
+3124 = 8000, -3800, 0     # where the quay meets the sea (Amendment A-47)
+3125 = 0, -1300, 0        # at the Heron's stern
+3134 = 150, 250, 0        # the miller's pick, by the millstone (Amendment A-47)
+3123 = 1500, 0, 0
+620 = 200, -200, 0
+621 = -250, -250, 0
+622 = -800, 0, 0
+623 = -2500, -2500, 0
+624 = -300, -200, 0     # the forge, against the cabin's back wall: not where one comes in (A-47)
 3111 = 560, 1000, 50
 3112 = 2560, 2000, 300
 3113 = 5560, 2000, 300
@@ -247,6 +382,15 @@ part_below = 3000                   # both this cool: they part
 2020 = 1100, 900, 0
 300 = 5000, 0, 0
 305 = 6000, 0, 0
+# the Lanes
+150 = 3000, -6000, 0
+151 = 0, 0, 0
+152 = 1000, 0, 0
+153 = 2000, 0, 0
+154 = 0, 1500, 0
+155 = 1000, 1500, 0
+156 = 2000, 1500, 0
+157 = 6000, 800, 0
 301 = 0, 0, 0
 302 = 0, 0, -300
 303 = 0, 0, 300
@@ -269,6 +413,9 @@ part_below = 3000                   # both this cool: they part
 512 = 0, -1000, 0
 # Millside
 600 = 0, 0, 0
+605 = 6000, -2500, 0      # the Brack, south of the wood
+307 = -2000, 2000, 0     # the pond, in the manor grounds
+506 = 10000, -8000, 0    # the sea, beyond the Heron's mooring
 601 = 0, 0, 0
 602 = 3000, 0, 0
 603 = 6000, 0, 0
@@ -295,6 +442,7 @@ part_below = 3000                   # both this cool: they part
 2060 = 0, 0, 0              # the farmer, in the farmhouse
 2061 = 0, 0, 0              # a fox, in the wood
 2062 = 0, 0, 0              # the miller, in the mill
+2063 = -100, 150, 0         # the baker, his daughter, by the oven (Amendment A-45)
 2070 = 500, 1000, 50        # a villager at the foot of the Hill
 2080 = 2500, 2000, 300      # Jory, in the west valley
 2081 = 5500, 2000, 300      # Kit, in the east valley
@@ -343,8 +491,30 @@ part_below = 3000                   # both this cool: they part
 1202 = 201, 12, 0, 300              # its door, inside
 1203 = 201, 202, 300, -200          # the ladder, foot
 1204 = 202, 201, 300, -200          # the ladder, head
+# The Lanes (Amendment A-24): a door from the street into each home and the workshop, and back.
+1301 = 150, 151, 0, 300             # the homes on the south side open north onto the street
+1302 = 150, 152, 1000, 300
+1303 = 150, 153, 2000, 300
+1304 = 150, 154, 0, 1200            # the north side's open south
+1305 = 150, 155, 1000, 1200
+1306 = 150, 156, 2000, 1200
+1307 = 150, 157, 5700, 800          # the workshop's door, at its west end
+1351 = 151, 150, 0, 300
+1352 = 152, 150, 0, 300
+1353 = 153, 150, 0, 300
+1354 = 154, 150, 0, -300
+1355 = 155, 150, 0, -300
+1356 = 156, 150, 0, -300
+1357 = 157, 150, -300, 0
+# The mill and the farmhouse (Amendment A-43): without doors, no grain could come in, nor bread out.
+1401 = 14, 604, 9000, 400           # the mill's door, outside (north wall)
+1402 = 604, 14, 0, 400              # inside
+1403 = 600, 601, 0, 400             # the farmhouse door, outside
+1404 = 601, 600, 0, 400             # inside
 
 [portal_pairs]
+1401 = 1402
+1403 = 1404
 1001 = 1002
 1003 = 1004
 1005 = 1006
@@ -356,6 +526,13 @@ part_below = 3000                   # both this cool: they part
 1105 = 1106
 1201 = 1202
 1203 = 1204
+1301 = 1351
+1302 = 1352
+1303 = 1353
+1304 = 1354
+1305 = 1355
+1306 = 1356
+1307 = 1357
 
 [portal_danger]
 1102 = 0                # the manor's inside front door is pinned harmless
@@ -363,6 +540,8 @@ part_below = 3000                   # both this cool: they part
 # ---- Bodies ------------------------------------------------------------------------------
 [bodies]
 # entity = half_width, half_depth, height
+100 = 2000, 1500, 0     # Alice's yard: 40 m x 30 m of open ground, the house standing in it (A-37)
+112 = 75, 50, 0         # the woodpile: a metre and a half by one, between the crate and the shed
 102 = 500, 500, 280     # Alice's rooms: 10 m x 10 m, 2.8 m high
 103 = 500, 500, 280
 104 = 500, 500, 280
@@ -374,6 +553,9 @@ part_below = 3000                   # both this cool: they part
 202 = 400, 300, 200     # the loft
 601 = 600, 400, 300     # the farmhouse
 604 = 400, 400, 600     # the mill
+605 = 3000, 300, 0      # the Brack: a 60 m stretch, 6 m wide
+307 = 500, 400, 0       # the pond: 10 m by 8 m
+506 = 10000, 4000, 0    # the sea, as far as the harbour's concern goes: 200 m by 80 m
 1001 = 45, 10, 205      # doors: 90 cm wide, 2.05 m tall
 1002 = 45, 10, 205
 1101 = 45, 10, 205
@@ -420,6 +602,10 @@ part_below = 3000                   # both this cool: they part
 3100 = 50, 50, 400      # the apple tree: a metre across, four metres tall
 122 = 60, 40, 100       # the hearth: 1.2 m wide, a metre high
 3005 = 3, 3, 20          # the bottle: 6 cm across, 20 cm tall (1.8 kg)
+3006 = 30, 25, 40        # the crate: 60 cm x 50 cm, 40 cm tall (84 kg of timber)
+3007 = 4, 4, 8           # its apple
+3008 = 2, 2, 15          # the hammer: 15 cm of iron (1.9 kg)
+3009 = 2, 2, 30          # the torch: 60 cm of timber (0.3 kg)
 3101 = 30, 30, 60
 3102 = 30, 30, 60
 3103 = 20, 20, 30
@@ -430,6 +616,26 @@ part_below = 3000                   # both this cool: they part
 3108 = 30, 30, 60
 3109 = 30, 30, 60
 3110 = 40, 40, 100
+3120 = 100, 30, 200     # a seam in the gallery wall: 2 m of it showing
+3121 = 100, 30, 200
+3122 = 100, 100, 1000   # the stand: a stool of timber 2 m across, 10 m tall
+3124 = 200, 100, 50     # the fish off the quay: a stretch of water 4 m by 2 m
+3125 = 100, 50, 50      # the Heron's nets
+3130 = 2, 2, 15         # picks and an axe: iron, like the hammer (1.9 kg)
+3131 = 2, 2, 15
+3132 = 2, 2, 15
+3133 = 2, 2, 15
+3134 = 2, 2, 15
+3123 = 2000, 2000, 100  # the wheat: 40 m by 40 m, a metre high
+620 = 60, 60, 80        # the millstone (Amendment A-43)
+621 = 60, 60, 120       # the bread oven
+622 = 100, 50, 50       # the sawpit and its trestle
+623 = 80, 80, 150       # the kiln
+624 = 60, 60, 100       # the forge
+1401 = 45, 10, 205      # the mill's door, and the farmhouse's
+1402 = 45, 10, 205
+1403 = 45, 10, 205
+1404 = 45, 10, 205
 3111 = 40, 40, 100
 3112 = 40, 40, 100
 3113 = 40, 40, 100
@@ -449,6 +655,7 @@ part_below = 3000                   # both this cool: they part
 2052 = 25, 15, 185
 2060 = 25, 15, 175
 2062 = 25, 15, 175
+2063 = 22, 14, 165
 2070 = 25, 15, 175
 2080 = 25, 15, 175
 2081 = 25, 15, 175
@@ -493,7 +700,20 @@ part_below = 3000                   # both this cool: they part
 110 = solid, opaque     # the shed
 120 = solid             # tables
 3100 = solid            # the apple tree
+3120 = solid            # the seams are the gallery's rock (Amendment A-41)
+150 = paved             # the Lanes are cobbled (Amendment A-42)
+620 = solid             # the millstone, oven, sawpit, kiln, and forge stand in the way (A-43)
+621 = solid
+622 = solid
+623 = solid
+624 = solid
+1401 = opaque           # the mill's and the farmhouse's doors
+1402 = opaque
+1403 = opaque
+1404 = opaque
+3121 = solid
 122 = solid             # the hearth
+3006 = solid            # the crate
 123 = solid             # the flour bin
 203 = solid
 130 = solid, opaque     # the hay wagon
@@ -522,6 +742,7 @@ part_below = 3000                   # both this cool: they part
 2060 = mobile
 2061 = mobile
 2062 = mobile
+2063 = mobile
 2070 = mobile
 2080 = mobile
 2081 = mobile
@@ -537,6 +758,54 @@ part_below = 3000                   # both this cool: they part
 400 = 4000              # the mine mouth: partly open to the sky
 401 = 0                 # the deep gallery: sealed
 402 = 1000              # the miners' cabin: shuttered
+
+# ---- Water (Amendment A-39): place = pond|river|sea, depth cm, bank cm, land drained m2, drain s
+[water]
+307 = pond, 100, 140, 5000, 86400       # the manor's pond: a metre deep, slow to rise and fall
+605 = river, 60, 150, 3000000, 120      # the Brack: knee deep, 300 hectares draining into it
+506 = sea, 500, 800, 0, 3600            # the sea at the harbour: five metres at mean tide
+
+[drains]
+605 = 506               # the Brack runs to the sea
+
+[floods]
+605 = 602               # over its banks, it floods the far field, low frost-hollow ground
+
+# ---- Ground (Amendment A-42): what each place's ground is made of, and what a pit in it holds -
+[ground]
+1 = 713                 # the Vale: clay
+3 = 713                 # Southfen: clay under the fen
+2 = 703                 # Highmoor: granite
+12 = 703                # the Hill: granite under thin soil
+
+[quarry]
+# material = units a pit holds, each unit's size, the work each unit takes
+703 = 5000, 12x10x8, 40000      # granite, cut in blocks of ten kilos: a hammer, and a while at it
+713 = 100000, 10x10x10, 0       # clay, dug out by the spadeful, by hand
+
+# ---- Wear (Amendment A-46): how fast each workplace wears in use, hundredths of a percent an hour
+[wear]
+620 = 50                # the millstone: dressed every week or so of grinding
+621 = 10                # the oven
+623 = 10                # the kiln
+624 = 20                # the forge
+
+# ---- Tended fires (Amendment A-43): the oven, the kiln, and the forge are kept burning ------
+[fires]
+621 = 3000, kept        # the bread oven
+623 = 3000, kept        # the charcoal kiln
+624 = 3000, kept        # the forge
+
+# ---- Ground water (Amendment A-41): how wet each climate's ground is in late April ----------
+[ground_water]
+1 = 4000                # the Vale
+2 = 6000                # Highmoor
+3 = 8000                # Southfen
+
+# ---- Humidity (Amendment A-35): what each climate's weather departs from --------------------
+[humidity]
+2 = 7500                # Highmoor: the moor is damp, often in cloud
+3 = 8000                # Southfen: the fens are wetter still, and foggy at dawn
 
 # ---- Living things (body heat) ----------------------------------------------------------
 [organisms]
@@ -562,6 +831,7 @@ part_below = 3000                   # both this cool: they part
 2060 = 601, 3700
 2061 = 603, 3880
 2062 = 604, 3700
+2063 = 604, 3700
 2070 = 12, 3700
 2080 = 12, 3700
 2081 = 12, 3700
@@ -593,12 +863,17 @@ part_below = 3000                   # both this cool: they part
 2060 = 3000
 2061 = 3000             # the fox
 2062 = 3000
+2063 = 3000
 2070 = 3000
 2080 = 3000
 2081 = 3000
 2082 = 3000
 2083 = 3000
 2084 = 3000
+
+[strength]
+# organism = how strong, beyond the world's 40% (Amendment A-27)
+2003 = 7000             # Carol hauls the harvest
 
 [knows]
 # mind = what it knows at the start: where each thing is; where an opening leads and whether
@@ -607,28 +882,29 @@ part_below = 3000                   # both this cool: they part
 2002 = 100, 102, 103, 104, 1001, 1002, 1007, 1008, 1009, 1010, 3100, 122, 123, 950   # Bob: the house, the hearth, and the pie
 2004 = 103, 104, 1007, 1008, 2002, 3100                                      # Dave: upstairs, and Bob below
 2005 = 100, 103, 104, 1001, 1002, 1007, 1008, 1009, 1010, 3100                 # Erin: the yard, the kitchen door, the stairs up to her bedroom
-2003 = 100, 3100, 103, 1001, 1002                                     # Carol: the yard, its tree, the kitchen door
+2003 = 100, 3100, 103, 1001, 1002, 112                                # Carol: the yard, its tree, the kitchen door, the woodpile
 2011 = 100                                                             # the courier: only the yard
-2015 = 300, 301, 302, 303, 1101, 1102, 1103, 1104, 1105, 1106, 3101   # the steward: the manor
+2015 = 300, 301, 302, 303, 1101, 1102, 1103, 1104, 1105, 1106, 3101, 11, 14, 604, 1401, 1402, 3109   # the steward: the manor, and the way to the mill (A-47)
 2016 = 300, 301, 302, 303, 1103, 1104, 3001, 3002, 3003, 3004, 3101   # Ned: the manor, and the vials
-2070 = 12, 200, 201, 202, 1201, 1202, 1203, 1204, 3111   # the villager: home
-2052 = 13, 510, 511, 512, 3107   # the guard: the harbour
+2070 = 12, 200, 201, 202, 1201, 1202, 1203, 1204, 3111, 402, 624, 955, 401, 3120   # the villager: home, the smithy, and the seam (A-47)
+2052 = 13, 510, 511, 512, 3107, 3124   # the guard: the harbour, and the fish off the quay
 2013 = 100, 103, 1001, 1002, 3100                                            # Finn: the yard and the kitchen door
 2014 = 100, 102, 103, 1001, 1002, 1009, 1010, 3100                           # Gwen: and the cellar stairs
 2012 = 102, 3102                                                       # the raccoon: the cellar and its crate
 2030 = 140, 3103                                                       # the rider: the cart and his provisions
 2040 = 2, 3104                                                         # Hal: the moor and its bilberries
 2041 = 3, 3105                                                         # Ida: the fen and its cranberries
-2050 = 500, 3106                                                       # the captain: her ship and its stores
-2051 = 500, 3106                                                       # the bosun likewise
-2060 = 601, 3108                                                       # the farmer: the farmhouse and its larder
+2050 = 500, 3106, 3125                                                 # the captain: her ship, its stores, and its nets
+2051 = 500, 3106, 3125                                                 # the bosun likewise
+2060 = 601, 3108, 1403, 1404, 600, 3123, 14, 1401, 1402, 604, 3109         # the farmer: home, his wheat, the way to the mill, and its bread
 2061 = 603, 3110                                                       # the fox: the wood and its brambles
-2062 = 604, 3109                                                       # the miller: the mill and his loaves
-2080 = 12, 3112                                                        # Jory: the west valley's bush
-2081 = 12, 3113                                                        # Kit: the east valley's bush
+2062 = 604, 3109, 620, 951, 1401, 1402, 14, 3134                         # the miller: the mill, his millstone, the grinding, his pick
+2063 = 604, 3109, 621, 952, 1401, 1402, 14                               # the baker: the mill, the oven, the baking
+2080 = 12, 3112, 400, 401, 402, 3120, 3130                           # Jory: the west valley's bush, the mine, his pick (A-47)
+2081 = 12, 3113, 14, 603, 3122, 623, 954, 402, 3131                   # Kit: the east valley's bush, the wood, its kiln, the forge
 2082 = 12, 3114                                                        # Lena: the ridgeline's bush
-2083 = 12, 3115                                                        # the hiker: the bush below the cliff
-2084 = 12, 3116                                                        # Nell: the bush by the boulder
+2083 = 12, 3115, 14, 603, 3122, 3133, 11, 100, 112                     # the hiker: the bush below the cliff; the wood, his axe, and Alice's woodpile (A-47)
+2084 = 12, 3116, 402, 3132, 14, 604, 1401, 1402                     # Nell: the bush by the boulder, her pick, the mill (A-47)
 
 # ---- Minds -------------------------------------------------------------------------------
 [minds]
@@ -655,6 +931,7 @@ part_below = 3000                   # both this cool: they part
 2060 = 140              # the farmer
 2061 = 250              # the fox
 2062 = 140              # the miller
+2063 = 130              # the baker
 2070 = 140              # the villager
 2080 = 140              # Jory
 2081 = 140              # Kit
@@ -696,11 +973,47 @@ part_below = 3000                   # both this cool: they part
 708 = density:600, hardness:0, flammability:1000, edible:10000, nutrition:1500    # berries
 709 = density:300, hardness:300, flammability:3000, edible:10000, nutrition:5000  # bread
 710 = density:900, hardness:500, flammability:1000, edible:10000, nutrition:4000  # smoked fish
+711 = density:800, hardness:200, flammability:1000, edible:10000, nutrition:4000  # a household's meal (Amendment A-26)
+712 = density:100, hardness:100, flammability:9500    # straw (Amendment A-28)
+715 = density:5000, hardness:6000, flammability:0, thermal_capacity:650     # iron ore (Amendment A-41)
+716 = density:4200, hardness:4000, flammability:0, thermal_capacity:540     # copper ore
+717 = density:100, hardness:200, flammability:8000    # wheat, standing or in the sheaf
+713 = density:1800, hardness:800, flammability:0, thermal_capacity:900       # clay: the Vale's soil (Amendment A-42)
+718 = density:8960, hardness:3500, flammability:0, conductivity:9500        # copper (Amendment A-43)
+719 = density:300, hardness:100, flammability:9000    # charcoal
+720 = density:1000, hardness:300, flammability:500, edible:10000, nutrition:3000   # fresh fish (Amendment A-47)
 
 [made_of]
 121 = 701               # the lamp: glass
 122 = 703               # the hearth: granite
 3005 = 701              # the bottle: glass
+3006 = 700              # the crate: timber
+3007 = 704              # its apple
+3008 = 702              # the hammer: iron
+3120 = 715              # the iron seam: iron ore (Amendment A-41)
+3121 = 716              # the copper seam: copper ore
+3122 = 700              # the stand: timber
+3124 = 720              # fish (Amendment A-47)
+3125 = 720
+3130 = 702              # the tools: iron
+3131 = 702
+3132 = 702
+3133 = 702
+3134 = 702
+3123 = 717              # the wheat
+620 = 703               # the millstone: granite (Amendment A-43)
+621 = 713               # the oven, the kiln: clay
+623 = 713
+622 = 700               # the sawpit: timber
+624 = 703               # the forge: granite
+1401 = 700              # the mill's door, the farmhouse's: timber
+1402 = 700
+1403 = 700
+1404 = 700
+130 = 712               # the hay wagon: straw, piled high
+3009 = 700              # a torch: a stave of timber
+110 = 700               # the shed: timber
+120 = 700               # the kitchen table: timber
 123 = 700               # the flour bin: timber
 3000 = 704              # the apple
 3001 = 705              # the vials: poppy tincture
@@ -736,15 +1049,15 @@ part_below = 3000                   # both this cool: they part
 # deposit = what each unit is made of and its size, how many ripen a day, the most it holds,
 # and how many it holds now
 3100 = made_of:704, size:4x4x8, per_day:20, cap:30, stock:6     # the apple tree
-3101 = made_of:709, size:8x8x6, per_day:3, cap:6, stock:4     # the manor pantry, in the hall
-3102 = made_of:704, size:4x4x8, per_day:2, cap:6, stock:4     # a crate of windfall apples in the cellar
+3101 = made_of:709, size:8x8x6, per_day:0, cap:6, stock:4     # the manor pantry, in the hall: what the steward brings from the mill (A-47)
+3102 = made_of:704, size:4x4x8, per_day:0, cap:6, stock:4     # a crate of apples in the cellar: what Gwen lays by (A-47)
 3103 = made_of:709, size:8x8x6, per_day:0, cap:8, stock:8     # the rider's provisions, in the cart
 3104 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bilberry patch on Highmoor
 3105 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a cranberry bog on Southfen
-3106 = made_of:709, size:8x8x6, per_day:3, cap:6, stock:4     # the Heron's stores
-3107 = made_of:710, size:10x4x4, per_day:2, cap:6, stock:4     # a barrel of smoked fish at the harbour gate
-3108 = made_of:709, size:8x8x6, per_day:2, cap:6, stock:4     # the farmhouse larder
-3109 = made_of:709, size:8x8x6, per_day:2, cap:6, stock:4     # the miller's loaves
+3106 = made_of:709, size:8x8x6, per_day:0, cap:6, stock:4     # the Heron's stores: what is left of them (A-47)
+3107 = made_of:710, size:10x4x4, per_day:0, cap:6, stock:4     # a barrel of smoked fish at the harbour gate: what is left (A-47)
+3108 = made_of:709, size:8x8x6, per_day:0, cap:6, stock:4     # the farmhouse larder: what is left (A-47)
+3109 = made_of:709, size:8x8x6, per_day:0, cap:6, stock:4     # the miller's loaves: no longer filling themselves (A-45)
 3110 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # brambles in the wood
 3111 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush at the foot of the Hill
 3112 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush in the west valley
@@ -752,26 +1065,73 @@ part_below = 3000                   # both this cool: they part
 3114 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush on the ridgeline
 3115 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush below the cliff
 3116 = made_of:708, size:2x2x2, per_day:4, cap:8, stock:6     # a bush by the boulder
-123 = made_of:706, size:5x5x5, per_day:3, cap:20, stock:20     # the flour bin: the mill sends three scoops a day
+123 = made_of:706, size:5x5x5, per_day:0, cap:20, stock:20     # the flour bin: twenty scoops, no longer filling themselves (A-45)
+# Worked with effort and a tool fit for them, renewing by their kind (Amendment A-41):
+3120 = made_of:715, size:6x6x5, per_day:0, cap:2000, stock:2000, renewal:nonrenewable, grade:6000, difficulty:30000    # an iron seam in the deep gallery
+3121 = made_of:716, size:6x6x5, per_day:0, cap:1000, stock:1000, renewal:nonrenewable, grade:4000, difficulty:20000    # a copper seam beside it, poorer
+3122 = made_of:700, size:50x8x8, per_day:1, cap:40, stock:30, renewal:threshold, floor:10, difficulty:15000, grows:400/1500/1000    # a stand of timber in the wood
+3123 = made_of:717, size:10x10x10, per_day:40, cap:200, stock:60, grows:500/2000/2000    # the wheat on the farm
+# Living stocks of fish (Amendment A-47): taken by hand, a net's worth at a time.
+3124 = made_of:720, size:15x5x5, per_day:30, cap:40, stock:20     # fish off the quay
+3125 = made_of:720, size:15x5x5, per_day:20, cap:30, stock:15     # fish in the Heron's nets
 
 # ---- Making (Amendment A-17) ---------------------------------------------------------------
 [recipes]
 # recipe = what it needs (material x how many), what it makes and how big, where, and how long
 950 = needs:704x2 706x1, makes:707, size:10x10x5, at:122, takes:3600    # an apple pie, at the hearth
+# The chains (Amendment A-43): heat, a mill's water, a tool to hand; some make several at once.
+951 = needs:717x2, makes:706, size:5x5x5, at:620, takes:600, power:605    # flour, ground from two sheaves while the Brack turns the mill
+952 = needs:706x1, makes:709, size:8x8x6, at:621, takes:1800, heat:yes   # a loaf from a scoop of flour, in the burning oven
+953 = needs:700x1, makes:700, size:50x10x2, at:622, takes:900, tool:3000, count:4    # planks, sawn from a log
+954 = needs:700x1, makes:719, size:10x10x10, at:623, takes:3600, heat:yes, count:2   # charcoal, two lumps from a log in the kiln
+955 = needs:715x2 719x1, makes:702, size:10x5x5, at:624, takes:3600, heat:yes        # an iron bar, at the forge
+956 = needs:716x2 719x1, makes:718, size:10x5x5, at:624, takes:3600, heat:yes        # a copper bar
 
 # ---- Work (Amendment A-18) ------------------------------------------------------------------
 [jobs]
 # job = carry a material from a source, or make a recipe; the store it keeps, how many, and when
 960 = carry:704, from:3100, to:103, keep:6, hours:6-18     # the orchard round: apples to the kitchen
 961 = make:950, to:103, keep:2, hours:8-20                  # the baking: pies for the kitchen
+# Millside's bread (Amendment A-45): wheat to the mill, flour ground there, bread baked there.
+962 = carry:717, from:3123, to:604, keep:8, hours:6-18      # the harvest: wheat to the mill
+963 = make:951, to:604, keep:4, hours:6-18                  # the grinding: flour in the mill
+964 = make:952, to:604, keep:4, hours:6-18                  # the bread: loaves in the mill
+# The trades (Amendment A-47): each store kept by someone's work.
+965 = carry:715, from:3120, to:402, keep:6, hours:7-17      # the mine: iron ore to the forge
+966 = make:954, to:402, keep:4, hours:7-17                  # the kiln: charcoal to the forge
+967 = make:955, to:402, keep:3, hours:7-17                  # the smithy: iron bars, the tools anyone takes up
+968 = carry:703, from:12, to:604, keep:16, hours:7-17       # the quarry: granite blocks for the millstone
+969 = carry:700, from:3122, to:112, keep:10, hours:7-17     # the woodpile in Alice's yard, for mending
+970 = carry:709, from:604, to:301, keep:4, hours:8-16       # the steward fetches the manor's bread from the mill
+971 = carry:704, from:3100, to:102, keep:4, hours:8-11     # Gwen lays apples by in the cellar
 
 [roles]
 2003 = 960              # Carol works the orchard
 2002 = 961              # Bob bakes
+2060 = 962              # the farmer brings in the wheat (Amendment A-45)
+2062 = 963              # the miller grinds it
+2063 = 964              # and his daughter bakes the flour into bread
+2080 = 965              # Jory mines (Amendment A-47)
+2081 = 966              # Kit burns charcoal
+2070 = 967              # the villager keeps the smithy
+2084 = 968              # Nell quarries
+2083 = 969              # the hiker, staying on, cuts wood
+2015 = 970              # the steward provisions the manor
+2014 = 971              # Gwen keeps the cellar stocked
 
 # ---- Wants (Amendment A-19) -----------------------------------------------------------------
 [owners]
 121 = 2002              # the lamp is Bob's
+3130 = 2080             # the trades' tools are their own (Amendment A-47)
+3131 = 2081
+3132 = 2084
+3133 = 2083
+3134 = 2062
+620 = 2062              # the millstone is the miller's, the oven the baker's (Amendment A-47)
+621 = 2063
+623 = 2081              # the kiln is Kit's, the forge the smith's, the sawpit Lena's
+624 = 2070
+622 = 2083
 
 [curiosity]
 2011 = 100              # the courier wonders what lies past the doors he sees
@@ -782,3 +1142,32 @@ part_below = 3000                   # both this cool: they part
 [home]
 2005 = 104              # Erin keeps her things in the bedroom
 
+# ---- The city tier (Amendment A-23; Appendix A, Ruling 19) --------------------------------
+# People who are resident records, not organisms: they live by the Lanes' rhythm.
+[residents]
+# resident = home, work (if any), and how hungry they begin
+5001 = home:151, work:157, hunger:1000
+5002 = home:151, work:157, hunger:3000
+5003 = home:152, work:157, hunger:500
+5004 = home:152, work:157, hunger:2500
+5005 = home:153, work:157, hunger:3500
+5006 = home:153, hunger:2000
+5007 = home:154, work:157, hunger:0
+5008 = home:154, work:157, hunger:1500
+5009 = home:155, work:157, hunger:3900
+5010 = home:155, hunger:1200
+5011 = home:156, work:157, hunger:2200
+5012 = home:156, work:157, hunger:800
+
+[residency]
+# place = city or scene (Amendment A-24): the Lanes keep the city tier until attention arrives.
+150 = city
+
+[larders]
+# home = meals in the larder at the start, and the pantry it is in the scene (Amendment A-26)
+151 = 4, pantry:1511
+152 = 4, pantry:1512
+153 = 3, pantry:1513
+154 = 4, pantry:1514
+155 = 2, pantry:1515
+156 = 4, pantry:1516

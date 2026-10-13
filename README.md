@@ -130,8 +130,45 @@ reference engine is being built here, from the specification, in roadmap order
       (A-16); making things from recipes (A-17); jobs — the orchard round and the baking — and
       sleep (A-18); wants — curiosity, and claiming and keeping things (A-19); a week in Ashford
       with nobody directed, and nobody starving
-- [ ] Hardening, from the hostile audit: tick continuity, a sealed mutation path, multi-cause
-      provenance, adversarial and benchmark gates
+- [x] Measured scale ([audit review](docs/audits/hostile-audit-review.md),
+      [plan](docs/audits/world-scale.md)): scaling benches and per-system meters; tick
+      continuity; levels (A-20); change memory (A-21); the agenda (A-22)
+- [x] The city tier (A-23): residents as compact records woken only when due; a million in
+      3 GB at 27 ms per simulated minute
+- [x] Crossing into the scene (A-24): attention on a place turns its residents into organisms
+      in one tick, levels exact; a district of 3,000 in about 50 ms at any city size
+- [x] Crossing back (A-25): kernel retirement; residents leaving the scene become records again
+      in one tick; Law 14's round trip identical to the bit; a generated town where people cross
+      the seam all day as they commute
+- [x] A mutable world ([plan](docs/audits/mutable-world.md)): integrity, breaking, and striking
+      by strength and tool (A-27); fire that burns, spreads by heat, lights the night, burns the
+      living, and is put out by rain (A-28); storms that tear down what they can (A-29);
+      open ground and ruins walked into anywhere along their edge (A-30); walls that fall on
+      whoever is inside, and mending with a tool until whole (A-31); fire that warms the air,
+      smoke that blinds and chokes, and wind that fans a fire (A-32); wind that carries off loose
+      things, pushes from anyone, and gales brewed by deep lows (A-33)
+- [x] The environment ([plan](docs/audits/environment.md)): a year, seasons, the sun's height,
+      and a moon (A-34); the day's curve, cloud, rain and snow, and fog (A-35); wind from
+      sea-level pressure, and weather carried between climates (A-36); warmth and smoke through
+      open openings, between rooms and to and from the yard (A-37); wet ground, lying snow, wet
+      things, and wind and wet that chill (A-38); ponds, rivers, the sea's tide, floods, and ice
+      (A-39)
+- [x] Shut eyes (A-40): a body at rest sees nothing but what it holds; in the sleeping hours only
+      what presses gets a sleeper up; absence judged only in a place taken in whole
+- [x] Resources ([plan](docs/audits/resources.md)): taking from deposits with a tool fit for
+      them, effort, grade, and four kinds of renewal (A-41); ground, digging, and quarries
+      wherever the ground is stone (A-42); chains of making that need heat, a mill's water, or a
+      tool to hand (A-43); mending that uses up material (A-44); minds that fetch a tool, dig,
+      cross open ground, and mend what is theirs, and Millside's farmer, miller, and baker
+      feeding the mill with nothing filling itself (A-45); tools and workplaces worn by use
+      (A-46); every store filled by someone: the Hill's trades, fish, and the manor's bread (A-47)
+- [ ] Two towns ([plan](docs/audits/two-towns.md)): work that keeps time — a go lasts the tick,
+      a whole load carried and set down at once, the carry limit counting all one holds (A-48);
+      next, settlements that own their nodes, farms agents sow, and a second town
+- [ ] Minds that flee fire and break a way through; fire and storm at the city tier
+- [ ] Carrying things across the seam; city generation at scale; the hot store; parallel shards
+- [ ] Hardening, from the hostile audit: a sealed mutation path, multi-cause provenance,
+      benchmark gates in CI
 - [ ] Agents, next: talking and rumour, model-backed minds as recorded inputs
 - [ ] Persistence: chronicle tail + snapshots, two-road recovery (Vol. V Ch. 7)
 - [ ] Hybrid store hot tier; residency ladder; parallel evaluation (Vol. V Ch. 2, Ch. 5)

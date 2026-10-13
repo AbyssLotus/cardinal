@@ -6,8 +6,8 @@
 //! candidates: candidates are drawn from beliefs alone.
 
 use crate::schema::{
-    ABOUT, ACT_CLAIM, ACT_CONSUME, ACT_DROP, ACT_MAKE, ACT_OPEN, ACT_PICK, ACT_TAKE, AT,
-    BELIEF_LEADS_TO, BELIEF_MADE_OF, BELIEF_NUTRITION, BELIEF_OWNER, BELIEF_PLACE_OF,
+    ABOUT, ACT_CLAIM, ACT_CONSUME, ACT_DROP, ACT_MAKE, ACT_OPEN, ACT_PICK, ACT_PICK_UP_TO,
+    ACT_TAKE, AT, BELIEF_LEADS_TO, BELIEF_MADE_OF, BELIEF_NUTRITION, BELIEF_OWNER, BELIEF_PLACE_OF,
     BELIEF_RECIPE_AT, BELIEF_RECIPE_MAKES, BELIEF_RECIPE_NEEDS, BELIEF_STOCK, BELIEF_WARMTH_OF,
     BELIEF_YIELDS, BLOCKED, CURIOSITY, DIRECTED, FELT_BODY_HEAT, FELT_FATIGUE, FELT_HEALTH,
     FELT_HUNGER, FELT_NEED, FELT_NEED_MET_BY, GAVE_UP_ON, GOAL, GOING_TO, HOME, LIKES, MET_BY_DOSE,
@@ -16,6 +16,10 @@ use crate::schema::{
     SCORE, STEP, STEP_APPROACH, STEP_CLAIM, STEP_CONSUME, STEP_DROP, STEP_FETCH, STEP_GO,
     STEP_MAKE, STEP_OPEN, STEP_PICK, STEP_TAKE, TRAVEL_SPEED, TRAVEL_TO, VIA, WALK_SPEED,
     WORK_CARRIES, WORK_FROM, WORK_HOURS, WORK_KEEP, WORK_MAKES, WORK_ROLE, WORK_TO,
+};
+use crate::schema::{
+    ACT_DIG, ACT_MEND, BELIEF_FIXTURE, BELIEF_GROUND, BELIEF_HARDNESS, BELIEF_INTEGRITY,
+    BELIEF_WALLED, REASON_REPAIR, STEP_DIG, STEP_MEND,
 };
 use kernel::fact::{Cause, Fact, FactKey, FactType, SystemId};
 use kernel::identity::EntityId;
@@ -76,9 +80,22 @@ pub struct MindRules {
     pub sleep_from_seconds: i64,
     /// When they end.
     pub sleep_to_seconds: i64,
+    /// The hardest material a bare hand works (Physical's rule, Amendment A-41): a mind knows
+    /// that anything harder wants a tool (Amendment A-45).
+    pub bare_hand_hardness: i64,
+    /// What mending something of one's own, or one's household's, is worth (Amendment A-45).
+    pub repair_value: i64,
+    /// How whole a thing must fall below, in hundredths of a percent, before it is worth mending;
+    /// once begun, mending goes on until it is whole (Amendment A-46).
+    pub repair_below: i64,
 }
 
 const THINK_READS: &[FactType] = &[
+    BELIEF_HARDNESS,
+    BELIEF_FIXTURE,
+    BELIEF_WALLED,
+    BELIEF_GROUND,
+    BELIEF_INTEGRITY,
     BELIEF_OWNER,
     CURIOSITY,
     LIKES,
@@ -124,6 +141,8 @@ const THINK_READS: &[FactType] = &[
     AT,
 ];
 const THINK_WRITES: &[FactType] = &[
+    ACT_DIG,
+    ACT_MEND,
     ACT_CLAIM,
     OBJECT,
     GAVE_UP_ON,
@@ -131,6 +150,7 @@ const THINK_WRITES: &[FactType] = &[
     ACT_MAKE,
     ABOUT,
     ACT_PICK,
+    ACT_PICK_UP_TO,
     ACT_TAKE,
     ACT_CONSUME,
     RESTING,
@@ -159,8 +179,9 @@ const THINK_WRITES: &[FactType] = &[
 ///    opening it believes is on the way and opens it;
 /// 6. **Trace** — the goal, its reason, and its winning score, as facts;
 /// 7. **Rest** — tired, with nowhere it wants to go, it lies down; it gets up when rested, when
-///    the cold calls, or when a routine calls and it is no longer tired. The dead do not think
-///    (Amendment A-10).
+///    the cold calls, or when a routine calls and it is no longer tired — in the sleeping hours,
+///    only for what presses, never a want (Amendment A-40). The dead do not think (Amendment
+///    A-10).
 pub struct Think {
     clock: SimClock,
     think_ticks: u64,
@@ -203,6 +224,19 @@ enum Work {
     Make(EntityId),
     /// Claim this, which no one owns (Amendment A-19).
     Claim(EntityId),
+    /// Dig the ground of this place, where it is what is wanted (Amendment A-45).
+    Dig(EntityId),
+}
+
+/// What a mind has to work something with (Amendment A-45).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Hand {
+    /// Its hand, or a tool it carries, will do.
+    Ready,
+    /// It must fetch this tool first.
+    Fetch(EntityId),
+    /// It knows of no tool hard enough.
+    Lacking,
 }
 
 /// One mind's view of itself and the world: its beliefs and commitments, and nothing else.
@@ -259,7 +293,66 @@ impl Mind<'_> {
             };
             ways.entry(from).or_default().push((opening, to));
         }
+        // Open ground (Amendments A-30, A-45): out of a place believed open into the place it is
+        // believed to lie in, and into it from there, anywhere along its edge. The step is named
+        // by the open place itself.
+        for (place, walled) in self.view.read_about(self.me, BELIEF_WALLED) {
+            if walled.value != Value::Bool(false) {
+                continue;
+            }
+            if let Some(around) = self.belief_entity(BELIEF_PLACE_OF, place) {
+                ways.entry(place).or_default().push((place, around));
+                ways.entry(around).or_default().push((place, place));
+            }
+        }
         ways
+    }
+
+    /// How hard the mind believes a material is (Amendment A-45).
+    fn hardness(&self, material: EntityId) -> Option<i64> {
+        self.belief_int(BELIEF_HARDNESS, material)
+    }
+
+    /// How hard the mind believes `thing` is: as the softest of what it is believed made of.
+    fn hardness_of(&self, thing: EntityId) -> Option<i64> {
+        self.view
+            .read_all(FactKey::pair(self.me, BELIEF_MADE_OF, thing))
+            .into_iter()
+            .filter_map(|m| match m.value {
+                Value::Entity(m) => self.hardness(m),
+                _ => None,
+            })
+            .min()
+    }
+
+    /// The material the mind believes `thing` would be mended with: the softest it is believed
+    /// made of — what gave way (Amendment A-45).
+    fn weakest_material(&self, thing: EntityId) -> Option<EntityId> {
+        self.view
+            .read_all(FactKey::pair(self.me, BELIEF_MADE_OF, thing))
+            .into_iter()
+            .filter_map(|m| match m.value {
+                Value::Entity(m) => Some((self.hardness(m).unwrap_or(0), m)),
+                _ => None,
+            })
+            .min()
+            .map(|(_, m)| m)
+    }
+
+    /// Whether the mind believes `thing` is a fixture: solid, not a piece to carry off and use
+    /// (Amendment A-45).
+    fn fixture(&self, thing: EntityId) -> bool {
+        self.view
+            .read(FactKey::pair(self.me, BELIEF_FIXTURE, thing))
+            .is_some_and(|f| f.value == Value::Bool(true))
+    }
+
+    /// Whether the mind believes `thing` is made of `material` and nothing else.
+    fn made_only_of(&self, thing: EntityId, material: EntityId) -> bool {
+        let made = self
+            .view
+            .read_all(FactKey::pair(self.me, BELIEF_MADE_OF, thing));
+        !made.is_empty() && made.iter().all(|m| m.value == Value::Entity(material))
     }
 
     /// The openings on the shortest way the mind believes leads from `from` to `to` (empty when
@@ -344,10 +437,12 @@ impl Mind<'_> {
         gave_up >= learned as i64
     }
 
-    /// Whether the mind believes someone else owns `thing` (Amendment A-19).
+    /// Whether the mind believes someone else owns `thing` (Amendment A-19): not the mind, and
+    /// not its household — what is owned by its home is its own as much as anyone's there
+    /// (Amendment A-26).
     fn others(&self, thing: EntityId) -> bool {
         self.belief_entity(BELIEF_OWNER, thing)
-            .is_some_and(|owner| owner != self.me)
+            .is_some_and(|owner| owner != self.me && Some(owner) != self.own_entity(HOME))
     }
 
     /// What `thing` is worth to the mind: how much it likes the best of what it believes the thing
@@ -383,6 +478,13 @@ fn in_window(t: i64, from: i64, to: i64) -> bool {
     }
 }
 
+/// Whether a reason presses: anything but a want or curiosity, which fill the hours when nothing
+/// presses (Amendment A-19). In the sleeping hours only what presses gets a sleeper up
+/// (Amendment A-40).
+const fn presses(reason: i64) -> bool {
+    !matches!(reason, REASON_WANT | REASON_CURIOSITY | REASON_REPAIR)
+}
+
 /// A list of proposals from one mind, all from this system.
 struct Acts<'a> {
     ctx: &'a TickContext,
@@ -405,6 +507,10 @@ impl Acts<'_> {
     }
     fn clear(&mut self, fact: FactType, why: &'static str) {
         self.push(fact, Change::Tombstone, why);
+    }
+    /// One more of a set the act holds: one more thing to put down in one go (Amendment A-48).
+    fn add(&mut self, fact: FactType, value: Value, why: &'static str) {
+        self.push(fact, Change::Add(value), why);
     }
     /// Give up trying to get `thing`, for now (Amendment A-18).
     fn give_up_on(&mut self, thing: EntityId) {
@@ -618,7 +724,7 @@ impl Think {
         // Work (Amendment A-18): the job the mind holds, in its hours, while there is something
         // to do for it — at the worth the world gives work, less the way to where it happens.
         if let Some(job) = mind.own_entity(WORK_ROLE) {
-            if let Some((_, place)) = self.work_next(mind, here, tick) {
+            if let Some((_, place, _)) = self.work_next(mind, here, tick) {
                 let hops = if place == here || place == mind.me {
                     Some(0)
                 } else {
@@ -681,6 +787,47 @@ impl Think {
             }
         }
 
+        // Repair (Amendment A-45): what is the mind's own, or its household's — or its home itself
+        // — that it believes worn or damaged enough to be worth mending (Amendment A-46), or is
+        // mending already and not yet whole, and can reach.
+        let home = mind.own_entity(HOME);
+        let mending = (mind.own_int(REASON) == Some(REASON_REPAIR))
+            .then(|| mind.own_entity(GOAL))
+            .flatten();
+        for (thing, whole) in mind.view.read_about(mind.me, BELIEF_INTEGRITY) {
+            let below = if mending == Some(thing) {
+                10_000
+            } else {
+                r.repair_below
+            };
+            let damaged = whole.value.as_int().is_some_and(|w| w < below);
+            let owner = mind.belief_entity(BELIEF_OWNER, thing);
+            let ours =
+                Some(thing) == home || owner == Some(mind.me) || (owner.is_some() && owner == home);
+            // Given up for want of a tool or the stuff, it is taken up again once both are to be
+            // had (Amendment A-47): a woodpile stacked since, a tool found.
+            if !damaged || !ours || (mind.gave_up_on(thing) && !self.could_mend(mind, here, thing))
+            {
+                continue;
+            }
+            let Some(place) = mind.place_of(thing) else {
+                continue;
+            };
+            let hops = if place == here {
+                Some(0)
+            } else {
+                mind.route(here, place).map(|r| r.len() as i64)
+            };
+            if let Some(hops) = hops {
+                options.push(Choice {
+                    target: thing,
+                    reason: REASON_REPAIR,
+                    score: r.repair_value - r.hop_cost * hops,
+                    about: None,
+                });
+            }
+        }
+
         // Best first; among equals, the lower id.
         options.sort_by(|a, b| b.score.cmp(&a.score).then(a.target.cmp(&b.target)));
         (options, stay)
@@ -730,10 +877,21 @@ impl Think {
         let best = options.first().copied().filter(|o| o.score > stay);
 
         if mind.own(RESTING).map(|f| f.value) == Some(Value::Bool(true)) {
-            // Resting: get up for something worth getting up for, or once rested.
-            if let Some(best) = best {
+            // Resting: get up for something worth getting up for, or once rested. In the
+            // sleeping hours, only for what presses: not for a want, nor curiosity (Amendment
+            // A-40).
+            let call = if night {
+                options
+                    .iter()
+                    .copied()
+                    .find(|o| presses(o.reason))
+                    .filter(|o| o.score > stay)
+            } else {
+                best
+            };
+            if let Some(call) = call {
                 Self::get_up(&mut acts, "called_away");
-                self.adopt(&mut acts, best, speed);
+                self.adopt(&mut acts, call, speed);
             } else if fatigue < self.rules.rested_below && !night {
                 Self::get_up(&mut acts, "rested");
             }
@@ -752,7 +910,8 @@ impl Think {
             return;
         };
 
-        if mind.at(goal) {
+        // Arrived, the goal is met — but a thing to mend is mended where one stands by it.
+        if mind.at(goal) && mind.own_int(REASON) != Some(REASON_REPAIR) {
             Self::settle(&mut acts, "arrived");
             return;
         }
@@ -790,6 +949,7 @@ impl Think {
             REASON_WORK => "work",
             REASON_CURIOSITY => "curious",
             REASON_WANT => "wanting",
+            REASON_REPAIR => "mending",
             _ => "longing",
         };
         acts.set(GOAL, Value::Entity(choice.target), why);
@@ -803,7 +963,7 @@ impl Think {
         }
         if matches!(
             choice.reason,
-            REASON_DOSE | REASON_HUNGER | REASON_WORK | REASON_WANT
+            REASON_DOSE | REASON_HUNGER | REASON_WORK | REASON_WANT | REASON_REPAIR
         ) {
             // Something to fetch and consume, or work to do: the plan begins on the next thought,
             // from what is believed then (see `fetch` and `work`).
@@ -844,6 +1004,8 @@ impl Think {
             self.work(mind, acts, here, tick, speed);
         } else if mind.own_int(REASON) == Some(REASON_WANT) {
             self.want(mind, acts, here, goal, tick, speed);
+        } else if mind.own_int(REASON) == Some(REASON_REPAIR) {
+            self.repair(mind, acts, here, goal, tick, speed);
         } else {
             self.travel_toward(mind, acts, here, goal, tick, speed);
         }
@@ -899,13 +1061,14 @@ impl Think {
             return;
         }
         // 2. Go and get it — one, so wait to feel it before reaching for another.
-        self.get(mind, acts, here, target, tick, speed, FEEL_TICKS);
+        self.get(mind, acts, here, target, tick, speed, FEEL_TICKS, 1);
     }
 
     /// Get `thing` (Amendments A-13, A-16, A-18): go to where it is believed to be, walk up to it,
-    /// and take it — or pick from it, if it bears. A step about something else starts over. What
-    /// cannot be taken or picked is given up on; picked or taken, and still wanted, try again
-    /// `patience` ticks on.
+    /// and take it — or pick from it, if it bears, `want` units at most, a tick's work a go
+    /// (Amendment A-48). A step about something else starts over. What cannot be taken or picked
+    /// is given up on; taken or picked, and still wanted, try again `patience` ticks on, once the
+    /// last go's yield has been seen.
     #[allow(clippy::too_many_arguments)]
     fn get(
         &self,
@@ -916,6 +1079,7 @@ impl Think {
         tick: u64,
         speed: i64,
         patience: u64,
+        want: i64,
     ) {
         let step = mind.own(STEP);
         let code = step.as_ref().and_then(|s| s.value.as_int());
@@ -955,15 +1119,22 @@ impl Think {
             Some(STEP_FETCH) if same && settled && going.is_none() => {
                 acts.set(STEP, Value::Int(get_step), why);
                 acts.set(get_act, Value::Entity(thing), why);
+                if bears {
+                    acts.set(ACT_PICK_UP_TO, Value::Int(want.max(1)), why);
+                }
             }
             Some(STEP_TAKE | STEP_PICK) if same && settled && refused => {
                 Self::settle(acts, "could_not_reach_it");
                 acts.give_up_on(thing);
             }
-            // Nothing came to hand yet, or more is wanted: again, once patient enough.
+            // Nothing came to hand yet, or more is wanted: again, once patient enough — once the
+            // last go's yield has been seen, so no more is fetched than wanted (Amendment A-48).
             Some(STEP_TAKE | STEP_PICK) if same && again => {
                 acts.set(STEP, Value::Int(get_step), why);
                 acts.set(get_act, Value::Entity(thing), why);
+                if bears {
+                    acts.set(ACT_PICK_UP_TO, Value::Int(want.max(1)), why);
+                }
             }
             Some(STEP_FETCH | STEP_TAKE | STEP_PICK) if same => {}
             _ if settled || code.is_none() || !same => {
@@ -986,7 +1157,7 @@ impl Think {
     /// for a recipe, what it needs and the mind does not carry, nearest first; with all of it in
     /// hand, the recipe is made at its workplace. What was made goes to the store at once;
     /// carried goods go once no more are wanted or can be got.
-    fn work_next(&self, mind: &Mind, here: EntityId, tick: u64) -> Option<(Work, EntityId)> {
+    fn work_next(&self, mind: &Mind, here: EntityId, tick: u64) -> Option<(Work, EntityId, i64)> {
         let store = mind.own_entity(WORK_TO)?;
         let keep = mind.own_int(WORK_KEEP).unwrap_or(0).max(0);
         let time = (self.clock.ms_at(tick) % self.day_ms / 1000) as i64;
@@ -1015,6 +1186,8 @@ impl Think {
             .map(|(_, p)| self.trust(tick, p.provenance.tick))
             .sum();
         let wanted = on_duty && stocked + carrying.len() as i64 * 10_000 < keep * 10_000;
+        // How many more the store wants, beyond what is carried (Amendment A-48).
+        let short = ((keep * 10_000 - stocked) / 10_000 - carrying.len() as i64).max(1);
         let next = if !wanted {
             None
         } else {
@@ -1022,13 +1195,16 @@ impl Think {
                 None => {
                     let from = mind.own_entity(WORK_FROM);
                     self.source_of(mind, here, goods, from, Some(store))
+                        .map(|(work, place)| (work, place, short))
                 }
                 Some(r) => self.for_recipe(mind, here, r, &held),
             }
         };
+        // Refused for its own hands, they are full: take the load to the store (Amendment A-48).
+        let full = mind.own_entity(REFUSED) == Some(mind.me);
         if let Some(&thing) = carrying.first() {
-            if recipe.is_some() || next.is_none() {
-                return Some((Work::Deliver(thing), store));
+            if recipe.is_some() || next.is_none() || full {
+                return Some((Work::Deliver(thing), store, 1));
             }
         }
         next
@@ -1043,7 +1219,7 @@ impl Think {
         here: EntityId,
         recipe: EntityId,
         held: &[EntityId],
-    ) -> Option<(Work, EntityId)> {
+    ) -> Option<(Work, EntityId, i64)> {
         let workplace = mind.belief_entity(BELIEF_RECIPE_AT, recipe)?;
         let at = mind.belief_entity(BELIEF_PLACE_OF, workplace)?;
         let mut used: BTreeSet<EntityId> = BTreeSet::new();
@@ -1062,18 +1238,22 @@ impl Think {
                 .filter(|t| !used.contains(t) && mind.made_of(*t, material))
                 .take(count)
                 .collect();
-            let short = have.len() < count;
+            let short = count.saturating_sub(have.len()) as i64;
             used.extend(have);
-            if short {
-                return self.source_of(mind, here, material, None, None);
+            if short > 0 {
+                return self
+                    .source_of(mind, here, material, None, None)
+                    .map(|(work, place)| (work, place, short));
             }
         }
-        Some((Work::Make(recipe), at))
+        Some((Work::Make(recipe), at, 1))
     }
 
     /// The nearest source of `material` the mind believes in: a deposit believed to bear it and
-    /// not bare, or a thing believed made of it, lying in a place a way is known to — only at
-    /// `within` if given, and never in `not_in`. Ties go to the lower id.
+    /// not bare, or a thing believed made of it and nothing else — a piece, not a fixture, an
+    /// opening or a place (Amendment A-45) — lying in a place a way is known to; only at `within`
+    /// if given, never in `not_in`, and never what the mind is working on. Ties go to the lower
+    /// id.
     fn source_of(
         &self,
         mind: &Mind,
@@ -1088,6 +1268,7 @@ impl Think {
                 || Some(place) == not_in
                 || mind.gave_up_on(thing)
                 || mind.others(thing)
+                || mind.own_entity(GOAL) == Some(thing)
             {
                 return;
             }
@@ -1113,23 +1294,112 @@ impl Think {
         }
         for (thing, place) in mind.view.read_about(mind.me, BELIEF_PLACE_OF) {
             if let Value::Entity(place) = place.value {
-                if thing != mind.me && mind.made_of(thing, material) {
+                let piece = thing != mind.me
+                    && mind.made_only_of(thing, material)
+                    && !mind.fixture(thing)
+                    && !mind.knows_as_place(thing)
+                    && mind.belief_entity(BELIEF_LEADS_TO, thing).is_none();
+                if piece {
                     consider(thing, place);
                 }
             }
         }
-        best.map(|(_, thing, place)| (Work::Get(thing), place))
+        if let Some((_, thing, place)) = best {
+            return Some((Work::Get(thing), place));
+        }
+        // Nothing of it known to take or pick: dig it, where the ground is made of it (Amendment
+        // A-45) — the nearest such place a way is known to, the lowest id among equals.
+        let mut ground: Option<(usize, EntityId)> = None;
+        for (place, made) in mind.view.read_about(mind.me, BELIEF_GROUND) {
+            if made.value != Value::Entity(material)
+                || Some(place) == not_in
+                || within.is_some_and(|w| w != place)
+                || mind.gave_up_on(place)
+            {
+                continue;
+            }
+            let hops = if place == here {
+                Some(0)
+            } else {
+                mind.route(here, place).map(|r| r.len())
+            };
+            if let Some(hops) = hops {
+                if ground.map_or(true, |g| (hops, place) < g) {
+                    ground = Some((hops, place));
+                }
+            }
+        }
+        ground.map(|(_, place)| (Work::Dig(place), place))
+    }
+
+    /// Whether the mind believes it could mend `thing` now (Amendment A-47): it knows what the
+    /// thing is made of, has or knows of a tool fit for it, and carries a piece of its stuff or
+    /// knows where to get some.
+    fn could_mend(&self, mind: &Mind, here: EntityId, thing: EntityId) -> bool {
+        let Some(stuff) = mind.weakest_material(thing) else {
+            return false;
+        };
+        let need = mind.hardness(stuff).unwrap_or(0);
+        if matches!(self.tool_for(mind, here, need), Hand::Lacking) {
+            return false;
+        }
+        mind.carried()
+            .into_iter()
+            .any(|t| mind.made_only_of(t, stuff))
+            || self.source_of(mind, here, stuff, None, None).is_some()
+    }
+
+    /// What the mind has to work something `need` hard with (Amendment A-45): a bare hand if it is
+    /// soft enough; else a tool it carries, believed no softer; else the nearest it knows of that
+    /// is not someone else's, to fetch first.
+    fn tool_for(&self, mind: &Mind, here: EntityId, need: i64) -> Hand {
+        if need <= self.rules.bare_hand_hardness {
+            return Hand::Ready;
+        }
+        let fits = |t: EntityId| mind.hardness_of(t).is_some_and(|h| h >= need);
+        if mind.carried().into_iter().any(fits) {
+            return Hand::Ready;
+        }
+        let mut best: Option<(usize, EntityId)> = None;
+        for (tool, place) in mind.view.read_about(mind.me, BELIEF_PLACE_OF) {
+            let Value::Entity(place) = place.value else {
+                continue;
+            };
+            if tool == mind.me
+                || place == mind.me
+                || !fits(tool)
+                || mind.fixture(tool)
+                || mind.others(tool)
+                || mind.gave_up_on(tool)
+                || mind.knows_as_place(tool)
+                || mind.belief_entity(BELIEF_LEADS_TO, tool).is_some()
+                || mind.belief_entity(BELIEF_YIELDS, tool).is_some()
+            {
+                continue;
+            }
+            let hops = if place == here {
+                Some(0)
+            } else {
+                mind.route(here, place).map(|r| r.len())
+            };
+            if let Some(hops) = hops {
+                if best.map_or(true, |b| (hops, tool) < b) {
+                    best = Some((hops, tool));
+                }
+            }
+        }
+        best.map_or(Hand::Lacking, |(_, tool)| Hand::Fetch(tool))
     }
 
     /// Carry the mind's work one step further (Amendment A-18): get what it needs, take what it
     /// carries to the store and put it down there, one thing at a time, or make the recipe at its
     /// workplace. With nothing left to do, the goal is let go.
     fn work(&self, mind: &Mind, acts: &mut Acts, here: EntityId, tick: u64, speed: i64) {
-        let Some((next, place)) = self.work_next(mind, here, tick) else {
+        let Some((next, place, want)) = self.work_next(mind, here, tick) else {
             Self::settle(acts, "work_done");
             return;
         };
-        self.carry_out(mind, acts, here, next, place, tick, speed);
+        self.carry_out(mind, acts, here, next, place, tick, speed, want);
     }
 
     /// What the mind wants next (Amendment A-19): the thing it concerns, the step, where that
@@ -1156,6 +1426,23 @@ impl Think {
             }
         }
         let mut best: Option<(i64, EntityId, EntityId, i64)> = None;
+        // Where the mind believes its openings lead, gathered once: a place it knows as one is
+        // never a thing to fetch ([`Mind::knows_as_place`], without reading every opening anew
+        // for every thing).
+        let led_to: BTreeSet<EntityId> = mind
+            .view
+            .read_about(mind.me, BELIEF_LEADS_TO)
+            .into_iter()
+            .filter_map(|(_, f)| match f.value {
+                Value::Entity(to) => Some(to),
+                _ => None,
+            })
+            .collect();
+        let knows_as_place = |t: EntityId| {
+            mind.here() == Some(t)
+                || led_to.contains(&t)
+                || mind.belief_int(BELIEF_WARMTH_OF, t).is_some()
+        };
         for (thing, place) in mind.view.read_about(mind.me, BELIEF_PLACE_OF) {
             let Value::Entity(place) = place.value else {
                 continue;
@@ -1164,7 +1451,7 @@ impl Think {
             if thing == mind.me
                 || place == mind.me
                 || !wanted
-                || mind.knows_as_place(thing)
+                || knows_as_place(thing)
                 || mind.belief_entity(BELIEF_LEADS_TO, thing).is_some()
                 || mind.gave_up_on(thing)
             {
@@ -1199,7 +1486,7 @@ impl Think {
     ) {
         match self.want_next(mind, here) {
             Some((thing, next, place, _)) if thing == goal => {
-                self.carry_out(mind, acts, here, next, place, tick, speed);
+                self.carry_out(mind, acts, here, next, place, tick, speed, 1);
             }
             _ => Self::settle(acts, "have_it"),
         }
@@ -1208,6 +1495,7 @@ impl Think {
     /// Carry out one step of work or want (Amendments A-18, A-19): get a thing; carry one to where
     /// it goes and put it down there, one at a time; make a recipe at its workplace; or claim what
     /// is carried.
+    #[allow(clippy::too_many_arguments)]
     #[allow(clippy::too_many_arguments)]
     fn carry_out(
         &self,
@@ -1218,6 +1506,7 @@ impl Think {
         place: EntityId,
         tick: u64,
         speed: i64,
+        want: i64,
     ) {
         let step = mind.own(STEP);
         let code = step.as_ref().and_then(|s| s.value.as_int());
@@ -1229,16 +1518,74 @@ impl Think {
             .map_or(true, |s| tick >= s.provenance.tick + FEEL_TICKS);
         let same = |thing: EntityId| mind.own_entity(OBJECT) == Some(thing);
         match next {
-            // Gathering, an extra one does no harm: reach again once the last reach has told.
-            Work::Get(thing) => self.get(mind, acts, here, thing, tick, speed, SETTLE_TICKS),
+            // Gathering, an extra one does no harm: reach again once the last reach has told. What
+            // is too hard for a hand is worked only with a tool, fetched first (Amendment A-45).
+            Work::Get(thing) => {
+                let need = mind
+                    .belief_entity(BELIEF_YIELDS, thing)
+                    .and_then(|m| mind.hardness(m))
+                    .unwrap_or(0);
+                match self.tool_for(mind, here, need) {
+                    Hand::Ready => {
+                        self.get(mind, acts, here, thing, tick, speed, SETTLE_TICKS, want)
+                    }
+                    Hand::Fetch(tool) => {
+                        self.get(mind, acts, here, tool, tick, speed, FEEL_TICKS, 1)
+                    }
+                    Hand::Lacking => {
+                        Self::settle(acts, "no_tool");
+                        acts.give_up_on(thing);
+                    }
+                }
+            }
+            // Digging (Amendment A-45): there, with a hand or a tool fit for the ground, again and
+            // again until what is dug comes to hand.
+            Work::Dig(ground) if ground != here => {
+                self.travel_toward(mind, acts, here, ground, tick, speed);
+            }
+            Work::Dig(ground) => {
+                let need = mind
+                    .belief_entity(BELIEF_GROUND, ground)
+                    .and_then(|m| mind.hardness(m))
+                    .unwrap_or(0);
+                match self.tool_for(mind, here, need) {
+                    // A tick's digging at a time, once the last has told (Amendment A-48).
+                    Hand::Ready => {
+                        if code != Some(STEP_DIG) || settled {
+                            acts.set(STEP, Value::Int(STEP_DIG), "digging");
+                            acts.set(OBJECT, Value::Entity(ground), "digging");
+                            acts.set(ACT_DIG, Value::Bool(true), "digging");
+                            acts.set(ACT_PICK_UP_TO, Value::Int(want.max(1)), "digging");
+                        }
+                    }
+                    Hand::Fetch(tool) => {
+                        self.get(mind, acts, here, tool, tick, speed, FEEL_TICKS, 1)
+                    }
+                    Hand::Lacking => {
+                        Self::settle(acts, "no_tool");
+                        acts.give_up_on(ground);
+                    }
+                }
+            }
             Work::Deliver(_) | Work::Make(_) if place != here => {
                 self.travel_toward(mind, acts, here, place, tick, speed);
             }
+            // The whole load at once (Amendment A-48): everything carried made of what this is
+            // made of, and held on the same terms.
             Work::Deliver(thing) => {
                 if code != Some(STEP_DROP) || !same(thing) || settled {
                     acts.set(STEP, Value::Int(STEP_DROP), "putting_down");
                     acts.set(OBJECT, Value::Entity(thing), "putting_down");
-                    acts.set(ACT_DROP, Value::Entity(thing), "putting_down");
+                    let owner = mind.belief_entity(BELIEF_OWNER, thing);
+                    let stuff = mind.weakest_material(thing);
+                    for t in mind.carried() {
+                        let alike = t == thing
+                            || (stuff.is_some_and(|m| mind.made_only_of(t, m))
+                                && mind.belief_entity(BELIEF_OWNER, t) == owner);
+                        if alike {
+                            acts.add(ACT_DROP, Value::Entity(t), "putting_down");
+                        }
+                    }
                 }
             }
             Work::Make(recipe) => {
@@ -1255,6 +1602,103 @@ impl Think {
                     acts.set(ACT_CLAIM, Value::Entity(thing), "claiming");
                 }
             }
+        }
+    }
+
+    /// Mend `goal` (Amendment A-45): with a tool fit for its weakest material, fetched first; with
+    /// a piece of that material in hand, fetched from a store or a source if none is carried; then
+    /// standing in it, or walking up to it, and mending, go after go, each go using up what it
+    /// takes. Done once the mind believes it whole; given up if there is no tool or no material
+    /// to be had.
+    fn repair(
+        &self,
+        mind: &Mind,
+        acts: &mut Acts,
+        here: EntityId,
+        goal: EntityId,
+        tick: u64,
+        speed: i64,
+    ) {
+        let whole = mind
+            .belief_int(BELIEF_INTEGRITY, goal)
+            .map_or(true, |w| w >= 10_000);
+        let Some(stuff) = mind.weakest_material(goal) else {
+            Self::settle(acts, "cannot_tell_its_make");
+            acts.give_up_on(goal);
+            return;
+        };
+        if whole {
+            Self::settle(acts, "mended");
+            return;
+        }
+        let need = mind.hardness(stuff).unwrap_or(0);
+        match self.tool_for(mind, here, need) {
+            Hand::Ready => {}
+            Hand::Fetch(tool) => {
+                self.get(mind, acts, here, tool, tick, speed, FEEL_TICKS, 1);
+                return;
+            }
+            Hand::Lacking => {
+                Self::settle(acts, "no_tool");
+                acts.give_up_on(goal);
+                return;
+            }
+        }
+        let carrying = mind
+            .carried()
+            .into_iter()
+            .any(|t| mind.made_only_of(t, stuff));
+        if !carrying {
+            match self.source_of(mind, here, stuff, None, None) {
+                Some((Work::Get(piece), place)) => {
+                    self.carry_out(mind, acts, here, Work::Get(piece), place, tick, speed, 1);
+                }
+                Some((Work::Dig(ground), place)) => {
+                    self.carry_out(mind, acts, here, Work::Dig(ground), place, tick, speed, 1);
+                }
+                _ => {
+                    Self::settle(acts, "nothing_to_mend_it_with");
+                    acts.give_up_on(goal);
+                }
+            }
+            return;
+        }
+        // To it: in it, if it is a place; else beside it, in the place it stands in.
+        let Some(place) = mind.place_of(goal) else {
+            Self::settle(acts, "lost_it");
+            return;
+        };
+        if place != here {
+            self.travel_toward(mind, acts, here, place, tick, speed);
+            return;
+        }
+        let step = mind.own(STEP);
+        let code = step.as_ref().and_then(|s| s.value.as_int());
+        let settled = step
+            .as_ref()
+            .map_or(true, |s| tick >= s.provenance.tick + SETTLE_TICKS);
+        let same = mind.own_entity(OBJECT) == Some(goal);
+        let going = mind.own_entity(GOING_TO);
+        let beside = place == goal || (code == Some(STEP_FETCH) && same && going.is_none());
+        let refused = mind.own_entity(REFUSED) == Some(goal);
+        if code == Some(STEP_MEND) && same && settled && refused && place != goal {
+            // Out of reach, it seems: walk up to it again.
+            acts.set(STEP, Value::Int(STEP_FETCH), "to_mend");
+            acts.set(OBJECT, Value::Entity(goal), "to_mend");
+            acts.set(TRAVEL_TO, Value::Entity(goal), "to_mend");
+            acts.set(TRAVEL_SPEED, Value::Int(speed), "to_mend");
+        } else if beside || (code == Some(STEP_MEND) && same) {
+            // A tick's mending at a time, once the last has told (Amendment A-48).
+            if code != Some(STEP_MEND) || !same || settled {
+                acts.set(STEP, Value::Int(STEP_MEND), "mending");
+                acts.set(OBJECT, Value::Entity(goal), "mending");
+                acts.set(ACT_MEND, Value::Entity(goal), "mending");
+            }
+        } else if code != Some(STEP_FETCH) || !same || settled {
+            acts.set(STEP, Value::Int(STEP_FETCH), "to_mend");
+            acts.set(OBJECT, Value::Entity(goal), "to_mend");
+            acts.set(TRAVEL_TO, Value::Entity(goal), "to_mend");
+            acts.set(TRAVEL_SPEED, Value::Int(speed), "to_mend");
         }
     }
 
@@ -1282,10 +1726,14 @@ impl Think {
         match step.value.as_int() {
             Some(STEP_GO) if blocked => {
                 // The way is shut somewhere. Go to the first opening believed to be on it.
+                // The first opening on the way: steps across open ground need no opening.
                 let first = mind
                     .place_of(goal)
                     .and_then(|p| mind.route(here, p))
-                    .and_then(|r| r.first().copied());
+                    .and_then(|r| {
+                        r.into_iter()
+                            .find(|h| mind.belief_entity(BELIEF_LEADS_TO, *h).is_some())
+                    });
                 match first {
                     Some(opening) => {
                         acts.set(STEP, Value::Int(STEP_APPROACH), "way_shut");
@@ -1314,7 +1762,7 @@ impl Think {
             }
             Some(
                 STEP_FETCH | STEP_TAKE | STEP_CONSUME | STEP_PICK | STEP_DROP | STEP_MAKE
-                | STEP_CLAIM,
+                | STEP_CLAIM | STEP_DIG | STEP_MEND,
             ) => Self::go(acts, goal, speed, "resume"),
             Some(STEP_OPEN) => {
                 if via.is_some() && mind.own_entity(REFUSED) == via {

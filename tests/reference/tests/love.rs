@@ -17,10 +17,12 @@ use society::schema::{BOND, LOVERS};
 const HOUR: u64 = 6; // ten-minute ticks
 const DAY: u64 = 24 * HOUR;
 
-/// Ashford on a still day, and well fed: love, not hunger, moves them here.
+/// Ashford on a still day, and well fed: love, not hunger, moves them here — and Gwen has the
+/// week off from laying apples by in the cellar (Amendment A-47).
 fn still(change: impl FnOnce(&mut packages::WorldPackage)) -> City {
     let mut pkg = well_fed(with_tick_seconds(600));
     pkg.physical_rules.temperature_variability_centi_c = 0;
+    pkg.roles.retain(|(who, _)| *who != GWEN);
     change(&mut pkg);
     City::from(pkg)
 }
@@ -37,12 +39,14 @@ fn fond(city: &City, holder: u64, about: u64) -> i64 {
 fn finn_and_gwen_fall_in_love_and_the_courier_does_not() {
     let mut city = still(|_| {});
     city.run(3 * DAY);
-    // Side by side, well matched: lovers on the second day, each way.
+    // Side by side, well matched: lovers on the third day, each way. Not the second: lying down,
+    // their eyes are shut, and the dawn hour they once watched each other by from where they lay
+    // no longer counts as time together (Amendment A-40).
     let bond = pair(&city, FINN, BOND, GWEN).expect("lovers");
     assert_eq!(bond.value, Value::Int(LOVERS));
     assert_eq!(bond.provenance.cause, Cause::new("fell_in_love"));
     assert!(
-        (DAY..2 * DAY).contains(&bond.provenance.tick),
+        (2 * DAY..3 * DAY).contains(&bond.provenance.tick),
         "on day {}",
         bond.provenance.tick / DAY
     );
@@ -67,8 +71,17 @@ fn finn_and_gwen_fall_in_love_and_the_courier_does_not() {
 #[test]
 fn apart_gwen_longs_for_finn_and_goes_back_to_him() {
     // Finn, without a mind of his own, keeps to the kitchen; Gwen spends her nights there too, out
-    // of the cold, and by day they fall for each other there.
-    let mut city = still(|p| p.minds.retain(|(m, _)| *m != FINN));
+    // of the cold — she has never been down to the cellar, or she might have gone there, its
+    // stone keeping the day's warmth while the kitchen's open door lets the night in (Amendment
+    // A-37) — and by day they fall for each other there.
+    let mut city = still(|p| {
+        p.minds.retain(|(m, _)| *m != FINN);
+        for (mind, things) in &mut p.knows {
+            if *mind == GWEN {
+                things.retain(|t| ![CELLAR, 1009, 1010].contains(t));
+            }
+        }
+    });
     city.go(FINN, KITCHEN, 140);
     city.run(3 * DAY + 12 * HOUR); // noon on the fourth day, lovers in the kitchen
     assert_eq!((city.room_of(FINN), city.room_of(GWEN)), (KITCHEN, KITCHEN));

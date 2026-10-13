@@ -164,7 +164,10 @@ fn search(
             out.push((e, d));
         }
     }
-    for sub in index.subframes(frame) {
+    // Only the subframes whose subtree could meet the question's box: found by the index, so a
+    // question asked on a city's open ground does not look at every district in it.
+    let reaching = Aabb::around(local_at, radius.saturating_add(slack.saturating_mul(2)));
+    for sub in index.subframes_meeting(frame, &reaching) {
         let Some(placement) = index.placement(sub) else {
             continue;
         };

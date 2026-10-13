@@ -8,10 +8,11 @@ use crate::schema::{
     LIVING_HEALTH, LIVING_HUNGER, LIVING_KIND_MET_BY, LIVING_NEED, LIVING_NEED_KIND,
     LIVING_SIGHT_RANGE, MADE_OF, MIND_TEMPERAMENT, NUTRITION, OPEN, OWNER, PHYS_ACT_REFUSED,
     PHYS_CONTAINED_IN, PHYS_IN_VIEW, PHYS_LEADS_TO, PHYS_MADE_OF, PHYS_MOBILE, PHYS_NUTRITION,
-    PHYS_PICKED, PHYS_PORTAL_OPEN, PHYS_SOLID, PHYS_TEMPERATURE, PHYS_TRAVEL_BLOCKED,
-    PHYS_TRAVEL_TO, PLACE_OF, REFUSED, RES_STOCK, RES_YIELD, SOC_JOB_CARRIES, SOC_JOB_FROM,
-    SOC_JOB_HOURS, SOC_JOB_KEEP, SOC_JOB_MAKES, SOC_JOB_TO, SOC_ROLE, STOCK, WARMTH_OF,
-    WORK_CARRIES, WORK_FROM, WORK_HOURS, WORK_KEEP, WORK_MAKES, WORK_ROLE, WORK_TO, YIELDS,
+    PHYS_PICKED, PHYS_PORTAL_OPEN, PHYS_SEEN_WHOLE, PHYS_SOLID, PHYS_TEMPERATURE,
+    PHYS_TRAVEL_BLOCKED, PHYS_TRAVEL_TO, PLACE_OF, REFUSED, RES_STOCK, RES_YIELD, SOC_JOB_CARRIES,
+    SOC_JOB_FROM, SOC_JOB_HOURS, SOC_JOB_KEEP, SOC_JOB_MAKES, SOC_JOB_TO, SOC_ROLE, STOCK,
+    WARMTH_OF, WORK_CARRIES, WORK_FROM, WORK_HOURS, WORK_KEEP, WORK_MAKES, WORK_ROLE, WORK_TO,
+    YIELDS,
 };
 use kernel::fact::{Cause, FactKey, FactType, SystemId};
 use kernel::hierarchy::ancestry;
@@ -26,6 +27,16 @@ use std::collections::BTreeSet;
 // the body it feels, the body's own intent and reports — and its own beliefs, to write only
 // what changed.
 const PERCEPTION_READS: &[FactType] = &[
+    crate::schema::HARDNESS,
+    crate::schema::FIXTURE,
+    crate::schema::WALLED,
+    crate::schema::GROUND,
+    crate::schema::INTEGRITY,
+    crate::schema::PHYS_HARDNESS,
+    crate::schema::PHYS_ENCLOSED,
+    crate::schema::PHYS_PLACE,
+    crate::schema::PHYS_GROUND,
+    crate::schema::PHYS_INTEGRITY,
     ECON_OWNER,
     OWNER,
     PHYS_SOLID,
@@ -62,6 +73,7 @@ const PERCEPTION_READS: &[FactType] = &[
     FELT_NEED_MET_BY,
     LIVING_SIGHT_RANGE,
     PHYS_IN_VIEW,
+    PHYS_SEEN_WHOLE,
     PHYS_CONTAINED_IN,
     PHYS_LEADS_TO,
     PHYS_PORTAL_OPEN,
@@ -85,6 +97,11 @@ const PERCEPTION_READS: &[FactType] = &[
     REFUSED,
 ];
 const PERCEPTION_WRITES: &[FactType] = &[
+    crate::schema::HARDNESS,
+    crate::schema::FIXTURE,
+    crate::schema::WALLED,
+    crate::schema::GROUND,
+    crate::schema::INTEGRITY,
     OWNER,
     WORK_ROLE,
     WORK_CARRIES,
@@ -311,6 +328,19 @@ impl Perception {
             here,
             "felt",
         );
+        // The place one stands in: whether it is walled, and what its ground is (Amendment A-45),
+        // known underfoot, light or dark.
+        if let Some(Value::Entity(place)) = here {
+            let walled = value(view, FactKey::new(place, crate::schema::PHYS_ENCLOSED))
+                == Some(Value::Bool(true));
+            let key = FactKey::pair(mind, crate::schema::WALLED, place);
+            self.mirror(view, ctx, out, key, Some(Value::Bool(walled)), "felt");
+            let ground = ancestry(view, place, PHYS_CONTAINED_IN)
+                .into_iter()
+                .find_map(|p| value(view, FactKey::new(p, crate::schema::PHYS_GROUND)));
+            let key = FactKey::pair(mind, crate::schema::GROUND, place);
+            self.mirror(view, ctx, out, key, ground, "felt");
+        }
         if let (Some(Value::Entity(place)), Some(air)) = (here, air_around(view, mind)) {
             self.feel(
                 view,
@@ -368,6 +398,32 @@ impl Perception {
                     "seen",
                 );
             }
+            // How whole it is, and, for a place, whether it is walled (Amendment A-45).
+            let whole = value(view, FactKey::new(seen, crate::schema::PHYS_INTEGRITY));
+            let whole_key = FactKey::pair(mind, crate::schema::INTEGRITY, seen);
+            self.mirror(view, ctx, out, whole_key, whole, "seen");
+            // Whether it is a fixture: solid, not a piece to carry off (Amendment A-45).
+            let fixed = value(view, FactKey::new(seen, PHYS_SOLID)) == Some(Value::Bool(true));
+            let fixed_key = FactKey::pair(mind, crate::schema::FIXTURE, seen);
+            self.mirror(
+                view,
+                ctx,
+                out,
+                fixed_key,
+                fixed.then_some(Value::Bool(true)),
+                "seen",
+            );
+            // (The place one stands in is known underfoot, below.)
+            let underfoot = here == Some(Value::Entity(seen));
+            if !underfoot
+                && value(view, FactKey::new(seen, crate::schema::PHYS_PLACE))
+                    == Some(Value::Bool(true))
+            {
+                let walled = value(view, FactKey::new(seen, crate::schema::PHYS_ENCLOSED))
+                    == Some(Value::Bool(true));
+                let key = FactKey::pair(mind, crate::schema::WALLED, seen);
+                self.mirror(view, ctx, out, key, Some(Value::Bool(walled)), "seen");
+            }
             // Whose it is (Amendment A-19).
             let owner = value(view, FactKey::new(seen, ECON_OWNER));
             let owner_key = FactKey::pair(mind, OWNER, seen);
@@ -416,6 +472,12 @@ impl Perception {
             }
         }
         for m in materials {
+            // How hard it is (Amendment A-45).
+            let hard = value(view, FactKey::new(m, crate::schema::PHYS_HARDNESS));
+            if hard.is_some() {
+                let key = FactKey::pair(mind, crate::schema::HARDNESS, m);
+                self.mirror(view, ctx, out, key, hard, "seen");
+            }
             let fed = value(view, FactKey::new(m, PHYS_NUTRITION));
             if fed.is_some() {
                 self.mirror(
@@ -461,11 +523,12 @@ impl Perception {
                 None => {}
             }
         }
-        // Absence (Amendment A-11): standing somewhere lit enough to see — the place itself is
-        // in view — a person, a movable thing, or a thing one could carry off (made of something,
-        // and no fixture: Amendment A-18) believed here and not seen is not here.
+        // Absence (Amendment A-11): standing somewhere one takes in whole — lit, all of it in
+        // sight, nothing in it to hide behind, and the view taken here, not on the way in
+        // (Amendment A-40) — a person, a movable thing, or a thing one could carry off (made of
+        // something, and no fixture: Amendment A-18) believed here and not seen is not here.
         if let Some(Value::Entity(here)) = value(view, FactKey::new(mind, PHYS_CONTAINED_IN)) {
-            if now.contains(&here) {
+            if value(view, FactKey::new(mind, PHYS_SEEN_WHOLE)) == Some(Value::Entity(here)) {
                 for (thing, place) in view.read_about(mind, PLACE_OF) {
                     let portable = view.read(FactKey::new(thing, PHYS_MADE_OF)).is_some()
                         && value(view, FactKey::new(thing, PHYS_SOLID)) != Some(Value::Bool(true));

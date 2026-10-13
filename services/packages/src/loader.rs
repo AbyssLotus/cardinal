@@ -214,6 +214,14 @@ pub fn living_config(package: &WorldPackage) -> Option<LivingConfig> {
         hunger_per_hour: rules.hunger_per_hour,
         starving_above: rules.starving_above,
         starving_harm_per_hour: rules.starving_harm_per_hour,
+        resident_sight_cm: package.residents_rules.map(|r| r.sight_cm),
+        strength: rules.strength,
+        burn_harm_per_hour: rules.burn_harm_per_hour,
+        smoke_harm_per_hour: rules.smoke_harm_per_hour,
+        chill: living::systems::Chill {
+            wind_cm_s: rules.chill_wind_cm_s,
+            wet: rules.wet_chill_percent,
+        },
     })
 }
 
@@ -223,6 +231,13 @@ pub fn resources_config(package: &WorldPackage) -> Option<ResourcesConfig> {
     Some(ResourcesConfig {
         clock: SimClock::new(package.clock.tick_ms),
         regrow_step_seconds: r.regrow_step_seconds,
+        // Households' larders in the scene (Amendment A-26), if any household has a pantry.
+        pantries: pantry_rules(package).map(|(meal_material, meal_size, _)| {
+            resources::systems::PantryRules {
+                meal_material: EntityId::from_raw(meal_material),
+                meal_size,
+            }
+        }),
     })
 }
 
@@ -243,6 +258,27 @@ pub fn society_config(package: &WorldPackage) -> Option<SocietyConfig> {
         courtship_step_seconds: r.courtship_step_seconds,
         bond_above: r.bond_above,
         part_below: r.part_below,
+        // The city tier's rhythm (Amendment A-23), at Living's rates: the same person hungers and
+        // tires at the same pace at every tier.
+        rhythm: package.residents_rules.map(|rr| {
+            let living = package.living_rules;
+            society::residents::RhythmRules {
+                day_seconds: package.clock.day_seconds as i64,
+                sleep_from_seconds: rr.sleep_hours.0 * 3600,
+                sleep_to_seconds: rr.sleep_hours.1 * 3600,
+                work_from_seconds: rr.work_hours.0 * 3600,
+                work_to_seconds: rr.work_hours.1 * 3600,
+                hungry_above: rr.hungry_above,
+                meal_nutrition: rr.meal_nutrition,
+                meals_per_shift: rr.meals_per_shift,
+                meal_seconds: rr.meal_minutes * 60,
+                walk_speed_cm_s: rr.walk_speed_cm_s,
+                hours_spread_seconds: rr.hours_spread_minutes * 60,
+                hunger_per_hour: living.map_or(0, |l| l.hunger_per_hour),
+                tire_per_hour: living.map_or(0, |l| l.tire_per_hour),
+                rest_per_hour: living.map_or(0, |l| l.rest_per_hour),
+            }
+        }),
     })
 }
 
@@ -269,7 +305,17 @@ pub fn minds_config(package: &WorldPackage) -> Option<MindsConfig> {
             tired_margin: r.tired_margin,
             sleep_from_seconds: r.sleep_hours.0 * 3600,
             sleep_to_seconds: r.sleep_hours.1 * 3600,
+            bare_hand_hardness: package.physical_rules.bare_hand_hardness,
+            repair_value: r.repair_value,
+            repair_below: r.repair_below,
         },
+        // A resident crossing into the scene keeps their pace and their hours (Amendment A-24).
+        residents: package.residents_rules.map(|rr| minds::seam::ResidentMind {
+            walk_speed_cm_s: rr.walk_speed_cm_s,
+            work_from_seconds: rr.work_hours.0 * 3600,
+            work_to_seconds: rr.work_hours.1 * 3600,
+            hours_spread_seconds: rr.hours_spread_minutes * 60,
+        }),
     })
 }
 
@@ -285,6 +331,8 @@ pub fn information_config(package: &WorldPackage) -> Option<InformationConfig> {
         affection_step_seconds: rules.affection_step_seconds,
         affection_per_hour: rules.affection_per_hour,
         affection_fade_per_day: rules.affection_fade_per_day,
+        residents: package.residents_rules.is_some(),
+        meal_material: pantry_rules(package).map(|(m, _, _)| EntityId::from_raw(m)),
     })
 }
 
@@ -298,6 +346,8 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
         day_length_seconds: package.clock.day_seconds,
         environment_step_seconds: r.environment_step_seconds,
         diurnal_amplitude_centi_c: r.diurnal_amplitude_centi_c,
+        diurnal_coldest_seconds: r.diurnal_coldest_seconds,
+        diurnal_warmest_seconds: r.diurnal_warmest_seconds,
         temperature_variability_centi_c: r.temperature_variability_centi_c,
         weather_persistence_seconds: r.weather_persistence_seconds,
         illumination_peak: r.illumination_peak,
@@ -306,7 +356,11 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
         pressure_sea_level: r.pressure_sea_level,
         pressure_elevation_factor: r.pressure_elevation_factor,
         pressure_variability: r.pressure_variability,
-        wind_gradient_divisor: r.wind_gradient_divisor,
+        wind_per_decapascal: r.wind_per_decapascal,
+        fronts: physical::systems::Fronts {
+            mixing_ms: r.climate_mixing_seconds.saturating_mul(1000),
+            distance_cm: r.front_distance_cm,
+        },
         fall_danger_per_meter: r.fall_danger_per_meter,
         thermal_mass_reference: r.thermal_mass_reference,
         gravity_cm_s2: r.gravity_cm_s2,
@@ -318,7 +372,99 @@ pub fn physical_config(package: &WorldPackage) -> PhysicalConfig {
         sight_step_seconds: r.sight_step_seconds,
         sight_min_illumination: r.sight_min_illumination,
         carry_limit_kg: r.carry_limit_kg,
+        resident_body: package.residents_rules.map(|rr| rr.body),
+        pantry_body: pantry_rules(package).map(|(_, _, body)| body),
+        strike: physical::act::StrikeRules {
+            hand_percent: r.hand_strike_percent,
+            tool_percent_per_kg: r.tool_strike_percent_per_kg,
+            scale: r.strike_scale,
+            bare_hand_hardness: r.bare_hand_hardness,
+            tool_wear: r.tool_wear,
+            go_seconds: r.go_seconds,
+        },
+        pit_half_width_cm: r.pit_half_width_cm,
+        wreckage_height_cm: r.wreckage_height_cm,
+        mend_scale: r.mend_scale,
+        fire: physical::fire::FireRules {
+            step_seconds: r.fire_step_seconds,
+            grow_per_hour: r.fire_grow_per_hour,
+            burn_per_hour: r.burn_per_hour,
+            reach_cm: r.fire_reach_cm,
+            ignition_heat: r.ignition_heat,
+            ignite_intensity: r.ignite_intensity,
+            douse_per_hour: r.douse_per_hour,
+            wall_thickness_cm: r.wall_thickness_cm,
+            warmth_per_hour: r.fire_warmth_per_hour,
+            smoke_per_hour: r.smoke_per_hour,
+            smoke_clear_per_hour: r.smoke_clear_per_hour,
+            fan_wind_cm_s: r.fire_fan_wind_cm_s,
+            dry_by_heat_per_hour: r.dry_by_heat_per_hour,
+        },
+        wind: physical::wind::WindRules {
+            force_divisor: r.wind_force_divisor,
+            damage_scale: r.wind_damage_scale,
+            hold_per_kg: r.wind_hold_per_kg,
+            carry_cm_per_hour: r.wind_carry_cm_per_hour,
+        },
+        gale: physical::systems::Gale {
+            below: r.gale_below,
+            per_decapascal: r.gale_per_decapascal,
+        },
+        sky: physical::systems::SkyRules {
+            cloud_above: r.cloud_above,
+            rain_above: r.rain_above,
+            cloud_shade: r.cloud_shade,
+            cloud_damp: r.cloud_damp,
+            rain_per_hour: r.rain_per_hour,
+            snow_below_centi_c: r.snow_below_centi_c,
+            fog_above: r.fog_above,
+            fog_wind_below_cm_s: r.fog_wind_below_cm_s,
+            humidity_per_degree: r.humidity_per_degree,
+        },
+        wet: physical::wet::WetRules {
+            soak_per_mm: r.soak_per_mm,
+            ground_drying_per_hour: r.ground_drying_per_hour,
+            snow_melt_mm_per_degree_hour: r.snow_melt_mm_per_degree_hour,
+            wetting_per_hour: r.wetting_per_hour,
+            drying_per_hour: r.drying_per_hour,
+            hardest_rain: r.rain_per_hour,
+        },
+        water: physical::water::WaterRules {
+            tide_amplitude_cm: r.tide_amplitude_cm,
+            tidal_period_ms: r.tidal_period_seconds.saturating_mul(1000),
+            ice_mm_per_degree_hour: r.ice_mm_per_degree_hour,
+            wade_depth_cm: r.wade_depth_cm,
+            ice_bears_mm: r.ice_bears_mm,
+            snow_melt_mm_per_degree_hour: r.snow_melt_mm_per_degree_hour,
+        },
+        air: physical::air::AirRules {
+            opening_speed_cm_s: r.opening_air_speed_cm_s,
+            draught: r.draught_percent,
+            open_air_height_cm: r.open_air_height_cm,
+        },
+        calendar: physical::calendar::Calendar {
+            day_ms: package.clock.day_seconds.saturating_mul(1000),
+            year_days: r.year_days,
+            start_day: r.start_day,
+            tilt: r.axial_tilt_centi_deg,
+            latitude: r.latitude_centi_deg,
+            seasonal_amplitude_centi_c: r.seasonal_amplitude_centi_c,
+            seasonal_lag_days: r.seasonal_lag_days,
+            lunar_month_ms: r.lunar_month_seconds.saturating_mul(1000),
+            moon_phase_at_start: r.moon_phase_at_start,
+            moonlight_peak: r.moonlight_peak,
+        },
     }
+}
+
+/// What households' pantries need (Amendment A-26) — the meal material, a meal's size, and a
+/// pantry's — if any household has one and the rules declare all three.
+fn pantry_rules(package: &WorldPackage) -> Option<(u64, [i64; 3], [i64; 3])> {
+    let rr = package.residents_rules?;
+    if package.pantries.is_empty() {
+        return None;
+    }
+    Some((rr.meal_material?, rr.meal_size?, rr.pantry_body?))
 }
 
 /// The engine version this build presents to packages (from the crate version).
@@ -387,12 +533,9 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     systems.extend(physical.systems());
     domains.push(Box::new(physical));
 
-    // Seed regions' initial physical state: temperature always, elevation when specified.
+    // Seed regions' elevation when specified; their temperature, once what they are built of
+    // and how open they are is seeded (below).
     for region in &package.regions {
-        store.seed(
-            FactKey::new(EntityId::from_raw(region.id), TEMPERATURE),
-            seeded(Value::Int(region.temperature_centi_c)),
-        );
         if let Some(elev) = region.elevation {
             store.seed(
                 FactKey::new(EntityId::from_raw(region.id), ELEVATION),
@@ -546,6 +689,7 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 Flag::Enclosed => (ENCLOSED, true),
                 Flag::Mobile => (MOBILE, true),
                 Flag::Closed => (PORTAL_OPEN, false),
+                Flag::Paved => (physical::schema::PAVED, true),
             };
             store.seed(FactKey::new(e, fact), seeded(Value::Bool(value)));
         }
@@ -592,15 +736,159 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
         );
     }
 
+    // Places one can be in, rather than things (Amendment A-30): every climate, every declared
+    // place, every walled room, and everywhere an opening is in or leads to.
+    let mut places: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
+    places.extend(package.regions.iter().map(|r| r.id));
+    places.extend(package.places.iter().map(|(p, _)| *p));
+    for spec in &package.flags {
+        if spec.flags.contains(&Flag::Enclosed) {
+            places.insert(spec.entity_id);
+        }
+    }
+    for portal in &package.portals {
+        places.insert(portal.host_region);
+        places.insert(portal.dest_region);
+    }
+    for place in places {
+        store.seed(
+            FactKey::new(EntityId::from_raw(place), physical::schema::PLACE),
+            seeded(Value::Bool(true)),
+        );
+    }
+
+    // Storms the world declares (Amendment A-29): from when to when, in seconds, and how hard.
+    for &(region, from_hour, hours, wind) in &package.storms {
+        let (from, to) = (from_hour * 3600, (from_hour + hours) * 3600);
+        store.seed(
+            FactKey::new(EntityId::from_raw(region), physical::schema::STORM),
+            seeded(Value::Vec3([from, to, wind])),
+        );
+    }
+
+    // What each place's ground is made of (Amendment A-42).
+    for &(place, material) in &package.ground {
+        store.seed(
+            FactKey::new(EntityId::from_raw(place), physical::schema::GROUND),
+            seeded(Value::Entity(EntityId::from_raw(material))),
+        );
+    }
+
+    // How fast each workplace wears in use (Amendment A-46).
+    for &(workplace, per_hour) in &package.wear {
+        store.seed(
+            FactKey::new(
+                EntityId::from_raw(workplace),
+                physical::schema::WEAR_PER_HOUR,
+            ),
+            seeded(Value::Int(per_hour)),
+        );
+    }
+
+    // How wet each climate's ground begins (Amendment A-41).
+    for &(climate, wet) in &package.ground_water {
+        store.seed(
+            FactKey::new(EntityId::from_raw(climate), physical::schema::GROUND_WATER),
+            seeded(Value::Int(wet)),
+        );
+    }
+
+    // Climates' normal humidity, where it differs from the world's (Amendment A-35).
+    for &(climate, normal) in &package.humidities {
+        store.seed(
+            FactKey::new(
+                EntityId::from_raw(climate),
+                physical::schema::HUMIDITY_NORMAL,
+            ),
+            seeded(Value::Int(normal)),
+        );
+    }
+
+    // The world's water (Amendment A-39): what each body of water is, standing at rest; where it
+    // flows on; what it floods.
+    for w in &package.waters {
+        let id = EntityId::from_raw(w.id);
+        for (fact, value) in [
+            (physical::schema::WATER_KIND, w.kind),
+            (physical::schema::WATER_NORMAL, w.depth_cm),
+            (physical::schema::WATER_BANK, w.bank_cm),
+            (physical::schema::CATCHMENT, w.catchment_m2),
+            (physical::schema::WATER_DRAIN_SECONDS, w.drain_seconds),
+            (physical::schema::WATER_LEVEL, w.depth_cm),
+        ] {
+            store.seed(FactKey::new(id, fact), seeded(Value::Int(value)));
+        }
+    }
+    for &(from, to) in &package.drains {
+        store.seed(
+            FactKey::new(EntityId::from_raw(from), physical::schema::DRAINS_TO),
+            seeded(Value::Entity(EntityId::from_raw(to))),
+        );
+    }
+    for (water, places) in &package.floods {
+        for &p in places {
+            store.seed(
+                FactKey::new(EntityId::from_raw(*water), physical::schema::FLOODS),
+                seeded(Value::Entity(EntityId::from_raw(p))),
+            );
+        }
+    }
+
+    // Latitudes, where a place's differs from the world's (Amendment A-34).
+    for &(place, latitude) in &package.latitudes {
+        store.seed(
+            FactKey::new(EntityId::from_raw(place), physical::schema::LATITUDE),
+            seeded(Value::Int(latitude)),
+        );
+    }
+
+    // Fires burning at the start (Amendment A-28).
+    for &(thing, fierce, kept) in &package.fires {
+        let thing = EntityId::from_raw(thing);
+        store.seed(
+            FactKey::new(thing, physical::schema::BURNING),
+            seeded(Value::Int(fierce)),
+        );
+        if kept {
+            store.seed(
+                FactKey::new(thing, physical::schema::KEPT_FIRE),
+                seeded(Value::Bool(true)),
+            );
+        }
+    }
+
+    // Regions' temperature (Amendment A-35): a climate open to the sky is declared by the coldest
+    // of its day, and begins as warm above that as the day's swing stands at the first moment —
+    // as exposed and as heavy as it is. A walled room begins at what it declares.
+    let physical = physical_config(package);
+    for region in &package.regions {
+        let id = EntityId::from_raw(region.id);
+        let share = if physical::climate::is_sheltered(&store, id) {
+            0
+        } else {
+            physical::systems::day_share(
+                &store,
+                id,
+                &physical.day_curve(),
+                physical.thermal_mass_reference,
+                physical.clock.ms_at(0),
+            )
+        };
+        store.seed(
+            FactKey::new(id, TEMPERATURE),
+            seeded(Value::Int(region.temperature_centi_c + share)),
+        );
+    }
+
     // The world begins with its light (Amendment A-16): each region lit as the sun stands at the
     // first moment, so a world that opens at midnight opens dark, and nobody sees by a light
     // that is not there.
-    let physical = physical_config(package);
     for (region, light) in physical::systems::light_by_region(
         &store,
         physical.clock.ms_at(0),
-        physical.day_length_seconds.saturating_mul(1000),
+        &physical.calendar,
         physical.illumination_peak,
+        physical.sky.cloud_shade,
     ) {
         store.seed(
             FactKey::new(region, physical::schema::ILLUMINATION),
@@ -672,6 +960,21 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 seeded(Value::Int(level)),
             );
         }
+        // Strength, a capability (Amendment A-27): declared, or the world's default for every
+        // organism.
+        for o in &package.organisms {
+            let declared = package
+                .strength
+                .iter()
+                .find(|(who, _)| *who == o.id)
+                .map(|(_, s)| *s);
+            if let Some(strength) = declared.or(rules.strength) {
+                store.seed(
+                    FactKey::new(EntityId::from_raw(o.id), living::schema::STRENGTH),
+                    seeded(Value::Int(strength)),
+                );
+            }
+        }
         // Sensory capability is Living's (Amendment A-8).
         for &(organism, range) in &package.senses {
             store.seed(
@@ -684,6 +987,17 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
     // Deposits are seeded before anyone's starting knowledge, so a mind that knows a tree knows
     // what it bears and how much (Amendment A-16).
     if has_resources {
+        // What a pit dug in each ground holds (Amendment A-42).
+        for &(material, units, size, work) in &package.quarries {
+            let material = EntityId::from_raw(material);
+            for (fact, v) in [
+                (resources::schema::QUARRY_RESERVE, Value::Int(units)),
+                (resources::schema::QUARRY_SIZE, Value::Vec3(size)),
+                (resources::schema::QUARRY_DIFFICULTY, Value::Int(work)),
+            ] {
+                store.seed(FactKey::new(material, fact), seeded(v));
+            }
+        }
         for d in &package.deposits {
             let deposit = EntityId::from_raw(d.id);
             let unit = resources::schema::UNIT;
@@ -698,6 +1012,18 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 (resources::schema::YIELD_CAP, Value::Int(d.cap)),
             ] {
                 store.seed(FactKey::new(deposit, fact), seeded(v));
+            }
+            // How it renews, how poor it is, how hard it is to work, and how it grows (A-41).
+            for (fact, v) in [
+                (resources::schema::RENEWAL, d.renewal.map(Value::Int)),
+                (resources::schema::FLOOR, d.floor.map(Value::Int)),
+                (resources::schema::GRADE, d.grade.map(Value::Int)),
+                (resources::schema::DIFFICULTY, d.difficulty.map(Value::Int)),
+                (resources::schema::GROWS, d.grows.map(Value::Vec3)),
+            ] {
+                if let Some(v) = v {
+                    store.seed(FactKey::new(deposit, fact), seeded(v));
+                }
             }
         }
     }
@@ -736,6 +1062,24 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
                 (economy::schema::RECIPE_TAKES, Value::Int(r.takes_seconds)),
             ] {
                 store.seed(FactKey::new(recipe, fact), seeded(v));
+            }
+            // What else the making needs, and how many it makes (Amendment A-43).
+            for (fact, v) in [
+                (
+                    economy::schema::RECIPE_HEAT,
+                    r.heat.then_some(Value::Bool(true)),
+                ),
+                (
+                    economy::schema::RECIPE_POWER,
+                    r.power.map(|w| Value::Entity(EntityId::from_raw(w))),
+                ),
+                (economy::schema::RECIPE_WIND, r.wind.map(Value::Int)),
+                (economy::schema::RECIPE_TOOL, r.tool.map(Value::Int)),
+                (economy::schema::RECIPE_COUNT, r.count.map(Value::Int)),
+            ] {
+                if let Some(v) = v {
+                    store.seed(FactKey::new(recipe, fact), seeded(v));
+                }
             }
         }
     }
@@ -829,6 +1173,71 @@ pub fn load(package: &WorldPackage, engine: Version) -> Result<LoadedWorld, Load
             SocietyDomain::new(society_config(package).ok_or(LoadError::SocietyRulesMissing)?);
         systems.extend(society.systems());
         domains.push(Box::new(society));
+        // Residents at the city tier and their larders (Amendment A-23). Each first attends to
+        // its day within the first hour, staggered by id, so a city does not all wake at once.
+        let rr = society_config(package).and_then(|c| c.rhythm);
+        let hour = (3_600_000 / package.clock.tick_ms.max(1)).max(1);
+        for r in &package.residents {
+            let who = EntityId::from_raw(r.id);
+            let home = EntityId::from_raw(r.home);
+            let level = |v: i64, rate: i64| kernel::level::Level::new(v, rate, 0).to_value();
+            let mut facts = vec![
+                (society::schema::RESIDENT_HOME, Value::Entity(home)),
+                (society::schema::RESIDENT_AT, Value::Entity(home)),
+                (
+                    society::schema::RESIDENT_DOING,
+                    Value::Int(society::schema::AT_HOME),
+                ),
+                (
+                    society::schema::RESIDENT_UNTIL,
+                    Value::Int(1 + (r.id % hour) as i64),
+                ),
+                (
+                    society::schema::RESIDENT_HUNGER,
+                    level(r.hunger, rr.map_or(0, |x| x.hunger_per_hour)),
+                ),
+                (
+                    society::schema::RESIDENT_FATIGUE,
+                    level(0, rr.map_or(0, |x| x.tire_per_hour)),
+                ),
+            ];
+            if let Some(work) = r.work {
+                facts.push((
+                    society::schema::RESIDENT_WORK,
+                    Value::Entity(EntityId::from_raw(work)),
+                ));
+            }
+            for (fact, v) in facts {
+                store.seed(FactKey::new(who, fact), seeded(v));
+            }
+        }
+        for &(home, meals) in &package.larders {
+            store.seed(
+                FactKey::new(EntityId::from_raw(home), society::schema::LARDER),
+                seeded(Value::Int(meals)),
+            );
+        }
+        // Households' pantries (Amendment A-26): which entity each larder becomes in the scene,
+        // owned by the household — its home.
+        for &(home, pantry) in &package.pantries {
+            store.seed(
+                FactKey::new(EntityId::from_raw(home), society::schema::PANTRY),
+                seeded(Value::Entity(EntityId::from_raw(pantry))),
+            );
+            if has_economy {
+                store.seed(
+                    FactKey::new(EntityId::from_raw(pantry), economy::schema::OWNER),
+                    seeded(Value::Entity(EntityId::from_raw(home))),
+                );
+            }
+        }
+        // Places' rungs on the residency ladder (Amendment A-24).
+        for &(place, rung) in &package.residency {
+            store.seed(
+                FactKey::new(EntityId::from_raw(place), society::schema::RESIDENCY),
+                seeded(Value::Int(rung)),
+            );
+        }
         // Jobs and who holds them (Amendment A-18).
         for job in &package.jobs {
             let id = EntityId::from_raw(job.id);
@@ -906,11 +1315,39 @@ fn starting_knowledge(
                 if let Some(fed) = read(material, physical::schema::MATERIAL_NUTRITION) {
                     out.push((FactKey::pair(mind, info::NUTRITION, material), fed));
                 }
+                // How hard it is (Amendment A-45).
+                if let Some(hard) = read(material, physical::schema::MATERIAL_HARDNESS) {
+                    out.push((FactKey::pair(mind, info::HARDNESS, material), hard));
+                }
+            }
+        }
+        // How whole it is, and whether it is a fixture; for a place, whether it is walled and
+        // what its ground is (A-45).
+        if let Some(whole) = read(thing, physical::schema::INTEGRITY) {
+            out.push((FactKey::pair(mind, info::INTEGRITY, thing), whole));
+        }
+        if read(thing, SOLID) == Some(Value::Bool(true)) {
+            out.push((FactKey::pair(mind, info::FIXTURE, thing), Value::Bool(true)));
+        }
+        if is_place(store, thing) || read(thing, physical::schema::PLACE).is_some() {
+            let walled = read(thing, ENCLOSED) == Some(Value::Bool(true));
+            out.push((
+                FactKey::pair(mind, info::WALLED, thing),
+                Value::Bool(walled),
+            ));
+            if let Some(ground) = ancestry(store, thing, CONTAINED_IN)
+                .into_iter()
+                .find_map(|p| read(p, physical::schema::GROUND))
+            {
+                out.push((FactKey::pair(mind, info::GROUND, thing), ground));
             }
         }
         if let Some(yields) = read(thing, resources::schema::YIELD_MADE_OF) {
             out.push((FactKey::pair(mind, info::YIELDS, thing), yields));
             if let Value::Entity(material) = yields {
+                if let Some(hard) = read(material, physical::schema::MATERIAL_HARDNESS) {
+                    out.push((FactKey::pair(mind, info::HARDNESS, material), hard));
+                }
                 if let Some(fed) = read(material, physical::schema::MATERIAL_NUTRITION) {
                     out.push((FactKey::pair(mind, info::NUTRITION, material), fed));
                 }
